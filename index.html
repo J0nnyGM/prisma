@@ -75,7 +75,9 @@
                 <h2 class="text-2xl font-bold text-center mb-6">Crear Cuenta</h2>
                 <div class="space-y-4">
                     <input type="text" id="register-name" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                    <input type="text" id="register-cedula" placeholder="Cédula" class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <input type="tel" id="register-phone" placeholder="Celular" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                    <input type="text" id="register-address" placeholder="Dirección" class="w-full p-3 border border-gray-300 rounded-lg">
                     <input type="email" id="register-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <div><label for="register-dob" class="block text-sm font-medium text-gray-700">Fecha de Nacimiento</label><input type="date" id="register-dob" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div>
@@ -95,6 +97,7 @@
                 </div>
                 <div class="flex items-center gap-4">
                     <button id="summary-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Resumen</button>
+                    <button id="edit-profile-btn" class="bg-gray-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-800">Editar Perfil</button>
                     <button id="logout-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600">Cerrar Sesión</button>
                 </div>
             </header>
@@ -134,7 +137,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
@@ -176,28 +179,15 @@
         let dynamicElementCounter = 0;
         const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
         const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'empleados'];
-        const OBRAS_DOCUMENT_TYPES = [
-            { id: 'cedula_obra', name: 'Cédula' },
-            { id: 'hoja_vida_obra', name: 'Hoja de vida' },
-            { id: 'contrato_obra', name: 'Contrato' },
-            { id: 'afiliacion_eps_obra', name: 'Afiliación EPS' },
-            { id: 'afiliacion_arl_obra', name: 'Afiliación ARL' },
-            { id: 'certificado_arl_obra', name: 'Certificado ARL' },
-            { id: 'examen_medico_obra', name: 'Examen Médico', requiresDate: true, validityMonths: 12 },
-            { id: 'resolucion_salud_obra', name: 'Resolución Centro de Salud' },
-            { id: 'policia_obra', name: 'Policía Nacional' },
-            { id: 'curso_alturas_obra', name: 'Curso de Alturas', requiresDate: true, validityMonths: 18 },
-            { id: 'constancia_alturas_obra', name: 'Constancia Curso de Alturas', requiresDate: true, validityMonths: 18 },
-            { id: 'perfil_cargo_obra', name: 'Perfil del Cargo' },
-            { id: 'induccion_empresa_obra', name: 'Inducción a la Empresa' },
-        ];
+       
         const RRHH_DOCUMENT_TYPES = [
-            { id: 'contrato_rrhh', name: 'Contrato' },
-            { id: 'cedula_rrhh', name: 'Cédula (PDF)' },
-            { id: 'examenMedico_rrhh', name: 'Examen Médico', requiresDate: true, validityMonths: 12 },
-            { id: 'certificadoARL_rrhh', name: 'Certificado ARL' },
-            { id: 'certificadoEPS_rrhh', name: 'Certificado EPS' },
-            { id: 'certificadoAFP_rrhh', name: 'Certificado AFP' },
+            { id: 'contrato', name: 'Contrato' },
+            { id: 'hojaDeVida', name: 'Hoja de Vida' },
+            { id: 'examenMedico', name: 'Examen Médico' },
+            { id: 'cedula', name: 'Cédula (PDF)' },
+            { id: 'certificadoARL', name: 'Certificado ARL' },
+            { id: 'certificadoEPS', name: 'Certificado EPS' },
+            { id: 'certificadoAFP', name: 'Certificado AFP' },
         ];
         const RRHH_PAYMENT_TYPES = [
             { id: 'prima', name: 'Prima' },
@@ -211,7 +201,7 @@
                 currentUser = user;
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists()) {
-                    currentUserData = userDoc.data();
+                    currentUserData = {id: user.uid, ...userDoc.data()};
                     document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
                 }
                 authView.classList.add('hidden');
@@ -267,9 +257,9 @@
 
         function loadInitialData() {
             // Cargar plantillas HTML en las vistas
-            document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar y Enviar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg w-full sm:w-40"></div></div><div id="remisiones-list" class="space-y-3"><p id="loading-remisiones" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
+            document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar y Enviar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"><p id="loading-remisiones" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
             document.getElementById('view-facturacion').innerHTML = `<div class="bg-white p-6 rounded-xl shadow-md max-w-6xl mx-auto"><h2 class="text-2xl font-semibold mb-4">Gestión de Facturación</h2><div class="border-b border-gray-200 mb-6"><nav id="facturacion-nav" class="-mb-px flex space-x-6"><button id="tab-pendientes" class="dashboard-tab-btn active py-3 px-1 font-semibold">Pendientes</button><button id="tab-realizadas" class="dashboard-tab-btn py-3 px-1 font-semibold">Realizadas</button></nav></div><div id="view-pendientes"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Pendientes de Facturar</h3><div id="facturacion-pendientes-list" class="space-y-3"></div></div><div id="view-realizadas" class="hidden"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Facturadas</h3><div id="facturacion-realizadas-list" class="space-y-3"></div></div></div>`;
-            document.getElementById('view-clientes').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Nuevo Cliente</h2><form id="add-cliente-form" class="space-y-4"><input type="text" id="nuevo-cliente-nombre" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="email" id="nuevo-cliente-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono" placeholder="Teléfono" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="text" id="nuevo-cliente-nit" placeholder="NIT (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Registrar Cliente</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Clientes Registrados</h2><input type="search" id="search-clientes" placeholder="Buscar cliente..." class="p-2 border rounded-lg"></div><div id="clientes-list" class="space-y-3"><p id="loading-clientes" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
+            document.getElementById('view-clientes').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Nuevo Cliente</h2><form id="add-cliente-form" class="space-y-4"><input type="text" id="nuevo-cliente-nombre" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="email" id="nuevo-cliente-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono1" placeholder="Teléfono 1" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono2" placeholder="Teléfono 2 (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="text" id="nuevo-cliente-nit" placeholder="NIT (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Registrar Cliente</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Clientes Registrados</h2><input type="search" id="search-clientes" placeholder="Buscar cliente..." class="p-2 border rounded-lg"></div><div id="clientes-list" class="space-y-3"><p id="loading-clientes" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
             document.getElementById('view-proveedores').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Nuevo Proveedor</h2><form id="add-proveedor-form" class="space-y-4"><input type="text" id="nuevo-proveedor-nombre" placeholder="Nombre del Proveedor" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="text" id="nuevo-proveedor-contacto" placeholder="Nombre de Contacto (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="tel" id="nuevo-proveedor-telefono" placeholder="Teléfono" class="w-full p-3 border border-gray-300 rounded-lg"><input type="email" id="nuevo-proveedor-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-teal-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-700 transition-colors">Registrar Proveedor</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Proveedores Registrados</h2><input type="search" id="search-proveedores" placeholder="Buscar proveedor..." class="p-2 border rounded-lg"></div><div id="proveedores-list" class="space-y-3"><p id="loading-proveedores" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
             document.getElementById('view-items').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Nuevo Ítem</h2><form id="add-item-form" class="space-y-4"><input type="text" id="nuevo-item-ref" placeholder="Referencia (ej. P-001)" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="text" id="nuevo-item-desc" placeholder="Descripción del Ítem o Servicio" class="w-full p-3 border border-gray-300 rounded-lg" required><button type="submit" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors">Registrar Ítem</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Catálogo de Ítems</h2><input type="search" id="search-items" placeholder="Buscar por ref. o desc..." class="p-2 border rounded-lg"></div><div id="items-list" class="space-y-3"><p id="loading-items" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
             document.getElementById('view-colores').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Nuevo Color</h2><form id="add-color-form" class="space-y-4"><input type="text" id="nuevo-color-nombre" placeholder="Nombre del Color (ej. RAL 7016)" class="w-full p-3 border border-gray-300 rounded-lg" required><button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors">Registrar Color</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Catálogo de Colores</h2><input type="search" id="search-colores" placeholder="Buscar color..." class="p-2 border rounded-lg"></div><div id="colores-list" class="space-y-3"><p id="loading-colores" class="text-center text-gray-500 py-8">Cargando...</p></div></div></div>`;
@@ -294,10 +284,12 @@
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const nombre = document.getElementById('register-name').value;
+            const cedula = document.getElementById('register-cedula').value;
             const telefono = document.getElementById('register-phone').value;
             const email = document.getElementById('register-email').value;
             const password = document.getElementById('register-password').value;
             const dob = document.getElementById('register-dob').value;
+            const direccion = document.getElementById('register-address').value;
             showModalMessage("Registrando...", true);
             try {
                 const usersCollection = collection(db, "users");
@@ -308,7 +300,7 @@
 
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
-                await setDoc(doc(db, "users", user.uid), { nombre, email, telefono, dob, role, creadoEn: new Date(), permissions });
+                await setDoc(doc(db, "users", user.uid), { nombre, cedula, email, telefono, dob, direccion: direccion || '', role, creadoEn: new Date(), permissions });
                 hideModal();
                 showModalMessage("¡Registro exitoso! Ahora puedes iniciar sesión.", false, 3000);
                 registerForm.reset();
@@ -348,7 +340,7 @@
 
             document.getElementById('add-color-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoColor = { nombre: document.getElementById('nuevo-color-nombre').value, creadoEn: new Date() }; showModalMessage("Registrando color...", true); try { await addDoc(collection(db, "colores"), nuevoColor); e.target.reset(); hideModal(); showModalMessage("¡Color registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar color."); } });
             document.getElementById('add-item-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoItem = { referencia: document.getElementById('nuevo-item-ref').value, descripcion: document.getElementById('nuevo-item-desc').value, creadoEn: new Date() }; showModalMessage("Registrando ítem...", true); try { await addDoc(collection(db, "items"), nuevoItem); e.target.reset(); hideModal(); showModalMessage("¡Ítem registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar ítem."); } });
-            document.getElementById('add-cliente-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoCliente = { nombre: document.getElementById('nuevo-cliente-nombre').value, email: document.getElementById('nuevo-cliente-email').value, telefono: document.getElementById('nuevo-cliente-telefono').value, nit: document.getElementById('nuevo-cliente-nit').value || '', creadoEn: new Date() }; showModalMessage("Registrando cliente...", true); try { await addDoc(collection(db, "clientes"), nuevoCliente); e.target.reset(); hideModal(); showModalMessage("¡Cliente registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar cliente."); } });
+            document.getElementById('add-cliente-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoCliente = { nombre: document.getElementById('nuevo-cliente-nombre').value, email: document.getElementById('nuevo-cliente-email').value, telefono1: document.getElementById('nuevo-cliente-telefono1').value, telefono2: document.getElementById('nuevo-cliente-telefono2').value, nit: document.getElementById('nuevo-cliente-nit').value || '', creadoEn: new Date() }; showModalMessage("Registrando cliente...", true); try { await addDoc(collection(db, "clientes"), nuevoCliente); e.target.reset(); hideModal(); showModalMessage("¡Cliente registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar cliente."); } });
             document.getElementById('add-proveedor-form').addEventListener('submit', handleProveedorSubmit);
             document.getElementById('add-gasto-form').addEventListener('submit', handleGastoSubmit);
             document.getElementById('remision-form').addEventListener('submit', handleRemisionSubmit);
@@ -359,6 +351,7 @@
             const ivaCheckbox = document.getElementById('incluir-iva');
             if(ivaCheckbox) ivaCheckbox.addEventListener('input', calcularTotales);
             document.getElementById('summary-btn').addEventListener('click', showDashboardModal);
+            document.getElementById('edit-profile-btn').addEventListener('click', showEditProfileModal);
 
             // Listeners para buscadores
             document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
@@ -413,17 +406,15 @@
                             <p class="text-sm text-gray-600">${empleado.email}</p>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <button data-user-json='${JSON.stringify(empleado)}' class="manage-obras-docs-btn bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-yellow-600">Doc. Ingreso Obras</button>
-                            <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700">Doc. Recursos Humanos</button>
-                            <button data-user-json='${JSON.stringify(empleado)}' class="manage-permissions-btn bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Gestionar</button>
+                            <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700">Recursos Humanos</button>
+                            <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Gestionar</button>
                             <button data-uid="${empleado.id}" class="delete-user-btn bg-red-600 text-white p-2 rounded hover:bg-red-700">Eliminar</button>
                         </div>`;
                     empleadosListEl.appendChild(el);
                 });
-                document.querySelectorAll('.manage-obras-docs-btn').forEach(btn => btn.addEventListener('click', (e) => showObrasDocsModal(JSON.parse(e.currentTarget.dataset.userJson))));
                 document.querySelectorAll('.manage-rrhh-docs-btn').forEach(btn => btn.addEventListener('click', (e) => showRRHHModal(JSON.parse(e.currentTarget.dataset.userJson))));
-                document.querySelectorAll('.manage-permissions-btn').forEach(btn => btn.addEventListener('click', (e) => showPermissionsModal(JSON.parse(e.currentTarget.dataset.userJson))));
-                document.querySelectorAll('.delete-user-btn').forEach(btn => { btn.addEventListener('click', async (e) => { const uid = e.target.dataset.uid; if (confirm('¿Estás seguro de que quieres eliminar este usuario?')) { await deleteDoc(doc(db, "users", uid)); showModalMessage("Usuario eliminado de Firestore.", false, 2000); } }); });
+                document.querySelectorAll('.manage-user-btn').forEach(btn => btn.addEventListener('click', (e) => showAdminEditUserModal(JSON.parse(e.currentTarget.dataset.userJson))));
+                document.querySelectorAll('.delete-user-btn').forEach(btn => { btn.addEventListener('click', async (e) => { const uid = e.target.dataset.uid; if (confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) { showModalMessage("Eliminando usuario... No se puede eliminar de Authentication, solo de la base de datos.", false, 4000); await deleteDoc(doc(db, "users", uid)); showModalMessage("Usuario eliminado de Firestore.", false, 2000); } }); });
             });
         }
         function loadColores() {
@@ -497,7 +488,8 @@
             const filtered = clientesConHistorial.filter(c => 
                 c.nombre.toLowerCase().includes(searchTerm) || 
                 c.email.toLowerCase().includes(searchTerm) || 
-                c.telefono.includes(searchTerm)
+                (c.telefono1 && c.telefono1.includes(searchTerm)) ||
+                (c.telefono2 && c.telefono2.includes(searchTerm))
             );
 
             clientesListEl.innerHTML = '';
@@ -509,10 +501,11 @@
             filtered.forEach(cliente => {
                 const clienteDiv = document.createElement('div');
                 clienteDiv.className = 'border p-4 rounded-lg flex justify-between items-start';
+                const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
                 clienteDiv.innerHTML = `
                     <div class="flex-grow">
                         <p class="font-semibold text-lg">${cliente.nombre}</p>
-                        <p class="text-sm text-gray-600">${cliente.email} | ${cliente.telefono}</p>
+                        <p class="text-sm text-gray-600">${cliente.email} | ${telefonos}</p>
                         ${cliente.nit ? `<p class="text-sm text-gray-500">NIT: ${cliente.nit}</p>` : ''}
                         <div class="mt-2 pt-2 border-t border-gray-100 text-sm">
                             <p><span class="font-semibold">Última Compra:</span> ${cliente.ultimaCompra}</p>
@@ -749,7 +742,7 @@
                             <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
                         </div>
                         <div class="flex-shrink-0 flex items-center gap-2">
-                             <div class="text-right">
+                            <div class="text-right">
                                 <span class="status-badge status-entregado">Facturado</span>
                                 <p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>
                             </div>
@@ -1016,778 +1009,878 @@
             return itemRow;
         }
         function calcularTotales() { const itemsContainer = document.getElementById('items-container'); const ivaCheckbox = document.getElementById('incluir-iva'); const subtotalEl = document.getElementById('subtotal'); const valorIvaEl = document.getElementById('valor-iva'); const valorTotalEl = document.getElementById('valor-total'); if(!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return {subtotalGeneral: 0, valorIVA: 0, total: 0}; let subtotalGeneral = 0; itemsContainer.querySelectorAll('.item-row').forEach(row => { const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0; const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value); subtotalGeneral += cantidad * valorUnitario; }); const incluyeIVA = ivaCheckbox.checked; const valorIVA = incluyeIVA ? subtotalGeneral * 0.19 : 0; const total = subtotalGeneral + valorIVA; subtotalEl.textContent = formatCurrency(subtotalGeneral); valorIvaEl.textContent = formatCurrency(valorIVA); valorTotalEl.textContent = formatCurrency(total); return { subtotalGeneral, valorIVA, total }; }
-        function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="edit-client-phone" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono}" required></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono: document.getElementById('edit-client-phone').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
+        function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone1" class="block text-sm font-medium text-gray-700">Teléfono 1</label><input type="tel" id="edit-client-phone1" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono1 || ''}" required></div><div><label for="edit-client-phone2" class="block text-sm font-medium text-gray-700">Teléfono 2</label><input type="tel" id="edit-client-phone2" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono2 || ''}"></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono1: document.getElementById('edit-client-phone1').value, telefono2: document.getElementById('edit-client-phone2').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
         function showPdfModal(pdfUrl, remisionNum) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-xl font-semibold">Visor de Remisión N° ${remisionNum}</h2><button id="close-pdf-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="flex-grow p-2 bg-gray-200"><iframe id="pdf-iframe" src="${pdfUrl}" class="w-full h-full" frameborder="0"></iframe></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-pdf-modal').addEventListener('click', hideModal); }
         function showPaymentModal(remision) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); const totalPagado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0); const saldoPendiente = remision.valorTotal - totalPagado; const paymentsHTML = (remision.payments || []).map(p => `<tr class="border-b"><td class="p-2">${p.date}</td><td class="p-2">${p.method}</td><td class="p-2 text-right">${formatCurrency(p.amount)}</td></tr>`).join(''); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-2xl w-full mx-auto text-left"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2><button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="grid grid-cols-3 gap-4 mb-4 text-center"><div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div><div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">TOTAL PAGADO</div><div class="font-bold text-lg">${formatCurrency(totalPagado)}</div></div><div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold mb-2">Historial de Pagos</h3><div class="border rounded-lg max-h-60 overflow-y-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th></tr></thead><tbody>${paymentsHTML || '<tr><td colspan="3" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody></table></div></div><div><h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>${saldoPendiente > 0 ? `<form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg"><div><label for="new-payment-amount" class="text-sm font-medium">Monto del Abono</label><input type="text" inputmode="numeric" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" max="${saldoPendiente}" required></div><div><label for="new-payment-date" class="text-sm font-medium">Fecha del Pago</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div><div><label for="new-payment-method" class="text-sm font-medium">Método de Pago</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Registrar Pago</button></form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold">Esta remisión ya ha sido pagada en su totalidad.</div>'}</div></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-payment-modal').addEventListener('click', hideModal); if (saldoPendiente > 0) { const paymentAmountInput = document.getElementById('new-payment-amount'); paymentAmountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target)); paymentAmountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target)); document.getElementById('add-payment-form').addEventListener('submit', async (e) => { e.preventDefault(); const amount = unformatCurrency(paymentAmountInput.value); if (amount <= 0 || !amount) { alert("El monto debe ser mayor a cero."); return; } if (amount > saldoPendiente + 0.01) { alert("El monto del pago no puede superar el saldo pendiente."); return; } const newPayment = { amount: amount, date: document.getElementById('new-payment-date').value, method: document.getElementById('new-payment-method').value, registeredAt: new Date() }; showModalMessage("Registrando pago...", true); try { await updateDoc(doc(db, "remisiones", remision.id), { payments: arrayUnion(newPayment) }); hideModal(); showModalMessage("¡Pago registrado!", false, 2000); } catch (error) { console.error("Error al registrar pago:", error); showModalMessage("Error al registrar el pago."); } }); } }
-        function showDashboardModal() {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto text-left flex flex-col" style="height: 80vh;">
-                    <div class="flex justify-between items-center p-4 border-b">
-                        <h2 class="text-xl font-semibold">Resumen Financiero</h2>
-                        <div class="flex items-center gap-4">
-                            <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
-                            <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-                        </div>
-                    </div>
-                    <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-6 px-6">
-                            <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold">Resumen Mensual</button>
-                            <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold">Cartera</button>
-                            <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold">Clientes</button>
-                        </nav>
-                    </div>
-                    <div id="dashboard-summary-view" class="p-6 space-y-6 overflow-y-auto flex-grow"> <div class="flex items-center gap-4"><select id="summary-month" class="p-2 border rounded-lg"></select><select id="summary-year" class="p-2 border rounded-lg"></select></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-green-100 p-4 rounded-lg"><div class="text-sm font-semibold text-green-800">VENTAS</div><div id="summary-sales" class="text-2xl font-bold"></div></div><div class="bg-red-100 p-4 rounded-lg"><div class="text-sm font-semibold text-red-800">GASTOS</div><div id="summary-expenses" class="text-2xl font-bold"></div></div><div class="bg-indigo-100 p-4 rounded-lg"><div class="text-sm font-semibold text-indigo-800">UTILIDAD/PÉRDIDA</div><div id="summary-profit" class="text-2xl font-bold"></div></div><div class="bg-yellow-100 p-4 rounded-lg"><div class="text-sm font-semibold text-yellow-800">CARTERA PENDIENTE (MES)</div><div id="summary-cartera" class="text-2xl font-bold"></div></div></div><div><h3 class="font-semibold mb-2">Saldos Estimados (Total)</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">EFECTIVO</div><div id="summary-efectivo" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">NEQUI</div><div id="summary-nequi" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">DAVIVIENDA</div><div id="summary-davivienda" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">CARTERA TOTAL</div><div id="summary-cartera-total" class="text-xl font-bold"></div></div></div></div><div><h3 class="font-semibold mb-2">Utilidad/Pérdida (Últimos 6 Meses)</h3><div class="bg-gray-50 p-4 rounded-lg"><canvas id="profitLossChart"></canvas></div></div></div>
-                    <div id="dashboard-cartera-view" class="p-6 hidden flex-grow overflow-y-auto"><h3 class="font-semibold mb-2 text-xl">Cartera Pendiente de Cobro</h3><div id="cartera-list" class="space-y-4"></div><div id="cartera-total" class="text-right font-bold text-xl mt-4"></div></div>
-                    <div id="dashboard-clientes-view" class="p-6 hidden flex-grow overflow-y-auto">
-                        <h3 class="font-semibold mb-2 text-xl">Ranking de Clientes</h3>
-                        <div class="flex flex-wrap items-center gap-4 mb-4 p-2 bg-gray-50 rounded-lg">
-                            <div class="flex items-center gap-2">
-                                <label class="text-sm font-medium">Desde:</label>
-                                <select id="rank-start-month" class="p-2 border rounded-lg"></select>
-                                <select id="rank-start-year" class="p-2 border rounded-lg"></select>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <label class="text-sm font-medium">Hasta:</label>
-                                <select id="rank-end-month" class="p-2 border rounded-lg"></select>
-                                <select id="rank-end-year" class="p-2 border rounded-lg"></select>
-                            </div>
-                            <button id="rank-filter-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Filtrar</button>
-                            <button id="rank-show-all-btn" class="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-700">Mostrar Todos</button>
-                        </div>
-                        <div id="top-clientes-list" class="space-y-3"></div>
-                    </div>
-                </div>
-            `;
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('close-dashboard-modal').addEventListener('click', hideModal);
-
-            const monthSelect = document.getElementById('summary-month');
-            const yearSelect = document.getElementById('summary-year');
-            const rankStartMonth = document.getElementById('rank-start-month');
-            const rankStartYear = document.getElementById('rank-start-year');
-            const rankEndMonth = document.getElementById('rank-end-month');
-            const rankEndYear = document.getElementById('rank-end-year');
-
-            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            const now = new Date();
-            
-            [monthSelect, rankStartMonth, rankEndMonth].forEach(sel => {
-                for (let i = 0; i < 12; i++) { const option = document.createElement('option'); option.value = i; option.textContent = monthNames[i]; if (i === now.getMonth()) option.selected = true; sel.appendChild(option); }
-            });
-            [yearSelect, rankStartYear, rankEndYear].forEach(sel => {
-                for (let i = 0; i < 5; i++) { const year = now.getFullYear() - i; const option = document.createElement('option'); option.value = year; option.textContent = year; sel.appendChild(option); }
-            });
-            
-            const updateDashboardView = () => updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
-            monthSelect.addEventListener('change', updateDashboardView);
-            yearSelect.addEventListener('change', updateDashboardView);
-
-            document.getElementById('rank-filter-btn').addEventListener('click', () => {
-                const startDate = new Date(rankStartYear.value, rankStartMonth.value, 1);
-                const endDate = new Date(rankEndYear.value, parseInt(rankEndMonth.value) + 1, 0);
-                renderTopClientes(startDate, endDate);
-            });
-            document.getElementById('rank-show-all-btn').addEventListener('click', () => renderTopClientes());
-
-
-            const summaryTab = document.getElementById('dashboard-tab-summary');
-            const carteraTab = document.getElementById('dashboard-tab-cartera');
-            const clientesTab = document.getElementById('dashboard-tab-clientes');
-            const summaryView = document.getElementById('dashboard-summary-view');
-            const carteraView = document.getElementById('dashboard-cartera-view');
-            const clientesView = document.getElementById('dashboard-clientes-view');
-
-            summaryTab.addEventListener('click', () => { 
-                summaryTab.classList.add('active'); 
-                carteraTab.classList.remove('active'); 
-                clientesTab.classList.remove('active');
-                summaryView.classList.remove('hidden'); 
-                carteraView.classList.add('hidden');
-                clientesView.classList.add('hidden');
-            });
-            carteraTab.addEventListener('click', () => { 
-                carteraTab.classList.add('active'); 
-                summaryTab.classList.remove('active'); 
-                clientesTab.classList.remove('active');
-                carteraView.classList.remove('hidden'); 
-                summaryView.classList.add('hidden');
-                clientesView.classList.add('hidden');
-            });
-             clientesTab.addEventListener('click', () => { 
-                clientesTab.classList.add('active'); 
-                summaryTab.classList.remove('active'); 
-                carteraTab.classList.remove('active');
-                clientesView.classList.remove('hidden'); 
-                summaryView.classList.add('hidden');
-                carteraView.classList.add('hidden');
-            });
-
-            document.getElementById('download-report-btn').addEventListener('click', showReportDateRangeModal);
-            
-            updateDashboardView();
-            renderCartera();
-            renderTopClientes();
-        }
-        function updateDashboard(year, month) { const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0); const expensesThisMonth = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0); document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth); document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth); document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth); const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera').textContent = formatCurrency(totalCartera); document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera); const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 }; allRemisiones.forEach(r => (r.payments || []).forEach(p => { if(accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; })); allGastos.forEach(g => { if(accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; }); document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo); document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi); document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda); const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; const labels = []; const salesData = []; const expensesData = []; for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const m = d.getMonth(); const y = d.getFullYear(); labels.push(monthNames[m]); const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const pDate = new Date(p.date); return pDate.getMonth() === m && pDate.getFullYear() === y; }).reduce((sum, p) => sum + p.amount, 0); const monthlyExpenses = allGastos.filter(g => { const gDate = new Date(g.fecha); return gDate.getMonth() === m && gDate.getFullYear() === y; }).reduce((sum, g) => sum + g.valorTotal, 0); salesData.push(monthlySales); expensesData.push(monthlyExpenses); } const ctx = document.getElementById('profitLossChart').getContext('2d'); if (profitLossChart) { profitLossChart.destroy(); } profitLossChart = new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: 'Ventas', data: salesData, backgroundColor: 'rgba(75, 192, 192, 0.6)' }, { label: 'Gastos', data: expensesData, backgroundColor: 'rgba(255, 99, 132, 0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } }); }
-        
-        function calculateOverdueDays(dateString) {
-            const today = new Date();
-            const receivedDate = new Date(dateString);
-            today.setHours(0, 0, 0, 0);
-            receivedDate.setHours(0, 0, 0, 0);
-            const diffTime = today - receivedDate;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays > 0 ? diffDays : 0;
-        }
-
-        function renderCartera() {
-            const carteraListEl = document.getElementById('cartera-list');
-            const carteraTotalEl = document.getElementById('cartera-total');
-            const pendingRemisiones = allRemisiones.filter(r => {
-                if (r.estado === 'Anulada') return false;
-                const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
-                return r.valorTotal - totalPagado > 0.01;
-            }).sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
-
-            carteraListEl.innerHTML = ''; // Clear previous content
-
-            if (pendingRemisiones.length === 0) {
-                carteraListEl.innerHTML = '<p class="text-center text-gray-500 py-8">¡No hay cartera pendiente!</p>';
-                carteraTotalEl.innerHTML = '';
-                return;
-            }
-
-            let totalCartera = 0;
-            pendingRemisiones.forEach(r => {
-                const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
-                const saldoPendiente = r.valorTotal - totalPagado;
-                totalCartera += saldoPendiente;
-                const overdueDays = calculateOverdueDays(r.fechaRecibido);
-                let overdueColor = 'text-gray-600';
-                if (overdueDays > 30) overdueColor = 'text-yellow-600';
-                if (overdueDays > 60) overdueColor = 'text-red-600';
-
-                const card = document.createElement('div');
-                card.className = 'bg-white p-4 rounded-lg shadow-md border border-gray-200';
-                card.innerHTML = `
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                        <div class="mb-2 sm:mb-0">
-                            <p class="font-bold text-gray-800">${r.clienteNombre}</p>
-                            <p class="text-sm text-gray-500">Remisión N° <span class="font-mono">${r.numeroRemision}</span> &bull; Recibido: ${r.fechaRecibido}</p>
-                        </div>
-                        <div class="text-left sm:text-right w-full sm:w-auto">
-                             <p class="text-sm text-gray-500">Saldo Pendiente</p>
-                            <p class="font-bold text-xl text-red-600">${formatCurrency(saldoPendiente)}</p>
-                        </div>
-                    </div>
-                    <div class="mt-2 pt-2 border-t border-gray-200 text-sm flex justify-between items-center">
-                        <p><span class="font-semibold">Valor Total:</span> ${formatCurrency(r.valorTotal)}</p>
-                        <p class="${overdueColor} font-semibold">${overdueDays} días de vencido</p>
-                    </div>
-                `;
-                carteraListEl.appendChild(card);
-            });
-
-            carteraTotalEl.innerHTML = `Total Cartera: <span class="text-red-600">${formatCurrency(totalCartera)}</span>`;
-        }
-        function renderTopClientes(startDate, endDate) {
-            const container = document.getElementById('top-clientes-list');
-            if (!container) return;
-
-            let remisionesToAnalyze = allRemisiones;
-            if (startDate && endDate) {
-                remisionesToAnalyze = allRemisiones.filter(r => {
-                    const d = new Date(r.fechaRecibido);
-                    return d >= startDate && d <= endDate;
-                });
-            }
-
-            const clientesConHistorial = allClientes.map(cliente => {
-                const remisionesCliente = remisionesToAnalyze.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
-                const totalComprado = remisionesCliente.reduce((sum, r) => sum + r.valorTotal, 0);
-                return { ...cliente, totalComprado, numCompras: remisionesCliente.length };
-            }).filter(c => c.numCompras > 0)
-              .sort((a, b) => b.totalComprado - a.totalComprado);
-            
-            container.innerHTML = '';
-            if (clientesConHistorial.length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500 py-8">No hay datos de compras de clientes para el rango seleccionado.</p>';
-                return;
-            }
-
-            clientesConHistorial.forEach(cliente => {
-                const el = document.createElement('div');
-                el.className = 'border p-4 rounded-lg';
-                el.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <p class="font-semibold text-lg">${cliente.nombre}</p>
-                        <p class="font-bold text-xl text-green-600">${formatCurrency(cliente.totalComprado)}</p>
-                    </div>
-                    <p class="text-sm text-gray-600">${cliente.numCompras} ${cliente.numCompras === 1 ? 'compra' : 'compras'}</p>
-                `;
-                container.appendChild(el);
-            });
-        }
-        const modal = document.getElementById('modal');
-        let modalTimeout;
-        function showModalMessage(message, isLoader = false, duration = 0) {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            modalContentWrapper.innerHTML = `<div id="modal-content" class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"></div>`;
-            const modalContent = document.getElementById('modal-content');
-            clearTimeout(modalTimeout);
-
-            let contentHTML = '';
-            if (isLoader) {
-                contentHTML = `<svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="mt-4 text-gray-700 font-semibold">${message}</p>`;
-            } else {
-                contentHTML = `<p class="text-gray-800 font-semibold mb-4">${message}</p>`;
-                if (duration === 0) {
-                    contentHTML += `<button id="close-message-modal-btn" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cerrar</button>`;
-                }
-            }
-            
-            modalContent.innerHTML = contentHTML;
-            modal.classList.remove('hidden');
-
-            if (duration > 0) {
-                modalTimeout = setTimeout(hideModal, duration);
-            } else if (!isLoader) {
-                const closeBtn = document.getElementById('close-message-modal-btn');
-                if (closeBtn) {
-                    closeBtn.addEventListener('click', hideModal);
-                }
-            }
-        }
-        function hideModal() { modal.classList.add('hidden'); }
-        function formatCurrency(value) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value); }
-        function populateDateFilters(prefix) {
-            const monthSelect = document.getElementById(`${prefix}-month`);
-            const yearSelect = document.getElementById(`${prefix}-year`);
-            if (!monthSelect || !yearSelect) return;
-
-            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            
-            monthSelect.innerHTML = '<option value="all">Todos los Meses</option>';
-            for (let i = 0; i < 12; i++) {
-                const option = document.createElement('option');
-                option.value = i;
-                option.textContent = monthNames[i];
-                monthSelect.appendChild(option);
-            }
-
-            yearSelect.innerHTML = '<option value="all">Todos los Años</option>';
-            const currentYear = new Date().getFullYear();
-            for (let i = 0; i < 5; i++) {
-                const year = currentYear - i;
-                const option = document.createElement('option');
-                option.value = year;
-                option.textContent = year;
-                yearSelect.appendChild(option);
-            }
-        }
-        function unformatCurrency(value) {
-            if (typeof value !== 'string') return parseFloat(value) || 0;
-            return parseFloat(value.replace(/[^0-9]/g, '')) || 0;
-        }
-        function formatCurrencyInput(inputElement) {
-            const value = unformatCurrency(inputElement.value);
-            inputElement.value = value > 0 ? formatCurrency(value) : '';
-        }
-        function unformatCurrencyInput(inputElement) {
-            const value = unformatCurrency(inputElement.value);
-            inputElement.value = value > 0 ? value : '';
-        }
-        function showReportDateRangeModal() {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            const now = new Date();
-            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            
-            let monthOptions = '';
-            for (let i = 0; i < 12; i++) {
-                monthOptions += `<option value="${i}" ${i === now.getMonth() ? 'selected' : ''}>${monthNames[i]}</option>`;
-            }
-
-            let yearOptions = '';
-            for (let i = 0; i < 5; i++) {
-                const year = now.getFullYear() - i;
-                yearOptions += `<option value="${year}">${year}</option>`;
-            }
-
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">Seleccionar Rango del Reporte</h2>
-                        <button id="close-report-range-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-                    </div>
-                    <form id="report-range-form" class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium">Mes de Inicio</label>
-                                <select id="report-start-month" class="w-full p-2 border rounded-lg">${monthOptions}</select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium">Año de Inicio</label>
-                                <select id="report-start-year" class="w-full p-2 border rounded-lg">${yearOptions}</select>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium">Mes de Fin</label>
-                                <select id="report-end-month" class="w-full p-2 border rounded-lg">${monthOptions}</select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium">Año de Fin</label>
-                                <select id="report-end-year" class="w-full p-2 border rounded-lg">${yearOptions}</select>
-                            </div>
-                        </div>
-                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Generar Reporte</button>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('close-report-range-modal').addEventListener('click', hideModal);
-            document.getElementById('report-range-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                const startMonth = parseInt(document.getElementById('report-start-month').value);
-                const startYear = parseInt(document.getElementById('report-start-year').value);
-                const endMonth = parseInt(document.getElementById('report-end-month').value);
-                const endYear = parseInt(document.getElementById('report-end-year').value);
+            function showDashboardModal() {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
                 
-                generateSummaryPDF(startYear, startMonth, endYear, endMonth);
-                hideModal();
-            });
-        }
-        function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            
-            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            const startDate = new Date(startYear, startMonth, 1);
-            const endDate = new Date(endYear, endMonth + 1, 0);
-
-            const rangeTitle = `${monthNames[startMonth]} ${startYear} - ${monthNames[endMonth]} ${endYear}`;
-            doc.setFontSize(20);
-            doc.text(`Reporte Financiero: ${rangeTitle}`, 105, 20, { align: "center" });
-
-            // Calculate totals for the entire period
-            const salesInRange = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d >= startDate && d <= endDate; }).reduce((sum, p) => sum + p.amount, 0);
-            const expensesInRange = allGastos.filter(g => { const d = new Date(g.fecha); return d >= startDate && d <= endDate; }).reduce((sum, g) => sum + g.valorTotal, 0);
-            const profitInRange = salesInRange - expensesInRange;
-
-            const summaryData = [
-                ['Ventas Totales en el Período', formatCurrency(salesInRange)],
-                ['Gastos Totales en el Período', formatCurrency(expensesInRange)],
-                ['Utilidad/Pérdida Total', formatCurrency(profitInRange)],
-            ];
-            
-            doc.autoTable({
-                startY: 30,
-                head: [['Resumen del Período', 'Valor']],
-                body: summaryData,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185] }
-            });
-
-            // Monthly breakdown
-            const monthlyData = [];
-            let currentDate = new Date(startDate);
-            while (currentDate <= endDate) {
-                const year = currentDate.getFullYear();
-                const month = currentDate.getMonth();
-                const monthName = monthNames[month];
-
-                const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0);
-                const monthlyExpenses = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0);
-                const monthlyProfit = monthlySales - monthlyExpenses;
-                const endOfMonth = new Date(year, month + 1, 0);
-                const carteraAtEndOfMonth = allRemisiones.filter(r => new Date(r.fechaRecibido) <= endOfMonth && r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).filter(p => new Date(p.date) <= endOfMonth).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
-
-
-                monthlyData.push([
-                    `${monthName} ${year}`,
-                    formatCurrency(monthlySales),
-                    formatCurrency(monthlyExpenses),
-                    formatCurrency(monthlyProfit),
-                    formatCurrency(carteraAtEndOfMonth)
-                ]);
-                currentDate.setMonth(currentDate.getMonth() + 1);
-            }
-
-            doc.autoTable({
-                startY: doc.lastAutoTable.finalY + 10,
-                head: [['Mes', 'Ventas', 'Gastos', 'Utilidad/Pérdida', 'Cartera al Cierre']],
-                body: monthlyData,
-                theme: 'striped',
-                headStyles: { fillColor: [22, 160, 133] }
-            });
-
-            const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 };
-            allRemisiones.forEach(r => (r.payments || []).forEach(p => { if(accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; }));
-            allGastos.forEach(g => { if(accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; });
-            const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
-
-            const accountData = [
-                ['Efectivo', formatCurrency(accountBalances.Efectivo)],
-                ['Nequi', formatCurrency(accountBalances.Nequi)],
-                ['Davivienda', formatCurrency(accountBalances.Davivienda)],
-                ['Cartera Total Pendiente', formatCurrency(totalCartera)],
-            ];
-
-            doc.autoTable({
-                startY: doc.lastAutoTable.finalY + 10,
-                head: [['Saldos y Totales Actuales', 'Valor']],
-                body: accountData,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185] }
-            });
-
-            doc.save(`Reporte-Financiero-${startYear}-${startMonth+1}_a_${endYear}-${endMonth+1}.pdf`);
-        }
-        function showPermissionsModal(user) {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            const userPermissions = user.permissions || {};
-
-            let permissionsHTML = ALL_MODULES.filter(m => m !== 'empleados').map(module => {
-                const isChecked = userPermissions[module] || false;
-                const capitalized = module.charAt(0).toUpperCase() + module.slice(1);
-                return `
-                    <label class="flex items-center space-x-2">
-                        <input type="checkbox" class="permission-checkbox h-4 w-4 rounded border-gray-300" data-module="${module}" ${isChecked ? 'checked' : ''}>
-                        <span>${capitalized}</span>
-                    </label>
-                `;
-            }).join('');
-
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">Gestionar Permisos para ${user.nombre}</h2>
-                        <button id="close-permissions-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-                    </div>
-                    <form id="permissions-form" class="space-y-4">
-                        <input type="hidden" id="permission-user-id" value="${user.id}">
-                        <div>
-                            <label class="block text-sm font-medium">Rol</label>
-                            <select id="role-select" class="w-full p-2 border rounded-lg mt-1 bg-white">
-                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador</option>
-                                <option value="facturador" ${user.role === 'facturador' ? 'selected' : ''}>Facturador</option>
-                                <option value="planta" ${user.role === 'planta' ? 'selected' : ''}>Planta</option>
-                                <option value="employee" ${user.role === 'employee' ? 'selected' : ''}>Empleado</option>
-                            </select>
-                        </div>
-                        <div id="permissions-container">
-                            <label class="block text-sm font-medium mb-2">Permisos de Módulos</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                ${permissionsHTML}
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto text-left flex flex-col" style="height: 80vh;">
+                        <div class="flex justify-between items-center p-4 border-b">
+                            <h2 class="text-xl font-semibold">Resumen Financiero</h2>
+                            <div class="flex items-center gap-4">
+                                <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
+                                <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                             </div>
                         </div>
-                        <div class="flex justify-end pt-4">
-                            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Guardar Cambios</button>
+                        <div class="border-b border-gray-200">
+                            <nav class="-mb-px flex space-x-6 px-6">
+                                <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold">Resumen Mensual</button>
+                                <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold">Cartera</button>
+                                <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold">Clientes</button>
+                            </nav>
                         </div>
-                    </form>
-                </div>
-            `;
-
-            const roleSelect = document.getElementById('role-select');
-            const permissionsContainer = document.getElementById('permissions-container');
-            const checkboxes = permissionsContainer.querySelectorAll('.permission-checkbox');
-
-            function togglePermissionsUI(role) {
-                if (role === 'admin') {
-                    permissionsContainer.style.display = 'none';
-                } else {
-                    permissionsContainer.style.display = 'block';
-                }
-            }
-
-            function setPermissionsForRole(role) {
-                let newPermissions = {};
-                if (role === 'facturador') {
-                    newPermissions = { remisiones: true, facturacion: true, clientes: true, items: false, colores: false, gastos: true, proveedores: true };
-                } else if (role === 'employee') {
-                    newPermissions = { remisiones: true, facturacion: false, clientes: true, items: true, colores: true, gastos: false, proveedores: false };
-                } else if (role === 'planta') {
-                    newPermissions = { remisiones: true, facturacion: false, clientes: false, items: false, colores: false, gastos: false, proveedores: false };
-                }
-                
-                checkboxes.forEach(cb => {
-                    cb.checked = newPermissions[cb.dataset.module] || false;
-                });
-            }
-
-            roleSelect.addEventListener('change', (e) => {
-                const newRole = e.target.value;
-                togglePermissionsUI(newRole);
-                setPermissionsForRole(newRole);
-            });
-
-            togglePermissionsUI(user.role);
-
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('close-permissions-modal').addEventListener('click', hideModal);
-            document.getElementById('permissions-form').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const userId = document.getElementById('permission-user-id').value;
-                const newRole = document.getElementById('role-select').value;
-                const newPermissions = {};
-                
-                checkboxes.forEach(cb => {
-                    newPermissions[cb.dataset.module] = cb.checked;
-                });
-                
-                showModalMessage("Guardando cambios...", true);
-                try {
-                    await updateDoc(doc(db, "users", userId), {
-                        role: newRole,
-                        permissions: newPermissions
-                    });
-                    hideModal();
-                    showModalMessage("Permisos actualizados.", false, 2000);
-                } catch (error) {
-                    console.error("Error al actualizar permisos:", error);
-                    showModalMessage("Error al guardar los cambios.");
-                }
-            });
-        }
-
-        function showDocumentModal(empleado, title, docTypes, storagePrefix) {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            const employeeDocs = empleado.documentos ? (empleado.documentos[storagePrefix] || {}) : {};
-
-            let documentsHTML = docTypes.map(docType => {
-                const docUrl = employeeDocs[docType.id];
-                const fileInputId = `file-${storagePrefix}-${docType.id}-${empleado.id}`;
-                return `
-                    <div class="flex justify-between items-center p-3 border-b">
-                        <span class="font-medium">${docType.name}</span>
-                        <div class="flex items-center gap-2">
-                            ${docUrl ? `<a href="${docUrl}" target="_blank" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">Ver</a>` : '<span class="text-xs text-gray-400">No adjunto</span>'}
-                            <input type="file" id="${fileInputId}" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
-                            <label for="${fileInputId}" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold cursor-pointer hover:bg-gray-300">Adjuntar</label>
+                        <div id="dashboard-summary-view" class="p-6 space-y-6 overflow-y-auto flex-grow"> <div class="flex items-center gap-4"><select id="summary-month" class="p-2 border rounded-lg"></select><select id="summary-year" class="p-2 border rounded-lg"></select></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-green-100 p-4 rounded-lg"><div class="text-sm font-semibold text-green-800">VENTAS</div><div id="summary-sales" class="text-2xl font-bold"></div></div><div class="bg-red-100 p-4 rounded-lg"><div class="text-sm font-semibold text-red-800">GASTOS</div><div id="summary-expenses" class="text-2xl font-bold"></div></div><div class="bg-indigo-100 p-4 rounded-lg"><div class="text-sm font-semibold text-indigo-800">UTILIDAD/PÉRDIDA</div><div id="summary-profit" class="text-2xl font-bold"></div></div><div class="bg-yellow-100 p-4 rounded-lg"><div class="text-sm font-semibold text-yellow-800">CARTERA PENDIENTE (MES)</div><div id="summary-cartera" class="text-2xl font-bold"></div></div></div><div><h3 class="font-semibold mb-2">Saldos Estimados (Total)</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">EFECTIVO</div><div id="summary-efectivo" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">NEQUI</div><div id="summary-nequi" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">DAVIVIENDA</div><div id="summary-davivienda" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">CARTERA TOTAL</div><div id="summary-cartera-total" class="text-xl font-bold"></div></div></div></div><div><h3 class="font-semibold mb-2">Utilidad/Pérdida (Últimos 6 Meses)</h3><div class="bg-gray-50 p-4 rounded-lg"><canvas id="profitLossChart"></canvas></div></div></div>
+                        <div id="dashboard-cartera-view" class="p-6 hidden flex-grow overflow-y-auto"><h3 class="font-semibold mb-2 text-xl">Cartera Pendiente de Cobro</h3><div id="cartera-list" class="space-y-4"></div><div id="cartera-total" class="text-right font-bold text-xl mt-4"></div></div>
+                        <div id="dashboard-clientes-view" class="p-6 hidden flex-grow overflow-y-auto">
+                            <h3 class="font-semibold mb-2 text-xl">Ranking de Clientes</h3>
+                            <div class="flex flex-wrap items-center gap-4 mb-4 p-2 bg-gray-50 rounded-lg">
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm font-medium">Desde:</label>
+                                    <select id="rank-start-month" class="p-2 border rounded-lg"></select>
+                                    <select id="rank-start-year" class="p-2 border rounded-lg"></select>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm font-medium">Hasta:</label>
+                                    <select id="rank-end-month" class="p-2 border rounded-lg"></select>
+                                    <select id="rank-end-year" class="p-2 border rounded-lg"></select>
+                                </div>
+                                <button id="rank-filter-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Filtrar</button>
+                                <button id="rank-show-all-btn" class="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-700">Mostrar Todos</button>
+                            </div>
+                            <div id="top-clientes-list" class="space-y-3"></div>
                         </div>
                     </div>
                 `;
-            }).join('');
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-dashboard-modal').addEventListener('click', hideModal);
 
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-auto text-left flex flex-col" style="max-height: 80vh;">
-                    <div class="flex justify-between items-center p-4 border-b">
-                        <h2 class="text-xl font-semibold">${title}: ${empleado.nombre}</h2>
-                        <div class="flex items-center gap-2">
-                           <button id="download-all-docs-btn" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Descargar todo (.zip)</button>
-                           <button id="close-docs-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-                        </div>
-                    </div>
-                    <div class="p-4 overflow-y-auto">
-                        ${documentsHTML}
-                    </div>
-                </div>
-            `;
+                const monthSelect = document.getElementById('summary-month');
+                const yearSelect = document.getElementById('summary-year');
+                const rankStartMonth = document.getElementById('rank-start-month');
+                const rankStartYear = document.getElementById('rank-start-year');
+                const rankEndMonth = document.getElementById('rank-end-month');
+                const rankEndYear = document.getElementById('rank-end-year');
 
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('close-docs-modal').addEventListener('click', hideModal);
-            document.getElementById('download-all-docs-btn').addEventListener('click', () => handleDownloadAllDocs(empleado, storagePrefix));
-
-
-            docTypes.forEach(docType => {
-                const fileInputId = `file-${storagePrefix}-${docType.id}-${empleado.id}`;
-                const fileInput = document.getElementById(fileInputId);
-                fileInput.addEventListener('change', (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        handleFileUpload(empleado.id, `documentos.${storagePrefix}.${docType.id}`, file);
-                    }
+                const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                const now = new Date();
+                
+                [monthSelect, rankStartMonth, rankEndMonth].forEach(sel => {
+                    for (let i = 0; i < 12; i++) { const option = document.createElement('option'); option.value = i; option.textContent = monthNames[i]; if (i === now.getMonth()) option.selected = true; sel.appendChild(option); }
                 });
-            });
-        }
+                [yearSelect, rankStartYear, rankEndYear].forEach(sel => {
+                    for (let i = 0; i < 5; i++) { const year = now.getFullYear() - i; const option = document.createElement('option'); option.value = year; option.textContent = year; sel.appendChild(option); }
+                });
+                
+                const updateDashboardView = () => updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
+                monthSelect.addEventListener('change', updateDashboardView);
+                yearSelect.addEventListener('change', updateDashboardView);
 
-        async function handleFileUpload(employeeId, docPath, file) {
-            if (!file) return;
-            showModalMessage("Subiendo documento...", true);
+                document.getElementById('rank-filter-btn').addEventListener('click', () => {
+                    const startDate = new Date(rankStartYear.value, rankStartMonth.value, 1);
+                    const endDate = new Date(rankEndYear.value, parseInt(rankEndMonth.value) + 1, 0);
+                    renderTopClientes(startDate, endDate);
+                });
+                document.getElementById('rank-show-all-btn').addEventListener('click', () => renderTopClientes());
 
-            const storagePath = `empleados/${employeeId}/${docPath.replace(/\./g, '/')}/${file.name}`;
-            const storageRef = ref(storage, storagePath);
+
+                const summaryTab = document.getElementById('dashboard-tab-summary');
+                const carteraTab = document.getElementById('dashboard-tab-cartera');
+                const clientesTab = document.getElementById('dashboard-tab-clientes');
+                const summaryView = document.getElementById('dashboard-summary-view');
+                const carteraView = document.getElementById('dashboard-cartera-view');
+                const clientesView = document.getElementById('dashboard-clientes-view');
+
+                summaryTab.addEventListener('click', () => { 
+                    summaryTab.classList.add('active'); 
+                    carteraTab.classList.remove('active'); 
+                    clientesTab.classList.remove('active');
+                    summaryView.classList.remove('hidden'); 
+                    carteraView.classList.add('hidden');
+                    clientesView.classList.add('hidden');
+                });
+                carteraTab.addEventListener('click', () => { 
+                    carteraTab.classList.add('active'); 
+                    summaryTab.classList.remove('active'); 
+                    clientesTab.classList.remove('active');
+                    carteraView.classList.remove('hidden'); 
+                    summaryView.classList.add('hidden');
+                    clientesView.classList.add('hidden');
+                });
+                clientesTab.addEventListener('click', () => { 
+                    clientesTab.classList.add('active'); 
+                    summaryTab.classList.remove('active'); 
+                    carteraTab.classList.remove('active');
+                    clientesView.classList.remove('hidden'); 
+                    summaryView.classList.add('hidden');
+                    carteraView.classList.add('hidden');
+                });
+
+                document.getElementById('download-report-btn').addEventListener('click', showReportDateRangeModal);
+                
+                updateDashboardView();
+                renderCartera();
+                renderTopClientes();
+            }
+            function updateDashboard(year, month) { const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0); const expensesThisMonth = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0); document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth); document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth); document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth); const carteraThisMonth = allRemisiones.filter(r => { const d = new Date(r.fechaRecibido); return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada'; }).reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera').textContent = formatCurrency(carteraThisMonth); const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera); const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 }; allRemisiones.forEach(r => (r.payments || []).forEach(p => { if(accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; })); allGastos.forEach(g => { if(accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; }); document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo); document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi); document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda); const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; const labels = []; const salesData = []; const expensesData = []; for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const m = d.getMonth(); const y = d.getFullYear(); labels.push(monthNames[m]); const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const pDate = new Date(p.date); return pDate.getMonth() === m && pDate.getFullYear() === y; }).reduce((sum, p) => sum + p.amount, 0); const monthlyExpenses = allGastos.filter(g => { const gDate = new Date(g.fecha); return gDate.getMonth() === m && gDate.getFullYear() === y; }).reduce((sum, g) => sum + g.valorTotal, 0); salesData.push(monthlySales); expensesData.push(monthlyExpenses); } const ctx = document.getElementById('profitLossChart').getContext('2d'); if (profitLossChart) { profitLossChart.destroy(); } profitLossChart = new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: 'Ventas', data: salesData, backgroundColor: 'rgba(75, 192, 192, 0.6)' }, { label: 'Gastos', data: expensesData, backgroundColor: 'rgba(255, 99, 132, 0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } }); }
             
-            try {
-                const snapshot = await uploadBytes(storageRef, file);
-                const downloadURL = await getDownloadURL(snapshot.ref);
-                
-                const updateData = {};
-                updateData[docPath] = downloadURL;
-
-                await updateDoc(doc(db, "users", employeeId), updateData);
-
-                hideModal();
-                showModalMessage("¡Documento subido y guardado!", false, 2000);
-            } catch (error) {
-                console.error("Error al subir archivo:", error);
-                hideModal();
-                showModalMessage("Error al subir el documento.");
-            }
-        }
-        
-        async function handleDownloadAllDocs(empleado, storagePrefix) {
-            const employeeDocs = empleado.documentos ? (empleado.documentos[storagePrefix] || {}) : {};
-            const docUrls = Object.entries(employeeDocs);
-
-            if (docUrls.length === 0) {
-                showModalMessage("No hay documentos para descargar.", false, 3000);
-                return;
+            function calculateOverdueDays(dateString) {
+                const today = new Date();
+                const receivedDate = new Date(dateString);
+                today.setHours(0, 0, 0, 0);
+                receivedDate.setHours(0, 0, 0, 0);
+                const diffTime = today - receivedDate;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays > 0 ? diffDays : 0;
             }
 
-            showModalMessage("Generando archivo .zip...", true);
+            function renderCartera() {
+                const carteraListEl = document.getElementById('cartera-list');
+                const carteraTotalEl = document.getElementById('cartera-total');
+                const pendingRemisiones = allRemisiones.filter(r => {
+                    if (r.estado === 'Anulada') return false;
+                    const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
+                    return r.valorTotal - totalPagado > 0.01;
+                }).sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
 
-            try {
-                const zip = new JSZip();
-                
-                const promises = docUrls.map(async ([docType, url]) => {
-                    try {
-                        const response = await fetch(url);
-                        if (!response.ok) {
-                            throw new Error(`Error fetching ${docType}: ${response.statusText}`);
-                        }
-                        const blob = await response.blob();
-                        
-                        const urlPath = new URL(url).pathname;
-                        const fileNameWithToken = urlPath.split('/').pop();
-                        const decodedFileName = decodeURIComponent(fileNameWithToken.split('?')[0]);
-                        const originalFileName = decodedFileName.split('/').pop(); 
-                        
-                        zip.file(originalFileName, blob);
-                    } catch (error) {
-                        console.error(`Could not download file for ${docType}:`, error);
-                    }
-                });
+                carteraListEl.innerHTML = ''; // Clear previous content
 
-                await Promise.all(promises);
-
-                const zipBlob = await zip.generateAsync({ type: "blob" });
-
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(zipBlob);
-                link.download = `${empleado.nombre.replace(/\s+/g, '_')}_documentos_${storagePrefix}.zip`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
-
-                hideModal();
-
-            } catch (error) {
-                console.error("Error creating zip file:", error);
-                hideModal();
-                showModalMessage("Error al crear el archivo .zip.", false, 3000);
-            }
-        }
-
-        function showFacturaModal(remisionId) {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
-                    <h2 class="text-xl font-semibold mb-4">Registrar Factura</h2>
-                    <form id="factura-form">
-                        <label for="numero-factura" class="block text-sm font-medium text-gray-700">Número de Factura</label>
-                        <input type="text" id="numero-factura" class="w-full p-2 border border-gray-300 rounded-lg mt-1" required>
-                        <div class="flex gap-4 justify-end pt-4 mt-4">
-                            <button type="button" id="cancel-factura-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button>
-                            <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('cancel-factura-btn').addEventListener('click', hideModal);
-            document.getElementById('factura-form').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const numeroFactura = document.getElementById('numero-factura').value;
-                if (!numeroFactura) {
-                    alert('Por favor, ingresa un número de factura.');
+                if (pendingRemisiones.length === 0) {
+                    carteraListEl.innerHTML = '<p class="text-center text-gray-500 py-8">¡No hay cartera pendiente!</p>';
+                    carteraTotalEl.innerHTML = '';
                     return;
                 }
-                showModalMessage("Guardando...", true);
-                try {
-                    await updateDoc(doc(db, "remisiones", remisionId), {
-                        facturado: true,
-                        numeroFactura: numeroFactura
+
+                let totalCartera = 0;
+                pendingRemisiones.forEach(r => {
+                    const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
+                    const saldoPendiente = r.valorTotal - totalPagado;
+                    totalCartera += saldoPendiente;
+                    const overdueDays = calculateOverdueDays(r.fechaRecibido);
+                    let overdueColor = 'text-gray-600';
+                    if (overdueDays > 30) overdueColor = 'text-yellow-600';
+                    if (overdueDays > 60) overdueColor = 'text-red-600';
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-lg shadow-md border border-gray-200';
+                    card.innerHTML = `
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                            <div class="mb-2 sm:mb-0">
+                                <p class="font-bold text-gray-800">${r.clienteNombre}</p>
+                                <p class="text-sm text-gray-500">Remisión N° <span class="font-mono">${r.numeroRemision}</span> &bull; Recibido: ${r.fechaRecibido}</p>
+                            </div>
+                            <div class="text-left sm:text-right w-full sm:w-auto">
+                                <p class="text-sm text-gray-500">Saldo Pendiente</p>
+                                <p class="font-bold text-xl text-red-600">${formatCurrency(saldoPendiente)}</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-gray-200 text-sm flex justify-between items-center">
+                            <p><span class="font-semibold">Valor Total:</span> ${formatCurrency(r.valorTotal)}</p>
+                            <p class="${overdueColor} font-semibold">${overdueDays} días de vencido</p>
+                        </div>
+                    `;
+                    carteraListEl.appendChild(card);
+                });
+
+                carteraTotalEl.innerHTML = `Total Cartera: <span class="text-red-600">${formatCurrency(totalCartera)}</span>`;
+            }
+            function renderTopClientes(startDate, endDate) {
+                const container = document.getElementById('top-clientes-list');
+                if (!container) return;
+
+                let remisionesToAnalyze = allRemisiones;
+                if (startDate && endDate) {
+                    remisionesToAnalyze = allRemisiones.filter(r => {
+                        const d = new Date(r.fechaRecibido);
+                        return d >= startDate && d <= endDate;
                     });
-                    hideModal();
-                    showModalMessage("¡Remisión marcada como facturada!", false, 2000);
-                } catch (error) {
-                    console.error("Error al actualizar la remisión:", error);
-                    showModalMessage("Error al guardar la factura.");
                 }
-            });
-        }
 
-        function showObrasDocsModal(empleado) {
-            showDocumentModal(empleado, 'Documentos de Ingreso a Obras', OBRAS_DOCUMENT_TYPES, 'obras_ingreso');
-        }
+                const clientesConHistorial = allClientes.map(cliente => {
+                    const remisionesCliente = remisionesToAnalyze.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
+                    const totalComprado = remisionesCliente.reduce((sum, r) => sum + r.valorTotal, 0);
+                    return { ...cliente, totalComprado, numCompras: remisionesCliente.length };
+                }).filter(c => c.numCompras > 0)
+                .sort((a, b) => b.totalComprado - a.totalComprado);
+                
+                container.innerHTML = '';
+                if (clientesConHistorial.length === 0) {
+                    container.innerHTML = '<p class="text-center text-gray-500 py-8">No hay datos de compras de clientes para el rango seleccionado.</p>';
+                    return;
+                }
 
-        function showRRHHModal(empleado) {
-            const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            modalContentWrapper.innerHTML = `
-                <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-auto text-left flex flex-col" style="max-height: 90vh;">
-                    <div class="flex justify-between items-center p-4 border-b">
-                        <h2 class="text-xl font-semibold">Recursos Humanos: ${empleado.nombre}</h2>
-                        <button id="close-rrhh-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                clientesConHistorial.forEach(cliente => {
+                    const el = document.createElement('div');
+                    el.className = 'border p-4 rounded-lg';
+                    el.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <p class="font-semibold text-lg">${cliente.nombre}</p>
+                            <p class="font-bold text-xl text-green-600">${formatCurrency(cliente.totalComprado)}</p>
+                        </div>
+                        <p class="text-sm text-gray-600">${cliente.numCompras} ${cliente.numCompras === 1 ? 'compra' : 'compras'}</p>
+                    `;
+                    container.appendChild(el);
+                });
+            }
+            const modal = document.getElementById('modal');
+            let modalTimeout;
+            function showModalMessage(message, isLoader = false, duration = 0) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                modalContentWrapper.innerHTML = `<div id="modal-content" class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"></div>`;
+                const modalContent = document.getElementById('modal-content');
+                clearTimeout(modalTimeout);
+
+                let contentHTML = '';
+                if (isLoader) {
+                    contentHTML = `<svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="mt-4 text-gray-700 font-semibold">${message}</p>`;
+                } else {
+                    contentHTML = `<p class="text-gray-800 font-semibold mb-4">${message}</p>`;
+                    if (duration === 0) {
+                        contentHTML += `<button id="close-message-modal-btn" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cerrar</button>`;
+                    }
+                }
+                
+                modalContent.innerHTML = contentHTML;
+                modal.classList.remove('hidden');
+
+                if (duration > 0) {
+                    modalTimeout = setTimeout(hideModal, duration);
+                } else if (!isLoader) {
+                    const closeBtn = document.getElementById('close-message-modal-btn');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', hideModal);
+                    }
+                }
+            }
+            function hideModal() { modal.classList.add('hidden'); }
+            function formatCurrency(value) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value); }
+            function populateDateFilters(prefix) {
+                const monthSelect = document.getElementById(`${prefix}-month`);
+                const yearSelect = document.getElementById(`${prefix}-year`);
+                if (!monthSelect || !yearSelect) return;
+
+                const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                
+                monthSelect.innerHTML = '<option value="all">Todos los Meses</option>';
+                for (let i = 0; i < 12; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = monthNames[i];
+                    monthSelect.appendChild(option);
+                }
+
+                yearSelect.innerHTML = '<option value="all">Todos los Años</option>';
+                const currentYear = new Date().getFullYear();
+                for (let i = 0; i < 5; i++) {
+                    const year = currentYear - i;
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    yearSelect.appendChild(option);
+                }
+            }
+            function unformatCurrency(value) {
+                if (typeof value !== 'string') return parseFloat(value) || 0;
+                return parseFloat(value.replace(/[^0-9]/g, '')) || 0;
+            }
+            function formatCurrencyInput(inputElement) {
+                const value = unformatCurrency(inputElement.value);
+                inputElement.value = value > 0 ? formatCurrency(value) : '';
+            }
+            function unformatCurrencyInput(inputElement) {
+                const value = unformatCurrency(inputElement.value);
+                inputElement.value = value > 0 ? value : '';
+            }
+            function showReportDateRangeModal() {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                const now = new Date();
+                const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                
+                let monthOptions = '';
+                for (let i = 0; i < 12; i++) {
+                    monthOptions += `<option value="${i}" ${i === now.getMonth() ? 'selected' : ''}>${monthNames[i]}</option>`;
+                }
+
+                let yearOptions = '';
+                for (let i = 0; i < 5; i++) {
+                    const year = now.getFullYear() - i;
+                    yearOptions += `<option value="${year}">${year}</option>`;
+                }
+
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Seleccionar Rango del Reporte</h2>
+                            <button id="close-report-range-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <form id="report-range-form" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium">Mes de Inicio</label>
+                                    <select id="report-start-month" class="w-full p-2 border rounded-lg">${monthOptions}</select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium">Año de Inicio</label>
+                                    <select id="report-start-year" class="w-full p-2 border rounded-lg">${yearOptions}</select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium">Mes de Fin</label>
+                                    <select id="report-end-month" class="w-full p-2 border rounded-lg">${monthOptions}</select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium">Año de Fin</label>
+                                    <select id="report-end-year" class="w-full p-2 border rounded-lg">${yearOptions}</select>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Generar Reporte</button>
+                        </form>
                     </div>
-                    <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-6 px-6">
-                            <button id="rrhh-tab-contratacion" class="dashboard-tab-btn active py-3 px-1 font-semibold">Datos y Contratación</button>
-                            <button id="rrhh-tab-pagos" class="dashboard-tab-btn py-3 px-1 font-semibold">Pagos y Liquidaciones</button>
-                            <button id="rrhh-tab-descargos" class="dashboard-tab-btn py-3 px-1 font-semibold">Descargos</button>
-                        </nav>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-report-range-modal').addEventListener('click', hideModal);
+                document.getElementById('report-range-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const startMonth = parseInt(document.getElementById('report-start-month').value);
+                    const startYear = parseInt(document.getElementById('report-start-year').value);
+                    const endMonth = parseInt(document.getElementById('report-end-month').value);
+                    const endYear = parseInt(document.getElementById('report-end-year').value);
+                    
+                    generateSummaryPDF(startYear, startMonth, endYear, endMonth);
+                    hideModal();
+                });
+            }
+            function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                const startDate = new Date(startYear, startMonth, 1);
+                const endDate = new Date(endYear, endMonth + 1, 0);
+
+                const rangeTitle = `${monthNames[startMonth]} ${startYear} - ${monthNames[endMonth]} ${endYear}`;
+                doc.setFontSize(20);
+                doc.text(`Reporte Financiero: ${rangeTitle}`, 105, 20, { align: "center" });
+
+                // Calculate totals for the entire period
+                const salesInRange = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d >= startDate && d <= endDate; }).reduce((sum, p) => sum + p.amount, 0);
+                const expensesInRange = allGastos.filter(g => { const d = new Date(g.fecha); return d >= startDate && d <= endDate; }).reduce((sum, g) => sum + g.valorTotal, 0);
+                const profitInRange = salesInRange - expensesInRange;
+
+                const summaryData = [
+                    ['Ventas Totales en el Período', formatCurrency(salesInRange)],
+                    ['Gastos Totales en el Período', formatCurrency(expensesInRange)],
+                    ['Utilidad/Pérdida Total', formatCurrency(profitInRange)],
+                ];
+                
+                doc.autoTable({
+                    startY: 30,
+                    head: [['Resumen del Período', 'Valor']],
+                    body: summaryData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [41, 128, 185] }
+                });
+
+                // Monthly breakdown
+                const monthlyData = [];
+                let currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    const year = currentDate.getFullYear();
+                    const month = currentDate.getMonth();
+                    const monthName = monthNames[month];
+
+                    const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0);
+                    const monthlyExpenses = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0);
+                    const monthlyProfit = monthlySales - monthlyExpenses;
+                    const endOfMonth = new Date(year, month + 1, 0);
+                    const carteraAtEndOfMonth = allRemisiones.filter(r => new Date(r.fechaRecibido) <= endOfMonth && r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).filter(p => new Date(p.date) <= endOfMonth).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
+
+
+                    monthlyData.push([
+                        `${monthName} ${year}`,
+                        formatCurrency(monthlySales),
+                        formatCurrency(monthlyExpenses),
+                        formatCurrency(monthlyProfit),
+                        formatCurrency(carteraAtEndOfMonth)
+                    ]);
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                }
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 10,
+                    head: [['Mes', 'Ventas', 'Gastos', 'Utilidad/Pérdida', 'Cartera al Cierre']],
+                    body: monthlyData,
+                    theme: 'striped',
+                    headStyles: { fillColor: [22, 160, 133] }
+                });
+
+                const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 };
+                allRemisiones.forEach(r => (r.payments || []).forEach(p => { if(accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; }));
+                allGastos.forEach(g => { if(accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; });
+                const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
+
+                const accountData = [
+                    ['Efectivo', formatCurrency(accountBalances.Efectivo)],
+                    ['Nequi', formatCurrency(accountBalances.Nequi)],
+                    ['Davivienda', formatCurrency(accountBalances.Davivienda)],
+                    ['Cartera Total Pendiente', formatCurrency(totalCartera)],
+                ];
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 10,
+                    head: [['Saldos y Totales Actuales', 'Valor']],
+                    body: accountData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [41, 128, 185] }
+                });
+
+                doc.save(`Reporte-Financiero-${startYear}-${startMonth+1}_a_${endYear}-${endMonth+1}.pdf`);
+            }
+            function showAdminEditUserModal(user) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                const userPermissions = user.permissions || {};
+
+                let permissionsHTML = ALL_MODULES.filter(m => m !== 'empleados').map(module => {
+                    const isChecked = userPermissions[module] || false;
+                    const capitalized = module.charAt(0).toUpperCase() + module.slice(1);
+                    return `
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="permission-checkbox h-4 w-4 rounded border-gray-300" data-module="${module}" ${isChecked ? 'checked' : ''}>
+                            <span>${capitalized}</span>
+                        </label>
+                    `;
+                }).join('');
+
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Gestionar Empleado: ${user.nombre}</h2>
+                            <button id="close-admin-edit-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <form id="admin-edit-user-form" class="space-y-4">
+                            <input type="hidden" id="admin-edit-user-id" value="${user.id}">
+                            <div><label class="block text-sm font-medium">Nombre Completo</label><input type="text" id="admin-edit-name" class="w-full p-2 border rounded-lg mt-1" value="${user.nombre || ''}" required></div>
+                            <div><label class="block text-sm font-medium">Correo Electrónico</label><input type="email" id="admin-edit-email" class="w-full p-2 border rounded-lg mt-1" value="${user.email || ''}" required></div>
+                            <div><label class="block text-sm font-medium">Teléfono</label><input type="tel" id="admin-edit-phone" class="w-full p-2 border rounded-lg mt-1" value="${user.telefono || ''}"></div>
+                            <div><label class="block text-sm font-medium">Dirección</label><input type="text" id="admin-edit-address" class="w-full p-2 border rounded-lg mt-1" value="${user.direccion || ''}"></div>
+                            <div><label class="block text-sm font-medium">Fecha de Nacimiento</label><input type="date" id="admin-edit-dob" class="w-full p-2 border rounded-lg mt-1" value="${user.dob || ''}"></div>
+                            <div>
+                                <label class="block text-sm font-medium">Rol</label>
+                                <select id="admin-edit-role-select" class="w-full p-2 border rounded-lg mt-1 bg-white">
+                                    <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador</option>
+                                    <option value="facturador" ${user.role === 'facturador' ? 'selected' : ''}>Facturador</option>
+                                    <option value="planta" ${user.role === 'planta' ? 'selected' : ''}>Planta</option>
+                                    <option value="employee" ${user.role === 'employee' ? 'selected' : ''}>Empleado</option>
+                                </select>
+                            </div>
+                            <div id="admin-edit-permissions-container">
+                                <label class="block text-sm font-medium mb-2">Permisos de Módulos</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    ${permissionsHTML}
+                                </div>
+                            </div>
+                            <div class="flex justify-end pt-4">
+                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Guardar Cambios</button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="p-6 overflow-y-auto flex-grow">
-                        <div id="rrhh-view-contratacion"></div>
-                        <div id="rrhh-view-pagos" class="hidden"></div>
-                        <div id="rrhh-view-descargos" class="hidden"></div>
+                `;
+
+                const roleSelect = document.getElementById('admin-edit-role-select');
+                const permissionsContainer = document.getElementById('admin-edit-permissions-container');
+                
+                function togglePermissionsUI(role) {
+                    permissionsContainer.style.display = (role === 'admin') ? 'none' : 'block';
+                }
+
+                roleSelect.addEventListener('change', (e) => togglePermissionsUI(e.target.value));
+                togglePermissionsUI(user.role);
+
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-admin-edit-modal').addEventListener('click', hideModal);
+                document.getElementById('admin-edit-user-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const userId = document.getElementById('admin-edit-user-id').value;
+                    const newRole = document.getElementById('admin-edit-role-select').value;
+                    const newPermissions = {};
+                    
+                    document.querySelectorAll('#admin-edit-permissions-container .permission-checkbox').forEach(cb => {
+                        newPermissions[cb.dataset.module] = cb.checked;
+                    });
+
+                    const updatedData = {
+                        nombre: document.getElementById('admin-edit-name').value,
+                        email: document.getElementById('admin-edit-email').value,
+                        telefono: document.getElementById('admin-edit-phone').value,
+                        direccion: document.getElementById('admin-edit-address').value,
+                        dob: document.getElementById('admin-edit-dob').value,
+                        role: newRole,
+                        permissions: (newRole === 'admin') ? {} : newPermissions
+                    };
+                    
+                    showModalMessage("Guardando cambios...", true);
+                    try {
+                        await updateDoc(doc(db, "users", userId), updatedData);
+                        // Note: Updating email in Firebase Auth is a sensitive operation and requires re-authentication.
+                        // It's safer to only update it in Firestore from an admin panel.
+                        hideModal();
+                        showModalMessage("Datos del empleado actualizados.", false, 2000);
+                    } catch (error) {
+                        console.error("Error al actualizar empleado:", error);
+                        showModalMessage("Error al guardar los cambios.");
+                    }
+                });
+            }
+
+            function showEditProfileModal() {
+                const user = currentUserData;
+                if (!user) return;
+
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Editar Mi Perfil</h2>
+                            <button id="close-profile-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <form id="edit-profile-form" class="space-y-4">
+                            <div><label for="profile-name" class="block text-sm font-medium">Nombre Completo</label><input type="text" id="profile-name" class="w-full p-2 border rounded-lg mt-1" value="${user.nombre || ''}" required></div>
+                            <div><label for="profile-cedula" class="block text-sm font-medium">Cédula</label><input type="text" id="profile-cedula" class="w-full p-2 border rounded-lg mt-1" value="${user.cedula || ''}" required></div>
+                            <div><label for="profile-dob" class="block text-sm font-medium">Fecha de Nacimiento</label><input type="date" id="profile-dob" class="w-full p-2 border rounded-lg mt-1" value="${user.dob || ''}" required></div>
+                            <div><label for="profile-email" class="block text-sm font-medium">Correo Electrónico</label><input type="email" id="profile-email" class="w-full p-2 border rounded-lg mt-1" value="${user.email || ''}" required></div>
+                            <div><label for="profile-address" class="block text-sm font-medium">Dirección</label><input type="text" id="profile-address" class="w-full p-2 border rounded-lg mt-1" value="${user.direccion || ''}"></div>
+                            <div class="flex justify-end pt-4">
+                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Guardar Cambios</button>
+                            </div>
+                        </form>
+                    </div>`;
+                
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-profile-modal').addEventListener('click', hideModal);
+                document.getElementById('edit-profile-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newEmail = document.getElementById('profile-email').value;
+                    const updatedData = {
+                        nombre: document.getElementById('profile-name').value,
+                        cedula: document.getElementById('profile-cedula').value,
+                        dob: document.getElementById('profile-dob').value,
+                        direccion: document.getElementById('profile-address').value,
+                        email: newEmail
+                    };
+
+                    showModalMessage("Guardando cambios...", true);
+                    try {
+                        // Update Firestore document
+                        await updateDoc(doc(db, "users", currentUser.uid), updatedData);
+                        
+                        if (currentUser.email !== newEmail) {
+                        await updateEmail(currentUser, newEmail);
+                        }
+
+                        // Refresh local data
+                        currentUserData = {...currentUserData, ...updatedData};
+                        document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
+
+                        hideModal();
+                        showModalMessage("Perfil actualizado con éxito.", false, 2000);
+                    } catch (error) {
+                        console.error("Error al actualizar perfil:", error);
+                        let errorMessage = "Error al guardar los cambios.";
+                        if (error.code === 'auth/requires-recent-login') {
+                            errorMessage = "Esta operación es sensible y requiere que inicies sesión de nuevo. Por favor, cierra sesión y vuelve a entrar para cambiar tu correo."
+                        }
+                        showModalMessage(errorMessage);
+                    }
+                });
+            }
+
+            function renderContratacionTab(empleado, container) {
+                const contratacionData = empleado.contratacion || {};
+                const documentos = contratacionData.documentos || {};
+
+                let documentsHTML = RRHH_DOCUMENT_TYPES.map(docType => {
+                    const docUrl = documentos[docType.id];
+                    const fileInputId = `file-rrhh-${docType.id}-${empleado.id}`;
+                    return `
+                        <div class="flex justify-between items-center p-3 border-b">
+                            <span class="font-medium">${docType.name}</span>
+                            <div class="flex items-center gap-2">
+                                ${docUrl ? `<a href="${docUrl}" target="_blank" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">Ver</a>` : '<span class="text-xs text-gray-400">No adjunto</span>'}
+                                <input type="file" id="${fileInputId}" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
+                                <label for="${fileInputId}" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold cursor-pointer hover:bg-gray-300">Adjuntar</label>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <form id="contratacion-form">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Columna de Datos -->
+                            <div class="space-y-4">
+                                <h3 class="text-lg font-semibold border-b pb-2">Información Laboral</h3>
+                                <div><label class="block text-sm font-medium">Fecha de Ingreso</label><input type="date" id="rrhh-fechaIngreso" class="w-full p-2 border rounded-lg mt-1" value="${contratacionData.fechaIngreso || ''}"></div>
+                                <div><label class="block text-sm font-medium">Salario</label><input type="text" id="rrhh-salario" class="w-full p-2 border rounded-lg mt-1" value="${contratacionData.salario ? formatCurrency(contratacionData.salario) : ''}"></div>
+                                <div><label class="block text-sm font-medium">EPS</label><input type="text" id="rrhh-eps" class="w-full p-2 border rounded-lg mt-1" value="${contratacionData.eps || ''}"></div>
+                                <div><label class="block text-sm font-medium">AFP</label><input type="text" id="rrhh-afp" class="w-full p-2 border rounded-lg mt-1" value="${contratacionData.afp || ''}"></div>
+                                <hr class="my-4"/>
+                                <div><label class="block text-sm font-medium">Fecha de Retiro</label><input type="date" id="rrhh-fechaRetiro" class="w-full p-2 border rounded-lg mt-1" value="${contratacionData.fechaRetiro || ''}"></div>
+                                <div><label class="block text-sm font-medium">Motivo de Retiro</label><textarea id="rrhh-motivoRetiro" class="w-full p-2 border rounded-lg mt-1" rows="3">${contratacionData.motivoRetiro || ''}</textarea></div>
+                            </div>
+                            <!-- Columna de Documentos -->
+                            <div class="space-y-4">
+                                <h3 class="text-lg font-semibold border-b pb-2">Documentos</h3>
+                                <div class="border rounded-lg">${documentsHTML}</div>
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-6">
+                            <button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700">Guardar Información</button>
+                        </div>
+                    </form>
+                `;
+                
+                const salarioInput = document.getElementById('rrhh-salario');
+                if(salarioInput) {
+                    salarioInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+                    salarioInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+                }
+
+                RRHH_DOCUMENT_TYPES.forEach(docType => {
+                    const fileInput = document.getElementById(`file-rrhh-${docType.id}-${empleado.id}`);
+                    if(fileInput) {
+                        fileInput.addEventListener('change', (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                handleFileUpload(empleado.id, `contratacion.documentos.${docType.id}`, file);
+                            }
+                        });
+                    }
+                });
+
+                const contratacionForm = document.getElementById('contratacion-form');
+                if(contratacionForm) {
+                    contratacionForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const updatedContratacionData = {
+                            fechaIngreso: document.getElementById('rrhh-fechaIngreso').value,
+                            salario: unformatCurrency(document.getElementById('rrhh-salario').value),
+                            eps: document.getElementById('rrhh-eps').value,
+                            afp: document.getElementById('rrhh-afp').value,
+                            fechaRetiro: document.getElementById('rrhh-fechaRetiro').value,
+                            motivoRetiro: document.getElementById('rrhh-motivoRetiro').value,
+                        };
+                        showModalMessage("Guardando datos...", true);
+                        try {
+                            await updateDoc(doc(db, "users", empleado.id), {
+                                "contratacion.fechaIngreso": updatedContratacionData.fechaIngreso,
+                                "contratacion.salario": updatedContratacionData.salario,
+                                "contratacion.eps": updatedContratacionData.eps,
+                                "contratacion.afp": updatedContratacionData.afp,
+                                "contratacion.fechaRetiro": updatedContratacionData.fechaRetiro,
+                                "contratacion.motivoRetiro": updatedContratacionData.motivoRetiro,
+                            });
+                            // No need to hide modal here, onSnapshot will trigger re-render
+                            showModalMessage("Datos de contratación actualizados.", false, 2000);
+                        } catch (error) {
+                            console.error("Error al guardar datos de contratación:", error);
+                            showModalMessage("Error al guardar los datos.");
+                        } finally {
+                            hideModal();
+                        }
+                    });
+                }
+            }
+
+            function renderPagosTab(empleado, container) {
+                const salario = empleado.contratacion?.salario || 0;
+                const pagos = empleado.pagos || [];
+
+                const pagosHTML = pagos.length > 0 ? pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(p => `
+                    <tr class="border-b">
+                        <td class="p-2">${p.fecha}</td>
+                        <td class="p-2">${p.motivo}</td>
+                        <td class="p-2 text-right">${formatCurrency(p.valor)}</td>
+                        <td class="p-2">${p.fuentePago}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="4" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>';
+
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="md:col-span-1 space-y-4">
+                             <button id="liquidar-empleado-btn" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700">Liquidar Empleado</button>
+                            <!-- Calculadora Horas Extra -->
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-2">Liquidador Horas Extra</h3>
+                                <div class="space-y-2">
+                                    <div><label class="text-sm">Salario Base (sin auxilio)</label><input type="text" id="salario-base-he" class="w-full p-2 border bg-gray-200 rounded-lg mt-1" value="${formatCurrency(salario > 200000 ? salario - 200000 : 0)}" readonly></div>
+                                    <div><label for="horas-extra-input" class="text-sm">Cantidad de Horas Extra</label><input type="number" id="horas-extra-input" class="w-full p-2 border rounded-lg mt-1" min="0"></div>
+                                    <button id="calcular-horas-btn" class="w-full bg-blue-500 text-white font-semibold py-2 rounded-lg hover:bg-blue-600">Calcular</button>
+                                    <div id="horas-extra-resultado" class="text-center font-bold text-xl mt-2 p-2 bg-blue-100 rounded-lg"></div>
+                                </div>
+                            </div>
+                            <!-- Registrar Pago -->
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-2">Registrar Nuevo Pago</h3>
+                                <form id="rrhh-pago-form" class="space-y-3">
+                                    <div><label class="text-sm">Motivo</label><select id="rrhh-pago-motivo" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Sueldo</option><option>Prima</option><option>Horas Extra</option></select></div>
+                                    <div><label class="text-sm">Valor</label><input type="text" id="rrhh-pago-valor" class="w-full p-2 border rounded-lg mt-1" required></div>
+                                    <div><label class="text-sm">Fecha</label><input type="date" id="rrhh-pago-fecha" class="w-full p-2 border rounded-lg mt-1" value="${new Date().toISOString().split('T')[0]}" required></div>
+                                    <div><label class="text-sm">Fuente de Pago</label><select id="rrhh-pago-fuente" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
+                                    <button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700">Registrar Pago</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <h3 class="text-lg font-semibold mb-2">Historial de Pagos</h3>
+                            <div class="border rounded-lg max-h-96 overflow-y-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-gray-100"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Motivo</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Fuente</th></tr></thead>
+                                    <tbody id="rrhh-pagos-historial">${pagosHTML}</tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            `;
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('close-rrhh-modal').addEventListener('click', hideModal);
+                `;
+                
+                document.getElementById('liquidar-empleado-btn').addEventListener('click', () => showLiquidacionModal(empleado));
 
-            // Lógica de Tabs
-            const contratacionTab = document.getElementById('rrhh-tab-contratacion');
-            const pagosTab = document.getElementById('rrhh-tab-pagos');
-            const descargosTab = document.getElementById('rrhh-tab-descargos');
-            const contratacionView = document.getElementById('rrhh-view-contratacion');
-            const pagosView = document.getElementById('rrhh-view-pagos');
-            const descargosView = document.getElementById('rrhh-view-descargos');
+                const valorPagoInput = document.getElementById('rrhh-pago-valor');
+                valorPagoInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+                valorPagoInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
 
-            contratacionTab.addEventListener('click', () => {
-                contratacionTab.classList.add('active');
-                pagosTab.classList.remove('active');
-                descargosTab.classList.remove('active');
-                contratacionView.classList.remove('hidden');
-                pagosView.classList.add('hidden');
-                descargosView.classList.add('hidden');
-            });
-            pagosTab.addEventListener('click', () => {
-                pagosTab.classList.add('active');
-                contratacionTab.classList.remove('active');
-                descargosTab.classList.remove('active');
-                pagosView.classList.remove('hidden');
-                contratacionView.classList.add('hidden');
-                descargosView.classList.add('hidden');
-            });
-            descargosTab.addEventListener('click', () => {
-                descargosTab.classList.add('active');
-                contratacionTab.classList.remove('active');
-                pagosTab.classList.remove('active');
-                descargosView.classList.remove('hidden');
-                contratacionView.classList.add('hidden');
-                pagosView.classList.add('hidden');
-            });
+                document.getElementById('calcular-horas-btn').addEventListener('click', () => {
+                    const horas = parseFloat(document.getElementById('horas-extra-input').value) || 0;
+                    if (salario > 0) {
+                        const salarioBase = salario > 200000 ? salario - 200000 : salario;
+                        const valorHoraNormal = salarioBase / 240;
+                        const valorHoraExtra = valorHoraNormal * 1.25;
+                        const totalPagar = valorHoraExtra * horas;
+                        document.getElementById('horas-extra-resultado').textContent = formatCurrency(totalPagar);
+                    } else {
+                        document.getElementById('horas-extra-resultado').textContent = "Salario no definido.";
+                    }
+                });
 
-            // Renderizar contenido de cada tab
-            renderContratacionTab(empleado, contratacionView);
-            renderPagosTab(empleado, pagosView);
-            renderDescargosTab(empleado, descargosView);
-        }
+                document.getElementById('rrhh-pago-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const nuevoPago = {
+                        motivo: document.getElementById('rrhh-pago-motivo').value,
+                        valor: unformatCurrency(document.getElementById('rrhh-pago-valor').value),
+                        fecha: document.getElementById('rrhh-pago-fecha').value,
+                        fuentePago: document.getElementById('rrhh-pago-fuente').value,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    if (nuevoPago.valor <= 0) {
+                        showModalMessage("El valor del pago debe ser mayor a cero.");
+                        return;
+                    }
+                    
+                    showModalMessage("Registrando pago...", true);
+                    try {
+                        await updateDoc(doc(db, "users", empleado.id), {
+                            pagos: arrayUnion(nuevoPago)
+                        });
+
+                        const nuevoGasto = {
+                            fecha: nuevoPago.fecha,
+                            proveedorId: empleado.id, 
+                            proveedorNombre: `Empleado: ${empleado.nombre} (${nuevoPago.motivo})`,
+                            numeroFactura: `Pago RRHH`,
+                            valorTotal: nuevoPago.valor,
+                            fuentePago: nuevoPago.fuentePago,
+                            registradoPor: currentUser.uid,
+                            timestamp: new Date(),
+                            isEmployeePayment: true
+                        };
+                        await addDoc(collection(db, "gastos"), nuevoGasto);
+
+                        showModalMessage("Pago registrado y añadido a gastos.", false, 2500);
+                        e.target.reset();
+                        const resultadoHoras = document.getElementById('horas-extra-resultado');
+                        if (resultadoHoras) resultadoHoras.textContent = '';
+                    } catch (error) {
+                        console.error("Error al registrar pago:", error);
+                        showModalMessage("Error al registrar el pago.");
+                    } finally {
+                        if (document.getElementById('modal-content')) { // Check if modal is still open before hiding
+                           hideModal();
+                        }
+                    }
+                });
+            }
+
+            function renderDescargosTab(empleado, container) {
+                container.innerHTML = `<p>Sección de Descargos en construcción.</p>`;
+            }
+
+
+            function showRRHHModal(empleado) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                let unsubscribe; 
+                let currentEmpleadoData = empleado;
+
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl mx-auto text-left flex flex-col" style="max-height: 90vh;">
+                        <div class="flex justify-between items-center p-4 border-b">
+                            <h2 class="text-xl font-semibold">Recursos Humanos: ${empleado.nombre}</h2>
+                            <button id="close-rrhh-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <div class="border-b border-gray-200">
+                            <nav class="-mb-px flex space-x-6 px-6">
+                                <button id="rrhh-tab-contratacion" class="dashboard-tab-btn active py-3 px-1 font-semibold">Datos y Contratación</button>
+                                <button id="rrhh-tab-pagos" class="dashboard-tab-btn py-3 px-1 font-semibold">Pagos y Liquidaciones</button>
+                                <button id="rrhh-tab-descargos" class="dashboard-tab-btn py-3 px-1 font-semibold">Descargos</button>
+                            </nav>
+                        </div>
+                        <div class="p-6 overflow-y-auto flex-grow">
+                            <div id="rrhh-view-contratacion"></div>
+                            <div id="rrhh-view-pagos" class="hidden"></div>
+                            <div id="rrhh-view-descargos" class="hidden"></div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                
+                const closeBtn = document.getElementById('close-rrhh-modal');
+                closeBtn.addEventListener('click', () => {
+                    if (unsubscribe) unsubscribe();
+                    hideModal();
+                });
+
+                const contratacionTab = document.getElementById('rrhh-tab-contratacion');
+                const pagosTab = document.getElementById('rrhh-tab-pagos');
+                const descargosTab = document.getElementById('rrhh-tab-descargos');
+                const contratacionView = document.getElementById('rrhh-view-contratacion');
+                const pagosView = document.getElementById('rrhh-view-pagos');
+                const descargosView = document.getElementById('rrhh-view-descargos');
+
+                const tabs = [contratacionTab, pagosTab, descargosTab];
+                const views = [contratacionView, pagosView, descargosView];
+
+                const switchRrhhTab = (activeIndex) => {
+                    tabs.forEach((tab, index) => tab.classList.toggle('active', index === activeIndex));
+                    views.forEach((view, index) => view.classList.toggle('hidden', index !== activeIndex));
+                };
+
+                contratacionTab.addEventListener('click', () => switchRrhhTab(0));
+                pagosTab.addEventListener('click', () => switchRrhhTab(1));
+                descargosTab.addEventListener('click', () => switchRrhhTab(2));
+                
+                unsubscribe = onSnapshot(doc(db, "users", empleado.id), (docSnapshot) => {
+                    if (docSnapshot.exists() && document.getElementById('close-rrhh-modal')) {
+                        currentEmpleadoData = { id: docSnapshot.id, ...docSnapshot.data() };
+                        
+                        const activeIndex = tabs.findIndex(tab => tab.classList.contains('active'));
+
+                        renderContratacionTab(currentEmpleadoData, contratacionView);
+                        renderPagosTab(currentEmpleadoData, pagosView);
+                        renderDescargosTab(currentEmpleadoData, descargosView);
+                    }
+                });
+            }
 
     </script>
 </body>
