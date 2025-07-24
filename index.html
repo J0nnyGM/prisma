@@ -78,6 +78,7 @@
                     <input type="tel" id="register-phone" placeholder="Celular" class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <input type="email" id="register-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                    <div><label for="register-dob" class="block text-sm font-medium text-gray-700">Fecha de Nacimiento</label><input type="date" id="register-dob" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div>
                     <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">Registrarse</button>
                 </div>
                  <p class="text-center mt-4 text-sm">¿Ya tienes una cuenta? <a href="#" id="show-login-link" class="font-semibold text-indigo-600 hover:underline">Inicia sesión</a></p>
@@ -176,14 +177,27 @@
         const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
         const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'empleados'];
         const OBRAS_DOCUMENT_TYPES = [
-             { id: 'contrato', name: 'Contrato' },
+            { id: 'cedula_obra', name: 'Cédula' },
+            { id: 'hoja_vida_obra', name: 'Hoja de vida' },
+            { id: 'contrato_obra', name: 'Contrato' },
+            { id: 'afiliacion_eps_obra', name: 'Afiliación EPS' },
+            { id: 'afiliacion_arl_obra', name: 'Afiliación ARL' },
+            { id: 'certificado_arl_obra', name: 'Certificado ARL' },
+            { id: 'examen_medico_obra', name: 'Examen Médico', requiresDate: true, validityMonths: 12 },
+            { id: 'resolucion_salud_obra', name: 'Resolución Centro de Salud' },
+            { id: 'policia_obra', name: 'Policía Nacional' },
+            { id: 'curso_alturas_obra', name: 'Curso de Alturas', requiresDate: true, validityMonths: 18 },
+            { id: 'constancia_alturas_obra', name: 'Constancia Curso de Alturas', requiresDate: true, validityMonths: 18 },
+            { id: 'perfil_cargo_obra', name: 'Perfil del Cargo' },
+            { id: 'induccion_empresa_obra', name: 'Inducción a la Empresa' },
         ];
         const RRHH_DOCUMENT_TYPES = [
-            { id: 'contrato', name: 'Contrato' },
-            { id: 'examenMedico', name: 'Examen Médico' },
-            { id: 'certificadoARL', name: 'Certificado ARL' },
-            { id: 'certificadoEPS', name: 'Certificado EPS' },
-            { id: 'certificadoAFP', name: 'Certificado AFP' },
+            { id: 'contrato_rrhh', name: 'Contrato' },
+            { id: 'cedula_rrhh', name: 'Cédula (PDF)' },
+            { id: 'examenMedico_rrhh', name: 'Examen Médico', requiresDate: true, validityMonths: 12 },
+            { id: 'certificadoARL_rrhh', name: 'Certificado ARL' },
+            { id: 'certificadoEPS_rrhh', name: 'Certificado EPS' },
+            { id: 'certificadoAFP_rrhh', name: 'Certificado AFP' },
         ];
         const RRHH_PAYMENT_TYPES = [
             { id: 'prima', name: 'Prima' },
@@ -283,6 +297,7 @@
             const telefono = document.getElementById('register-phone').value;
             const email = document.getElementById('register-email').value;
             const password = document.getElementById('register-password').value;
+            const dob = document.getElementById('register-dob').value;
             showModalMessage("Registrando...", true);
             try {
                 const usersCollection = collection(db, "users");
@@ -293,7 +308,7 @@
 
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
-                await setDoc(doc(db, "users", user.uid), { nombre, email, telefono, role, creadoEn: new Date(), permissions });
+                await setDoc(doc(db, "users", user.uid), { nombre, email, telefono, dob, role, creadoEn: new Date(), permissions });
                 hideModal();
                 showModalMessage("¡Registro exitoso! Ahora puedes iniciar sesión.", false, 3000);
                 registerForm.reset();
@@ -1537,13 +1552,13 @@
             });
         }
 
-        function showDocumentModal(empleado) {
+        function showDocumentModal(empleado, title, docTypes, storagePrefix) {
             const modalContentWrapper = document.getElementById('modal-content-wrapper');
-            const employeeDocs = empleado.documentos || {};
+            const employeeDocs = empleado.documentos ? (empleado.documentos[storagePrefix] || {}) : {};
 
-            let documentsHTML = DOCUMENT_TYPES.map(docType => {
+            let documentsHTML = docTypes.map(docType => {
                 const docUrl = employeeDocs[docType.id];
-                const fileInputId = `file-${docType.id}-${empleado.id}`;
+                const fileInputId = `file-${storagePrefix}-${docType.id}-${empleado.id}`;
                 return `
                     <div class="flex justify-between items-center p-3 border-b">
                         <span class="font-medium">${docType.name}</span>
@@ -1559,7 +1574,7 @@
             modalContentWrapper.innerHTML = `
                 <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-auto text-left flex flex-col" style="max-height: 80vh;">
                     <div class="flex justify-between items-center p-4 border-b">
-                        <h2 class="text-xl font-semibold">Documentos de ${empleado.nombre}</h2>
+                        <h2 class="text-xl font-semibold">${title}: ${empleado.nombre}</h2>
                         <div class="flex items-center gap-2">
                            <button id="download-all-docs-btn" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Descargar todo (.zip)</button>
                            <button id="close-docs-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
@@ -1573,37 +1588,36 @@
 
             document.getElementById('modal').classList.remove('hidden');
             document.getElementById('close-docs-modal').addEventListener('click', hideModal);
-            document.getElementById('download-all-docs-btn').addEventListener('click', () => handleDownloadAllDocs(empleado));
+            document.getElementById('download-all-docs-btn').addEventListener('click', () => handleDownloadAllDocs(empleado, storagePrefix));
 
 
-            DOCUMENT_TYPES.forEach(docType => {
-                const fileInputId = `file-${docType.id}-${empleado.id}`;
+            docTypes.forEach(docType => {
+                const fileInputId = `file-${storagePrefix}-${docType.id}-${empleado.id}`;
                 const fileInput = document.getElementById(fileInputId);
                 fileInput.addEventListener('change', (e) => {
                     const file = e.target.files[0];
                     if (file) {
-                        handleFileUpload(empleado.id, docType.id, file);
+                        handleFileUpload(empleado.id, `documentos.${storagePrefix}.${docType.id}`, file);
                     }
                 });
             });
         }
 
-        async function handleFileUpload(employeeId, docType, file) {
+        async function handleFileUpload(employeeId, docPath, file) {
             if (!file) return;
             showModalMessage("Subiendo documento...", true);
 
-            const storageRef = ref(storage, `empleados/${employeeId}/${docType}/${file.name}`);
+            const storagePath = `empleados/${employeeId}/${docPath.replace(/\./g, '/')}/${file.name}`;
+            const storageRef = ref(storage, storagePath);
             
             try {
                 const snapshot = await uploadBytes(storageRef, file);
                 const downloadURL = await getDownloadURL(snapshot.ref);
                 
-                const updateEmployeeDocument = httpsCallable(functions, 'updateEmployeeDocument');
-                await updateEmployeeDocument({
-                    employeeId: employeeId,
-                    docType: docType,
-                    fileUrl: downloadURL
-                });
+                const updateData = {};
+                updateData[docPath] = downloadURL;
+
+                await updateDoc(doc(db, "users", employeeId), updateData);
 
                 hideModal();
                 showModalMessage("¡Documento subido y guardado!", false, 2000);
@@ -1614,8 +1628,8 @@
             }
         }
         
-        async function handleDownloadAllDocs(empleado) {
-            const employeeDocs = empleado.documentos || {};
+        async function handleDownloadAllDocs(empleado, storagePrefix) {
+            const employeeDocs = empleado.documentos ? (empleado.documentos[storagePrefix] || {}) : {};
             const docUrls = Object.entries(employeeDocs);
 
             if (docUrls.length === 0) {
@@ -1653,7 +1667,7 @@
 
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(zipBlob);
-                link.download = `${empleado.nombre.replace(/\s+/g, '_')}_documentos.zip`;
+                link.download = `${empleado.nombre.replace(/\s+/g, '_')}_documentos_${storagePrefix}.zip`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -1707,6 +1721,73 @@
             });
         }
 
+        function showObrasDocsModal(empleado) {
+            showDocumentModal(empleado, 'Documentos de Ingreso a Obras', OBRAS_DOCUMENT_TYPES, 'obras_ingreso');
+        }
+
+        function showRRHHModal(empleado) {
+            const modalContentWrapper = document.getElementById('modal-content-wrapper');
+            modalContentWrapper.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-auto text-left flex flex-col" style="max-height: 90vh;">
+                    <div class="flex justify-between items-center p-4 border-b">
+                        <h2 class="text-xl font-semibold">Recursos Humanos: ${empleado.nombre}</h2>
+                        <button id="close-rrhh-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                    </div>
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex space-x-6 px-6">
+                            <button id="rrhh-tab-contratacion" class="dashboard-tab-btn active py-3 px-1 font-semibold">Datos y Contratación</button>
+                            <button id="rrhh-tab-pagos" class="dashboard-tab-btn py-3 px-1 font-semibold">Pagos y Liquidaciones</button>
+                            <button id="rrhh-tab-descargos" class="dashboard-tab-btn py-3 px-1 font-semibold">Descargos</button>
+                        </nav>
+                    </div>
+                    <div class="p-6 overflow-y-auto flex-grow">
+                        <div id="rrhh-view-contratacion"></div>
+                        <div id="rrhh-view-pagos" class="hidden"></div>
+                        <div id="rrhh-view-descargos" class="hidden"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('close-rrhh-modal').addEventListener('click', hideModal);
+
+            // Lógica de Tabs
+            const contratacionTab = document.getElementById('rrhh-tab-contratacion');
+            const pagosTab = document.getElementById('rrhh-tab-pagos');
+            const descargosTab = document.getElementById('rrhh-tab-descargos');
+            const contratacionView = document.getElementById('rrhh-view-contratacion');
+            const pagosView = document.getElementById('rrhh-view-pagos');
+            const descargosView = document.getElementById('rrhh-view-descargos');
+
+            contratacionTab.addEventListener('click', () => {
+                contratacionTab.classList.add('active');
+                pagosTab.classList.remove('active');
+                descargosTab.classList.remove('active');
+                contratacionView.classList.remove('hidden');
+                pagosView.classList.add('hidden');
+                descargosView.classList.add('hidden');
+            });
+            pagosTab.addEventListener('click', () => {
+                pagosTab.classList.add('active');
+                contratacionTab.classList.remove('active');
+                descargosTab.classList.remove('active');
+                pagosView.classList.remove('hidden');
+                contratacionView.classList.add('hidden');
+                descargosView.classList.add('hidden');
+            });
+            descargosTab.addEventListener('click', () => {
+                descargosTab.classList.add('active');
+                contratacionTab.classList.remove('active');
+                pagosTab.classList.remove('active');
+                descargosView.classList.remove('hidden');
+                contratacionView.classList.add('hidden');
+                pagosView.classList.add('hidden');
+            });
+
+            // Renderizar contenido de cada tab
+            renderContratacionTab(empleado, contratacionView);
+            renderPagosTab(empleado, pagosView);
+            renderDescargosTab(empleado, descargosView);
+        }
 
     </script>
 </body>
