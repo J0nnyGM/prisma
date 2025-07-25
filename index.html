@@ -2103,7 +2103,6 @@
                 });
             }
 
-
             function showRRHHModal(empleado) {
                 const modalContentWrapper = document.getElementById('modal-content-wrapper');
                 let unsubscribe; 
@@ -2167,6 +2166,76 @@
                         renderDescargosTab(currentEmpleadoData, descargosView);
                     }
                 });
+            }
+            
+            // +++ FUNCIÓN AÑADIDA PARA CORREGIR EL ERROR +++
+            async function downloadAllDocsAsZip(empleado) {
+                const documentos = empleado.contratacion?.documentos;
+                if (!documentos || Object.keys(documentos).length === 0) {
+                    showModalMessage("Este empleado no tiene documentos para descargar.");
+                    return;
+                }
+
+                showModalMessage("Preparando descarga... Esto puede tardar unos segundos.", true);
+
+                try {
+                    const zip = new JSZip();
+                    const promises = [];
+
+                    for (const docType in documentos) {
+                        const url = documentos[docType];
+                        if (url) {
+                            const promise = fetch(url)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                    }
+                                    return response.blob();
+                                })
+                                .then(blob => {
+                                    const docInfo = RRHH_DOCUMENT_TYPES.find(d => d.id === docType);
+                                    const docName = docInfo ? docInfo.name.replace(/ /g, '_') : docType;
+                                    
+                                    let fileExtension = 'pdf'; // default
+                                    try {
+                                        const urlPath = new URL(url).pathname;
+                                        const extensionMatch = urlPath.match(/\.([^.]+)$/);
+                                        if (extensionMatch) {
+                                            fileExtension = extensionMatch[1].split('?')[0];
+                                        } else {
+                                            fileExtension = blob.type.split('/')[1] || 'pdf';
+                                        }
+                                    } catch(e) {
+                                        console.warn("No se pudo analizar la URL para la extensión, usando el tipo de blob.", e);
+                                        fileExtension = blob.type.split('/')[1] || 'pdf';
+                                    }
+                                    
+                                    zip.file(`${docName}.${fileExtension}`, blob);
+                                })
+                                .catch(error => {
+                                    console.error(`No se pudo descargar el archivo para ${docType}:`, error);
+                                    zip.file(`ERROR_${docType}.txt`, `No se pudo descargar el archivo desde la URL.\nError: ${error.message}`);
+                                });
+                            promises.push(promise);
+                        }
+                    }
+
+                    await Promise.all(promises);
+
+                    zip.generateAsync({ type: "blob" }).then(function(content) {
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(content);
+                        a.download = `documentos_${empleado.nombre.replace(/ /g, '_')}.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(a.href);
+                        hideModal();
+                    });
+                } catch (error) {
+                    console.error("Error al crear el archivo zip:", error);
+                    showModalMessage("Error al crear el archivo ZIP.");
+                }
             }
 
             function showDiscountModal(remision) {
