@@ -1,5 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home4/jonat148/repositories/prisma/
+    - export DEPLOYPATH=/home4/jonat148/public_html/
     - /bin/cp -R * $DEPLOYPATH
