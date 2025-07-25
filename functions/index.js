@@ -29,7 +29,7 @@ function formatCurrency(value) {
     style: "currency",
     currency: "COP",
     minimumFractionDigits: 0,
-  }).format(value);
+  }).format(value || 0);
 }
 
 /**
@@ -55,10 +55,13 @@ function generarPDF(remision, isForPlanta = false) {
   }
 
   doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("PRISMACOLOR", 105, 28, {align: "center"});
   doc.setFont("helvetica", "normal");
-  doc.text("Prismacolor S.A.S.", 105, 28, {align: "center"});
-  const contactInfo = "NIT: 900.123.456-7 | Tel: 300 123 4567";
+  const contactInfo = "Tels: 310 2557543 – 313 2522810";
+  const address = "Cra 27A No. 68-80";
   doc.text(contactInfo, 105, 33, {align: "center"});
+  doc.text(address, 105, 38, {align: "center"});
 
   doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
@@ -71,6 +74,9 @@ function generarPDF(remision, isForPlanta = false) {
   doc.setFont("helvetica", "normal");
   doc.text(remision.clienteNombre, 40, 55);
   if (!isForPlanta) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Correo:", 20, 61);
+      doc.setFont("helvetica", "normal");
       doc.text(remision.clienteEmail, 40, 61);
   }
 
@@ -107,33 +113,61 @@ function generarPDF(remision, isForPlanta = false) {
   });
 
   const finalY = doc.lastAutoTable.finalY;
+  let yPos = finalY + 10;
 
   if (!isForPlanta) {
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text("Subtotal:", 130, finalY + 10);
-    doc.text("IVA (19%):", 130, finalY + 17);
-    doc.text("TOTAL:", 130, finalY + 24);
-
+    doc.text("Subtotal:", 130, yPos);
     doc.setFont("helvetica", "normal");
-    doc.text(formatCurrency(remision.subtotal), 190, finalY + 10, {
-      align: "right",
-    });
-    doc.text(formatCurrency(remision.valorIVA), 190, finalY + 17, {
-      align: "right",
-    });
+    doc.text(formatCurrency(remision.subtotal), 190, yPos, {align: "right"});
+    yPos += 7;
+
+    if (remision.discount && remision.discount.amount > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.text("Descuento:", 130, yPos);
+        doc.setFont("helvetica", "normal");
+        doc.text(`-${formatCurrency(remision.discount.amount)}`, 190, yPos, {align: "right"});
+        yPos += 7;
+    }
+
+    if (remision.incluyeIVA) {
+        doc.setFont("helvetica", "bold");
+        doc.text("IVA (19%):", 130, yPos);
+        doc.setFont("helvetica", "normal");
+        doc.text(formatCurrency(remision.valorIVA), 190, yPos, {align: "right"});
+        yPos += 7;
+    }
+
     doc.setFont("helvetica", "bold");
-    doc.text(formatCurrency(remision.valorTotal), 190, finalY + 24, {
-      align: "right",
-    });
+    doc.text("TOTAL:", 130, yPos);
+    doc.text(formatCurrency(remision.valorTotal), 190, yPos, {align: "right"});
+    yPos += 11;
+    
     doc.setFontSize(10);
-    doc.text(`Forma de Pago: ${remision.formaPago}`, 20, finalY + 35);
-    doc.text(`Estado: ${remision.estado}`, 20, finalY + 42);
+    doc.text(`Forma de Pago: ${remision.formaPago}`, 20, yPos);
+    yPos += 7;
+    doc.text(`Estado: ${remision.estado}`, 20, yPos);
   }
 
+  // Signature Line
+  yPos = Math.max(yPos, finalY + 20); // Ensure there's enough space after the table
+  yPos = 250; // Set a fixed position for the signature line
+  doc.line(40, yPos, 120, yPos); // Draw the line for signature
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text("Firma y Sello de Recibido", 75, yPos + 5, {align: "center"});
+
+
+  // Footer Note
   doc.setLineCap(2);
   doc.line(20, 270, 190, 270);
-  doc.text("Gracias por su confianza.", 105, 275, {align: "center"});
+  const footerText1 = "NO SE ENTREGA TRABAJO SINO HA SIDO CANCELADO.";
+  const footerText2 = "DESPUES DE 8 DIAS NO SE RESPONDE POR MERCANCIA.";
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.text(footerText1, 105, 275, {align: "center"});
+  doc.text(footerText2, 105, 279, {align: "center"});
 
   return Buffer.from(doc.output("arraybuffer"));
 }
@@ -196,6 +230,23 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
         };
         await sgMail.send(msg);
         log(`Correo enviado exitosamente a ${remisionData.clienteEmail}.`);
+        
+        // --- LÓGICA ACTUALIZADA ---
+        // Enviar una copia a un correo específico para cada remisión creada
+        const printerMsg = {
+            to: "oficinavidriosexito@print.brother.com",
+            from: FROM_EMAIL,
+            subject: `Nueva Remisión N° ${remisionData.numeroRemision} para Imprimir`,
+            html: `<p>Se ha generado la remisión N° ${remisionData.numeroRemision}. Adjunto para impresión.</p>`,
+            attachments: [{
+                content: pdfBuffer.toString("base64"),
+                filename: `Remision-${remisionData.numeroRemision}.pdf`,
+                type: "application/pdf",
+                disposition: "attachment",
+            }],
+        };
+        await sgMail.send(printerMsg);
+        log(`Copia de remisión enviada a la impresora.`);
 
         return snap.ref.update({pdfUrl: url, pdfPlantaUrl: urlPlanta, emailStatus: "sent"});
       } catch (error) {
@@ -218,28 +269,44 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
       if (beforeData.estado !== "Anulada" && afterData.estado === "Anulada") {
         log("Detectada anulación. Generando PDF y enviando correo.");
         try {
-          const pdfBuffer = generarPDF(afterData, false);
-          log("PDF de anulación generado.");
+            const pdfBuffer = generarPDF(afterData, false);
+            const pdfPlantaBuffer = generarPDF(afterData, true);
+            log("PDFs de anulación generados.");
 
-          const msg = {
-            to: afterData.clienteEmail,
-            from: FROM_EMAIL,
-            subject: `Anulación de Remisión N° ${afterData.numeroRemision}`,
-            html: `<p>Hola ${afterData.clienteNombre},</p>
-            <p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p>
-            <p>Adjuntamos una copia del documento anulado para tus registros.</p>
-            <p><strong>Prismacolor S.A.S.</strong></p>`,
-            attachments: [{
-              content: pdfBuffer.toString("base64"),
-              filename: `Remision-ANULADA-${afterData.numeroRemision}.pdf`,
-              type: "application/pdf",
-              disposition: "attachment",
-            }],
-          };
-          await sgMail.send(msg);
-          log(`Correo de anulación con PDF enviado a ${afterData.clienteEmail}.`);
+            const bucket = admin.storage().bucket(BUCKET_NAME);
+            const filePath = `remisiones/${afterData.numeroRemision}.pdf`;
+            const file = bucket.file(filePath);
+            await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+            const filePathPlanta = `remisiones/planta-${afterData.numeroRemision}.pdf`;
+            const filePlanta = bucket.file(filePathPlanta);
+            await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+
+            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+
+            await change.after.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+            log("PDFs de anulación actualizados en Storage y Firestore.");
+
+            const msg = {
+                to: afterData.clienteEmail,
+                from: FROM_EMAIL,
+                subject: `Anulación de Remisión N° ${afterData.numeroRemision}`,
+                html: `<p>Hola ${afterData.clienteNombre},</p>
+                <p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p>
+                <p>Adjuntamos una copia del documento anulado para tus registros.</p>
+                <p><strong>Prismacolor S.A.S.</strong></p>`,
+                attachments: [{
+                    content: pdfBuffer.toString("base64"),
+                    filename: `Remision-ANULADA-${afterData.numeroRemision}.pdf`,
+                    type: "application/pdf",
+                    disposition: "attachment",
+                }],
+            };
+            await sgMail.send(msg);
+            log(`Correo de anulación con PDF enviado a ${afterData.clienteEmail}.`);
         } catch (error) {
-          log("Error al enviar correo de anulación:", error);
+            log("Error al procesar anulación:", error);
         }
       }
 
@@ -279,8 +346,142 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
         }
       }
 
+      // Disparador para PAGO FINAL
+      const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
+      const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
+
+      if (totalPagadoAntes < afterData.valorTotal && totalPagadoDespues >= afterData.valorTotal) {
+          log("Detectado pago final. Generando PDF y enviando correo de confirmación.");
+          try {
+              const updatedRemisionData = { ...afterData, formaPago: "Cancelado" };
+              const pdfBuffer = generarPDF(updatedRemisionData, false);
+              log("PDF de pago final generado.");
+
+              const bucket = admin.storage().bucket(BUCKET_NAME);
+              const filePath = `remisiones/${afterData.numeroRemision}.pdf`;
+              const file = bucket.file(filePath);
+              await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+              log(`PDF de pago final actualizado en Storage: ${filePath}`);
+
+              const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+              await change.after.ref.update({ pdfUrl: url, formaPago: "Cancelado" });
+              log("URL del PDF y forma de pago actualizados en Firestore.");
+
+              const ultimoPago = afterData.payments[afterData.payments.length - 1];
+
+              const msg = {
+                  to: afterData.clienteEmail,
+                  from: FROM_EMAIL,
+                  subject: `Confirmación de Pago Total - Remisión N° ${afterData.numeroRemision}`,
+                  html: `<p>Hola ${afterData.clienteNombre},</p>
+                  <p>Hemos recibido el pago final para tu remisión N° <strong>${afterData.numeroRemision}</strong>.</p>
+                  <p>El valor total ha sido cancelado. Último pago registrado por ${ultimoPago.method}.</p>
+                  <p>Adjuntamos la remisión actualizada para tus registros.</p>
+                  <p>¡Gracias por tu confianza!</p>
+                  <p><strong>Prismacolor S.A.S.</strong></p>`,
+                  attachments: [{
+                      content: pdfBuffer.toString("base64"),
+                      filename: `Remision-CANCELADA-${afterData.numeroRemision}.pdf`,
+                      type: "application/pdf",
+                      disposition: "attachment",
+                  }],
+              };
+              await sgMail.send(msg);
+              log(`Correo de pago final enviado a ${afterData.clienteEmail}.`);
+          } catch (error) {
+              log("Error al procesar el pago final:", error);
+          }
+      }
+
       return null;
     });
+
+exports.applyDiscount = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "El usuario no está autenticado.");
+    }
+
+    const { remisionId, discountPercentage } = data;
+    if (!remisionId || discountPercentage === undefined) {
+        throw new functions.https.HttpsError("invalid-argument", "Faltan datos (remisionId, discountPercentage).");
+    }
+
+    if (discountPercentage < 0 || discountPercentage > 5.0001) { // Allow for small floating point inaccuracies
+        throw new functions.https.HttpsError("out-of-range", "El descuento debe estar entre 0 y 5%.");
+    }
+    
+    const remisionRef = admin.firestore().collection("remisiones").doc(remisionId);
+    
+    try {
+        const remisionDoc = await remisionRef.get();
+        if (!remisionDoc.exists) {
+            throw new functions.https.HttpsError("not-found", "La remisión no existe.");
+        }
+        
+        const remisionData = remisionDoc.data();
+        const subtotal = remisionData.subtotal;
+        const discountAmount = subtotal * (discountPercentage / 100);
+        const subtotalWithDiscount = subtotal - discountAmount;
+        const newIva = remisionData.incluyeIVA ? subtotalWithDiscount * 0.19 : 0;
+        const newTotal = subtotalWithDiscount + newIva;
+
+        const updatedData = {
+            valorTotal: newTotal,
+            valorIVA: newIva,
+            discount: {
+                percentage: discountPercentage,
+                amount: discountAmount,
+                appliedBy: context.auth.uid,
+                appliedAt: new Date(),
+            },
+        };
+
+        await remisionRef.update(updatedData);
+        
+        const finalRemisionData = { ...remisionData, ...updatedData };
+        const pdfBuffer = generarPDF(finalRemisionData, false);
+        const pdfPlantaBuffer = generarPDF(finalRemisionData, true);
+
+        const bucket = admin.storage().bucket(BUCKET_NAME);
+        const filePath = `remisiones/${finalRemisionData.numeroRemision}.pdf`;
+        const file = bucket.file(filePath);
+        await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+        const filePathPlanta = `remisiones/planta-${finalRemisionData.numeroRemision}.pdf`;
+        const filePlanta = bucket.file(filePathPlanta);
+        await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+        
+        const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+        const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+
+        await remisionRef.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+
+        const msg = {
+            to: finalRemisionData.clienteEmail,
+            from: FROM_EMAIL,
+            subject: `Descuento aplicado a tu Remisión N° ${finalRemisionData.numeroRemision}`,
+            html: `<p>Hola ${finalRemisionData.clienteNombre},</p>
+                   <p>Se ha aplicado un descuento del <strong>${discountPercentage.toFixed(2)}%</strong> a tu remisión N° ${finalRemisionData.numeroRemision}.</p>
+                   <p>El nuevo total es: <strong>${formatCurrency(newTotal)}</strong>.</p>
+                   <p>Adjuntamos la remisión actualizada.</p>
+                   <p><strong>Prismacolor S.A.S.</strong></p>`,
+            attachments: [{
+                content: pdfBuffer.toString("base64"),
+                filename: `Remision-Actualizada-${finalRemisionData.numeroRemision}.pdf`,
+                type: "application/pdf",
+                disposition: "attachment",
+            }],
+        };
+
+        await sgMail.send(msg);
+
+        return { success: true, message: "Descuento aplicado y correo enviado." };
+
+    } catch (error) {
+        functions.logger.error(`Error al aplicar descuento para ${remisionId}:`, error);
+        throw new functions.https.HttpsError("internal", "No se pudo aplicar el descuento.");
+    }
+});
 
 
 exports.onResendEmailRequest = functions.region("us-central1").firestore

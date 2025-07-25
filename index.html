@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestión - Pintura Electrostática</title>
     
+    <!-- La advertencia de la consola sobre el uso del CDN de Tailwind en producción es esperada en este entorno.
+         Para una aplicación final, se recomienda un proceso de compilación (build). -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -136,18 +138,18 @@
     </div>
     
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
         
         // --- INICIALIZACIÓN Y CONFIGURACIÓN ---
         const firebaseConfig = {
             apiKey: "AIzaSyAOeIv-PnETZIs5NFrsxsBnqf2_Gt6hbKM",
             authDomain: "prismacolorsas.firebaseapp.com",
-            storageBucket: "prismacolorsas.appspot.com",
+            storageBucket: "prismacolorsas.firebasestorage.app",
             projectId: "prismacolorsas",
             messagingSenderId: "907757501037",
             appId: "1:907757501037:web:ab61eb771e12add9a29d64",
@@ -159,7 +161,7 @@
             auth = getAuth(app);
             db = getFirestore(app);
             storage = getStorage(app);
-            functions = getFunctions(app);
+            functions = getFunctions(app, 'us-central1'); // Especificar la región
         } catch (e) { console.error("Error al inicializar Firebase.", e); showModalMessage("Error de Configuración de Firebase."); }
         
         // --- VISTAS Y ESTADO GLOBAL ---
@@ -188,10 +190,16 @@
             { id: 'certificadoARL', name: 'Certificado ARL' },
             { id: 'certificadoEPS', name: 'Certificado EPS' },
             { id: 'certificadoAFP', name: 'Certificado AFP' },
+            { id: 'cartaRetiro', name: 'Carta de renuncia o despido' },
+            { id: 'liquidacionDoc', name: 'Liquidación' },
         ];
-        const RRHH_PAYMENT_TYPES = [
-            { id: 'prima', name: 'Prima' },
-            { id: 'liquidacion', name: 'Liquidación' },
+        const LIQUIDACION_MOTIVOS = [
+            'Terminación de contrato',
+            'Renuncia voluntaria',
+            'Despido con justa causa',
+            'Despido sin justa causa',
+            'Mutuo acuerdo',
+            'Otro motivo (especificar)',
         ];
 
 
@@ -237,7 +245,7 @@
             
             const summaryBtn = document.getElementById('summary-btn');
             if(summaryBtn) {
-                summaryBtn.style.display = (isPlanta) ? 'none' : '';
+                summaryBtn.style.display = isAdmin ? '' : 'none';
             }
 
             const remisionFormContainer = document.getElementById('remision-form-container');
@@ -502,6 +510,10 @@
                 const clienteDiv = document.createElement('div');
                 clienteDiv.className = 'border p-4 rounded-lg flex justify-between items-start';
                 const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
+                const editButton = (currentUserData && currentUserData.role === 'admin') 
+                    ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300 w-full text-center">Editar</button>`
+                    : '';
+
                 clienteDiv.innerHTML = `
                     <div class="flex-grow">
                         <p class="font-semibold text-lg">${cliente.nombre}</p>
@@ -513,7 +525,7 @@
                         </div>
                     </div>
                     <div class="flex-shrink-0 flex flex-col items-end gap-2">
-                         <button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300 w-full text-center">Editar</button>
+                         ${editButton}
                     </div>
                 `;
                 clientesListEl.appendChild(clienteDiv);
@@ -539,10 +551,20 @@
             
             filtered.forEach(proveedor => {
                 const el = document.createElement('div');
-                el.className = 'border p-4 rounded-lg';
-                el.innerHTML = `<p class="font-semibold">${proveedor.nombre}</p><p class="text-sm text-gray-600">${proveedor.email || ''} | ${proveedor.telefono || ''}</p>`;
+                el.className = 'border p-4 rounded-lg flex justify-between items-center';
+                const editButton = (currentUserData && currentUserData.role === 'admin') 
+                    ? `<button data-provider-json='${JSON.stringify(proveedor)}' class="edit-provider-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300">Editar</button>`
+                    : '';
+                el.innerHTML = `
+                    <div class="flex-grow">
+                        <p class="font-semibold">${proveedor.nombre}</p>
+                        <p class="text-sm text-gray-600">${proveedor.email || ''} | ${proveedor.telefono || ''}</p>
+                    </div>
+                    ${editButton}
+                `;
                 proveedoresListEl.appendChild(el);
             });
+            document.querySelectorAll('.edit-provider-btn').forEach(btn => btn.addEventListener('click', (e) => showEditProviderModal(JSON.parse(e.currentTarget.dataset.providerJson))));
         }
         function loadRemisiones() {
             const q = query(collection(db, "remisiones"), orderBy("numeroRemision", "desc"));
@@ -557,6 +579,7 @@
             const remisionesListEl = document.getElementById('remisiones-list');
             if(!remisionesListEl) return;
 
+            const isAdmin = currentUserData && currentUserData.role === 'admin';
             const isPlanta = currentUserData && currentUserData.role === 'planta';
             const month = document.getElementById('filter-remisiones-month').value;
             const year = document.getElementById('filter-remisiones-year').value;
@@ -587,30 +610,35 @@
                 const esEntregada = remision.estado === 'Entregado';
                 el.className = `border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${esAnulada ? 'remision-anulada' : ''}`;
                 
-                const totalPagado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
-                const saldoPendiente = remision.valorTotal - totalPagado;
+                const totalPagadoConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+                const totalAbonado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
+                const saldoPendiente = remision.valorTotal - totalPagadoConfirmado;
                 
                 let paymentStatusBadge = '';
                 if (!esAnulada) {
                     if (saldoPendiente <= 0) {
                         paymentStatusBadge = `<span class="payment-status payment-pagado">Pagado</span>`;
+                    } else if (isPlanta) {
+                        paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
+                    } else if (totalAbonado > 0) {
+                        paymentStatusBadge = `<span class="payment-status payment-abono">Abono</span>`;
                     } else {
-                        if (isPlanta) {
-                            paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
-                        } else {
-                            if (totalPagado > 0) {
-                                paymentStatusBadge = `<span class="payment-status payment-abono">Abono</span>`;
-                            } else {
-                                paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
-                            }
-                        }
+                        paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
                     }
                 }
 
                 const pdfUrl = isPlanta ? remision.pdfPlantaUrl : remision.pdfUrl;
-                const pdfButton = pdfUrl ? `<button data-pdf-url="${pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver PDF</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
-                const anularButton = esAnulada || esEntregada || isPlanta ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
+                const pdfButton = pdfUrl ? `<button data-pdf-url="${pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
+                
+                const anularButton = (esAnulada || esEntregada || isPlanta || (remision.payments && remision.payments.length > 0)) 
+                    ? '' 
+                    : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
+                
                 const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">Pagos (${formatCurrency(saldoPendiente)})</button>`;
+                
+                const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount) 
+                    ? '' 
+                    : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
 
                 const statusClasses = {'Recibido': 'status-recibido', 'En Proceso': 'status-en-proceso', 'Procesado': 'status-procesado', 'Entregado': 'status-entregado'};
                 const statusBadge = `<span class="status-badge ${statusClasses[remision.estado] || ''}">${remision.estado}</span>`;
@@ -621,6 +649,11 @@
                     const nextStatus = ESTADOS_REMISION[currentIndex + 1];
                     statusButton = `<button data-remision-id="${remision.id}" data-current-status="${remision.estado}" class="status-update-btn w-full bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Mover a ${nextStatus}</button>`;
                 }
+                
+                let discountInfo = '';
+                if(remision.discount && remision.discount.percentage > 0) {
+                    discountInfo = `<span class="text-xs font-semibold bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full">DTO ${remision.discount.percentage.toFixed(2)}%</span>`;
+                }
 
                 el.innerHTML = `
                     <div class="flex-grow">
@@ -629,6 +662,7 @@
                             <p class="font-semibold text-lg">${remision.clienteNombre}</p>
                             ${statusBadge}
                             ${paymentStatusBadge}
+                            ${discountInfo}
                             ${esAnulada ? '<span class="px-2 py-1 bg-red-200 text-red-800 text-xs font-bold rounded-full">ANULADA</span>' : ''}
                         </div>
                         <p class="text-sm text-gray-600 mt-1">Recibido: ${remision.fechaRecibido} &bull; ${remision.fechaEntrega ? `Entregado: ${remision.fechaEntrega}` : 'Entrega: Pendiente'}</p>
@@ -638,14 +672,16 @@
                         ${statusButton}
                         ${pdfButton}
                         ${pagosButton}
+                        ${descuentoButton}
                         ${anularButton}
                     </div>`;
                 remisionesListEl.appendChild(el);
             });
             document.querySelectorAll('.anular-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; if(confirm(`¿Estás seguro de que quieres ANULAR esta remisión? Se enviará un correo de notificación al cliente.`)) { handleAnularRemision(remisionId); } }));
             document.querySelectorAll('.status-update-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; const currentStatus = e.currentTarget.dataset.currentStatus; handleStatusUpdate(remisionId, currentStatus); }));
-            document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, remisionNum); }));
+            document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
             document.querySelectorAll('.payment-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showPaymentModal(remision); }));
+            document.querySelectorAll('.discount-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showDiscountModal(remision); }));
         }
         function loadGastos() {
             const q = query(collection(db, "gastos"), orderBy("fecha", "desc"));
@@ -733,6 +769,14 @@
                 realizadas.forEach(remision => {
                     const el = document.createElement('div');
                     el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
+                    
+                    let facturaButtons = '';
+                    if (remision.facturaPdfUrl) {
+                        facturaButtons = `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">Ver Factura</button>`;
+                    } else {
+                        facturaButtons = `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600">Adjuntar Factura</button>`;
+                    }
+
                     el.innerHTML = `
                         <div class="flex-grow">
                             <div class="flex items-center gap-3 flex-wrap">
@@ -742,10 +786,11 @@
                             <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
                         </div>
                         <div class="flex-shrink-0 flex items-center gap-2">
-                            <div class="text-right">
+                             <div class="text-right">
                                 <span class="status-badge status-entregado">Facturado</span>
-                                <p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>
+                                ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
                             </div>
+                            ${facturaButtons}
                             <button data-pdf-url="${remision.pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
                         </div>
                     `;
@@ -759,7 +804,8 @@
                     showFacturaModal(remisionId);
                 });
             });
-            document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, remisionNum); }));
+            document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
+            document.querySelectorAll('.view-factura-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); }));
         }
         
         // --- FUNCIONES DE MANEJO DE ACCIONES ---
@@ -843,7 +889,7 @@
                 const formaDePago = document.getElementById('forma-pago').value;
                 const initialPayments = [];
                 if (formaDePago !== 'Pendiente') {
-                    initialPayments.push({ amount: total, date: document.getElementById('fecha-recibido').value, method: formaDePago, registeredAt: new Date() });
+                    initialPayments.push({ amount: total, date: document.getElementById('fecha-recibido').value, method: formaDePago, registeredAt: new Date(), registeredBy: currentUser.uid, status: 'confirmado' });
                 }
                 const nuevaRemision = {
                     numeroRemision: newRemisionNumber,
@@ -885,6 +931,29 @@
         }
 
         // --- FUNCIONES DE AYUDA Y MODALES ---
+        async function handleFileUpload(employeeId, docPath, file) {
+            if (!file) {
+                showModalMessage("No se seleccionó ningún archivo.");
+                return;
+            }
+            showModalMessage(`Subiendo ${file.name}...`, true);
+
+            const storageRef = ref(storage, `empleados/${employeeId}/documentos/${docPath.split('.').pop()}_${file.name}`);
+
+            try {
+                const snapshot = await uploadBytes(storageRef, file);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+
+                const updatePayload = {};
+                updatePayload[docPath] = downloadURL;
+
+                await updateDoc(doc(db, "users", employeeId), updatePayload);
+                showModalMessage("¡Documento subido con éxito!", false, 2000);
+            } catch (error) {
+                console.error("Error al subir el archivo:", error);
+                showModalMessage("Error al subir el archivo.");
+            }
+        }
         function initSearchableInput(searchInput, resultsContainer, getDataFn, displayFn, onSelect) {
             searchInput.addEventListener('input', () => {
                 const data = getDataFn();
@@ -1010,9 +1079,97 @@
         }
         function calcularTotales() { const itemsContainer = document.getElementById('items-container'); const ivaCheckbox = document.getElementById('incluir-iva'); const subtotalEl = document.getElementById('subtotal'); const valorIvaEl = document.getElementById('valor-iva'); const valorTotalEl = document.getElementById('valor-total'); if(!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return {subtotalGeneral: 0, valorIVA: 0, total: 0}; let subtotalGeneral = 0; itemsContainer.querySelectorAll('.item-row').forEach(row => { const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0; const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value); subtotalGeneral += cantidad * valorUnitario; }); const incluyeIVA = ivaCheckbox.checked; const valorIVA = incluyeIVA ? subtotalGeneral * 0.19 : 0; const total = subtotalGeneral + valorIVA; subtotalEl.textContent = formatCurrency(subtotalGeneral); valorIvaEl.textContent = formatCurrency(valorIVA); valorTotalEl.textContent = formatCurrency(total); return { subtotalGeneral, valorIVA, total }; }
         function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone1" class="block text-sm font-medium text-gray-700">Teléfono 1</label><input type="tel" id="edit-client-phone1" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono1 || ''}" required></div><div><label for="edit-client-phone2" class="block text-sm font-medium text-gray-700">Teléfono 2</label><input type="tel" id="edit-client-phone2" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono2 || ''}"></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono1: document.getElementById('edit-client-phone1').value, telefono2: document.getElementById('edit-client-phone2').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
-        function showPdfModal(pdfUrl, remisionNum) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-xl font-semibold">Visor de Remisión N° ${remisionNum}</h2><button id="close-pdf-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="flex-grow p-2 bg-gray-200"><iframe id="pdf-iframe" src="${pdfUrl}" class="w-full h-full" frameborder="0"></iframe></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-pdf-modal').addEventListener('click', hideModal); }
-        function showPaymentModal(remision) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); const totalPagado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0); const saldoPendiente = remision.valorTotal - totalPagado; const paymentsHTML = (remision.payments || []).map(p => `<tr class="border-b"><td class="p-2">${p.date}</td><td class="p-2">${p.method}</td><td class="p-2 text-right">${formatCurrency(p.amount)}</td></tr>`).join(''); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-2xl w-full mx-auto text-left"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2><button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="grid grid-cols-3 gap-4 mb-4 text-center"><div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div><div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">TOTAL PAGADO</div><div class="font-bold text-lg">${formatCurrency(totalPagado)}</div></div><div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold mb-2">Historial de Pagos</h3><div class="border rounded-lg max-h-60 overflow-y-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th></tr></thead><tbody>${paymentsHTML || '<tr><td colspan="3" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody></table></div></div><div><h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>${saldoPendiente > 0 ? `<form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg"><div><label for="new-payment-amount" class="text-sm font-medium">Monto del Abono</label><input type="text" inputmode="numeric" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" max="${saldoPendiente}" required></div><div><label for="new-payment-date" class="text-sm font-medium">Fecha del Pago</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div><div><label for="new-payment-method" class="text-sm font-medium">Método de Pago</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Registrar Pago</button></form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold">Esta remisión ya ha sido pagada en su totalidad.</div>'}</div></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-payment-modal').addEventListener('click', hideModal); if (saldoPendiente > 0) { const paymentAmountInput = document.getElementById('new-payment-amount'); paymentAmountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target)); paymentAmountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target)); document.getElementById('add-payment-form').addEventListener('submit', async (e) => { e.preventDefault(); const amount = unformatCurrency(paymentAmountInput.value); if (amount <= 0 || !amount) { alert("El monto debe ser mayor a cero."); return; } if (amount > saldoPendiente + 0.01) { alert("El monto del pago no puede superar el saldo pendiente."); return; } const newPayment = { amount: amount, date: document.getElementById('new-payment-date').value, method: document.getElementById('new-payment-method').value, registeredAt: new Date() }; showModalMessage("Registrando pago...", true); try { await updateDoc(doc(db, "remisiones", remision.id), { payments: arrayUnion(newPayment) }); hideModal(); showModalMessage("¡Pago registrado!", false, 2000); } catch (error) { console.error("Error al registrar pago:", error); showModalMessage("Error al registrar el pago."); } }); } }
-            function showDashboardModal() {
+        function showEditProviderModal(provider) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Proveedor</h2><form id="edit-provider-form" class="space-y-4 text-left"><input type="hidden" id="edit-provider-id" value="${provider.id}"><div><label for="edit-provider-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-provider-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.nombre}" required></div><div><label for="edit-provider-contact" class="block text-sm font-medium text-gray-700">Contacto</label><input type="text" id="edit-provider-contact" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.contacto || ''}"></div><div><label for="edit-provider-phone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="edit-provider-phone" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.telefono || ''}"></div><div><label for="edit-provider-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-provider-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.email || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-provider-form').addEventListener('submit', async (e) => { e.preventDefault(); const providerId = document.getElementById('edit-provider-id').value; const updatedData = { nombre: document.getElementById('edit-provider-name').value, contacto: document.getElementById('edit-provider-contact').value, telefono: document.getElementById('edit-provider-phone').value, email: document.getElementById('edit-provider-email').value, }; showModalMessage("Actualizando proveedor...", true); try { await updateDoc(doc(db, "proveedores", providerId), updatedData); hideModal(); showModalMessage("¡Proveedor actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar proveedor:", error); showModalMessage("Error al actualizar."); } }); }
+        function showPdfModal(pdfUrl, title) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-xl font-semibold">Visor: ${title}</h2><button id="close-pdf-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="flex-grow p-2 bg-gray-200"><iframe id="pdf-iframe" src="${pdfUrl}" class="w-full h-full" frameborder="0" allow="fullscreen"></iframe></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-pdf-modal').addEventListener('click', hideModal); }
+        function showPaymentModal(remision) {
+            const modalContentWrapper = document.getElementById('modal-content-wrapper');
+            const totalConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+            const totalPorConfirmar = (remision.payments || []).filter(p => p.status === 'por confirmar').reduce((sum, p) => sum + p.amount, 0);
+            const saldoPendiente = remision.valorTotal - totalConfirmado;
+            const saldoRealPendiente = remision.valorTotal - totalConfirmado - totalPorConfirmar;
+
+            const paymentsHTML = (remision.payments || []).map((p, index) => {
+                let statusBadge = '';
+                let confirmButton = '';
+                if (p.status === 'por confirmar') {
+                    statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
+                    if (currentUserData.role === 'admin' && p.registeredBy !== currentUser.uid) {
+                         confirmButton = `<button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600">Confirmar</button>`;
+                    }
+                } else {
+                    statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Confirmado</span>`;
+                }
+
+                return `<tr class="border-b">
+                    <td class="p-2">${p.date}</td>
+                    <td class="p-2">${p.method}</td>
+                    <td class="p-2 text-right">${formatCurrency(p.amount)}</td>
+                    <td class="p-2">${statusBadge}</td>
+                    <td class="p-2">${confirmButton}</td>
+                </tr>`;
+            }).join('');
+
+            modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2><button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 text-center"><div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div><div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">PAGADO (CONF.)</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div><div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800">POR CONFIRMAR</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div><div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold mb-2">Historial de Pagos</h3><div class="border rounded-lg max-h-60 overflow-y-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th><th class="p-2 text-left">Estado</th><th></th></tr></thead><tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody></table></div></div><div><h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>${saldoRealPendiente > 0 ? `<form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg"><div><label for="new-payment-amount" class="text-sm font-medium">Monto del Abono</label><input type="text" inputmode="numeric" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" max="${saldoRealPendiente}" required></div><div><label for="new-payment-date" class="text-sm font-medium">Fecha del Pago</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div><div><label for="new-payment-method" class="text-sm font-medium">Método de Pago</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Registrar Pago</button></form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold">Esta remisión ya ha sido pagada en su totalidad.</div>'}</div></div></div>`;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('close-payment-modal').addEventListener('click', hideModal);
+            
+            document.querySelectorAll('.confirm-payment-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const remisionId = e.currentTarget.dataset.remisionId;
+                    const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
+                    const remisionToUpdate = allRemisiones.find(r => r.id === remisionId);
+                    if (remisionToUpdate && remisionToUpdate.payments[paymentIndex]) {
+                        remisionToUpdate.payments[paymentIndex].status = 'confirmado';
+                        remisionToUpdate.payments[paymentIndex].confirmedBy = currentUser.uid;
+                        remisionToUpdate.payments[paymentIndex].confirmedAt = new Date();
+                        showModalMessage("Confirmando pago...", true);
+                        try {
+                            await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
+                            hideModal();
+                            showModalMessage("¡Pago confirmado!", false, 1500);
+                        } catch (error) {
+                             console.error("Error al confirmar pago:", error);
+                             showModalMessage("Error al confirmar el pago.");
+                        }
+                    }
+                });
+            });
+
+            if (saldoRealPendiente > 0) {
+                const paymentAmountInput = document.getElementById('new-payment-amount');
+                paymentAmountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+                paymentAmountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+                document.getElementById('add-payment-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const amount = unformatCurrency(paymentAmountInput.value);
+                    if (amount <= 0 || !amount) { showModalMessage("El monto debe ser mayor a cero."); return; }
+                    if (amount > saldoRealPendiente + 0.01) { 
+                        showModalMessage(`El monto del pago no puede superar el saldo pendiente de ${formatCurrency(saldoRealPendiente)}.`);
+                        return; 
+                    }
+                    
+                    const newPayment = {
+                        amount: amount,
+                        date: document.getElementById('new-payment-date').value,
+                        method: document.getElementById('new-payment-method').value,
+                        registeredAt: new Date(),
+                        registeredBy: currentUser.uid,
+                        status: 'por confirmar'
+                    };
+                    showModalMessage("Registrando pago...", true);
+                    try {
+                        await updateDoc(doc(db, "remisiones", remision.id), { payments: arrayUnion(newPayment) });
+                        hideModal();
+                        showModalMessage("¡Pago registrado! Pendiente de confirmación.", false, 2000);
+                    } catch (error) {
+                        console.error("Error al registrar pago:", error);
+                        showModalMessage("Error al registrar el pago.");
+                    }
+                });
+            }
+        }
+
+        function showDashboardModal() {
                 const modalContentWrapper = document.getElementById('modal-content-wrapper');
                 
                 modalContentWrapper.innerHTML = `
@@ -1607,7 +1764,7 @@
                         <div class="flex justify-between items-center p-3 border-b">
                             <span class="font-medium">${docType.name}</span>
                             <div class="flex items-center gap-2">
-                                ${docUrl ? `<a href="${docUrl}" target="_blank" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">Ver</a>` : '<span class="text-xs text-gray-400">No adjunto</span>'}
+                                ${docUrl ? `<button type="button" data-pdf-url="${docUrl}" data-doc-name="${docType.name}" class="view-rrhh-pdf-btn bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">Ver</button>` : '<span class="text-xs text-gray-400">No adjunto</span>'}
                                 <input type="file" id="${fileInputId}" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
                                 <label for="${fileInputId}" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold cursor-pointer hover:bg-gray-300">Adjuntar</label>
                             </div>
@@ -1631,7 +1788,10 @@
                             </div>
                             <!-- Columna de Documentos -->
                             <div class="space-y-4">
-                                <h3 class="text-lg font-semibold border-b pb-2">Documentos</h3>
+                                <div class="flex justify-between items-center border-b pb-2">
+                                    <h3 class="text-lg font-semibold">Documentos</h3>
+                                    <button type="button" id="download-all-docs-btn" class="bg-green-600 text-white font-bold py-1 px-3 rounded-lg hover:bg-green-700 text-sm">Descargar Todo (.zip)</button>
+                                </div>
                                 <div class="border rounded-lg">${documentsHTML}</div>
                             </div>
                         </div>
@@ -1646,6 +1806,16 @@
                     salarioInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
                     salarioInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
                 }
+
+                document.querySelectorAll('.view-rrhh-pdf-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const pdfUrl = e.currentTarget.dataset.pdfUrl;
+                        const docName = e.currentTarget.dataset.docName;
+                        showPdfModal(pdfUrl, docName);
+                    });
+                });
+                
+                document.getElementById('download-all-docs-btn').addEventListener('click', () => downloadAllDocsAsZip(empleado));
 
                 RRHH_DOCUMENT_TYPES.forEach(docType => {
                     const fileInput = document.getElementById(`file-rrhh-${docType.id}-${empleado.id}`);
@@ -1681,13 +1851,10 @@
                                 "contratacion.fechaRetiro": updatedContratacionData.fechaRetiro,
                                 "contratacion.motivoRetiro": updatedContratacionData.motivoRetiro,
                             });
-                            // No need to hide modal here, onSnapshot will trigger re-render
                             showModalMessage("Datos de contratación actualizados.", false, 2000);
                         } catch (error) {
                             console.error("Error al guardar datos de contratación:", error);
                             showModalMessage("Error al guardar los datos.");
-                        } finally {
-                            hideModal();
                         }
                     });
                 }
@@ -1709,8 +1876,7 @@
                 container.innerHTML = `
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="md:col-span-1 space-y-4">
-                             <button id="liquidar-empleado-btn" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700">Liquidar Empleado</button>
-                            <!-- Calculadora Horas Extra -->
+                             <!-- Calculadora Horas Extra -->
                             <div class="bg-gray-50 p-4 rounded-lg">
                                 <h3 class="text-lg font-semibold mb-2">Liquidador Horas Extra</h3>
                                 <div class="space-y-2">
@@ -1724,8 +1890,12 @@
                             <div class="bg-gray-50 p-4 rounded-lg">
                                 <h3 class="text-lg font-semibold mb-2">Registrar Nuevo Pago</h3>
                                 <form id="rrhh-pago-form" class="space-y-3">
-                                    <div><label class="text-sm">Motivo</label><select id="rrhh-pago-motivo" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Sueldo</option><option>Prima</option><option>Horas Extra</option></select></div>
-                                    <div><label class="text-sm">Valor</label><input type="text" id="rrhh-pago-valor" class="w-full p-2 border rounded-lg mt-1" required></div>
+                                    <div><label class="text-sm">Motivo</label><select id="rrhh-pago-motivo" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Sueldo</option><option>Prima</option><option>Horas Extra</option><option>Liquidación</option></select></div>
+                                    <div>
+                                        <label class="text-sm">Valor</label>
+                                        <input type="text" id="rrhh-pago-valor" class="w-full p-2 border rounded-lg mt-1" required>
+                                        <p id="pago-sugerido-info" class="text-xs text-gray-500 mt-1 hidden">Valor quincenal sugerido (salario/2 - aportes).</p>
+                                    </div>
                                     <div><label class="text-sm">Fecha</label><input type="date" id="rrhh-pago-fecha" class="w-full p-2 border rounded-lg mt-1" value="${new Date().toISOString().split('T')[0]}" required></div>
                                     <div><label class="text-sm">Fuente de Pago</label><select id="rrhh-pago-fuente" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
                                     <button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700">Registrar Pago</button>
@@ -1744,11 +1914,33 @@
                     </div>
                 `;
                 
-                document.getElementById('liquidar-empleado-btn').addEventListener('click', () => showLiquidacionModal(empleado));
-
                 const valorPagoInput = document.getElementById('rrhh-pago-valor');
+                const motivoPagoSelect = document.getElementById('rrhh-pago-motivo');
+                const pagoSugeridoInfo = document.getElementById('pago-sugerido-info');
+
                 valorPagoInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
                 valorPagoInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+
+                motivoPagoSelect.addEventListener('change', (e) => {
+                    if (e.target.value === 'Sueldo') {
+                        if (salario > 0) {
+                            const pagoQuincenal = (salario / 2) - 56940;
+                            valorPagoInput.value = pagoQuincenal > 0 ? pagoQuincenal : 0;
+                            formatCurrencyInput(valorPagoInput);
+                            pagoSugeridoInfo.classList.remove('hidden');
+                        } else {
+                            valorPagoInput.value = '';
+                            valorPagoInput.placeholder = 'Definir salario primero';
+                            pagoSugeridoInfo.classList.add('hidden');
+                        }
+                    } else {
+                        valorPagoInput.value = '';
+                        valorPagoInput.placeholder = '';
+                        pagoSugeridoInfo.classList.add('hidden');
+                    }
+                });
+                
+                motivoPagoSelect.dispatchEvent(new Event('change'));
 
                 document.getElementById('calcular-horas-btn').addEventListener('click', () => {
                     const horas = parseFloat(document.getElementById('horas-extra-input').value) || 0;
@@ -1799,21 +1991,116 @@
 
                         showModalMessage("Pago registrado y añadido a gastos.", false, 2500);
                         e.target.reset();
+                        motivoPagoSelect.dispatchEvent(new Event('change'));
                         const resultadoHoras = document.getElementById('horas-extra-resultado');
                         if (resultadoHoras) resultadoHoras.textContent = '';
                     } catch (error) {
                         console.error("Error al registrar pago:", error);
                         showModalMessage("Error al registrar el pago.");
-                    } finally {
-                        if (document.getElementById('modal-content')) { // Check if modal is still open before hiding
-                           hideModal();
-                        }
                     }
                 });
             }
 
             function renderDescargosTab(empleado, container) {
-                container.innerHTML = `<p>Sección de Descargos en construcción.</p>`;
+                const descargos = empleado.descargos || [];
+
+                const descargosHTML = descargos.length > 0 
+                    ? descargos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map((d, index) => `
+                        <div class="border p-4 rounded-lg">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-semibold">${d.motivo}</p>
+                                    <p class="text-sm text-gray-500">Fecha: ${d.fecha}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    ${d.citacionUrl ? `<button type="button" data-pdf-url="${d.citacionUrl}" data-doc-name="Citación" class="view-rrhh-pdf-btn text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full hover:bg-blue-200">Citación</button>` : ''}
+                                    ${d.actaUrl ? `<button type="button" data-pdf-url="${d.actaUrl}" data-doc-name="Acta" class="view-rrhh-pdf-btn text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full hover:bg-blue-200">Acta</button>` : ''}
+                                    ${d.conclusionUrl ? `<button type="button" data-pdf-url="${d.conclusionUrl}" data-doc-name="Conclusión" class="view-rrhh-pdf-btn text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full hover:bg-blue-200">Conclusión</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<p class="text-center text-gray-500 py-4">No hay descargos registrados.</p>';
+
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="md:col-span-1">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-2">Registrar Descargo</h3>
+                                <form id="descargos-form" class="space-y-4">
+                                    <div><label for="descargo-fecha" class="text-sm font-medium">Fecha de Reunión</label><input type="date" id="descargo-fecha" class="w-full p-2 border rounded-lg mt-1" required></div>
+                                    <div><label for="descargo-motivo" class="text-sm font-medium">Motivo de Reunión</label><textarea id="descargo-motivo" class="w-full p-2 border rounded-lg mt-1" rows="3" required></textarea></div>
+                                    <div><label for="descargo-citacion" class="text-sm font-medium">Citación a descargos (PDF)</label><input type="file" id="descargo-citacion" class="w-full text-sm" accept=".pdf"></div>
+                                    <div><label for="descargo-acta" class="text-sm font-medium">Acta de descargos (PDF)</label><input type="file" id="descargo-acta" class="w-full text-sm" accept=".pdf"></div>
+                                    <div><label for="descargo-conclusion" class="text-sm font-medium">Conclusión de descargos (PDF)</label><input type="file" id="descargo-conclusion" class="w-full text-sm" accept=".pdf"></div>
+                                    <button type="submit" class="w-full bg-purple-600 text-white font-semibold py-2 rounded-lg hover:bg-purple-700">Guardar Descargo</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                             <h3 class="text-lg font-semibold mb-2">Historial de Descargos</h3>
+                             <div class="space-y-3">${descargosHTML}</div>
+                        </div>
+                    </div>
+                `;
+                
+                document.querySelectorAll('.view-rrhh-pdf-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const pdfUrl = e.currentTarget.dataset.pdfUrl;
+                        const docName = e.currentTarget.dataset.docName;
+                        showPdfModal(pdfUrl, docName);
+                    });
+                });
+
+                document.getElementById('descargos-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const fecha = document.getElementById('descargo-fecha').value;
+                    const motivo = document.getElementById('descargo-motivo').value;
+                    const citacionFile = document.getElementById('descargo-citacion').files[0];
+                    const actaFile = document.getElementById('descargo-acta').files[0];
+                    const conclusionFile = document.getElementById('descargo-conclusion').files[0];
+
+                    showModalMessage("Guardando descargo y subiendo archivos...", true);
+
+                    try {
+                        const timestamp = Date.now();
+                        const uploadPromises = [];
+                        const fileData = {};
+
+                        if (citacionFile) {
+                            const citacionRef = ref(storage, `empleados/${empleado.id}/descargos/${timestamp}_citacion.pdf`);
+                            uploadPromises.push(uploadBytes(citacionRef, citacionFile).then(snap => getDownloadURL(snap.ref)).then(url => fileData.citacionUrl = url));
+                        }
+                        if (actaFile) {
+                            const actaRef = ref(storage, `empleados/${empleado.id}/descargos/${timestamp}_acta.pdf`);
+                            uploadPromises.push(uploadBytes(actaRef, actaFile).then(snap => getDownloadURL(snap.ref)).then(url => fileData.actaUrl = url));
+                        }
+                        if (conclusionFile) {
+                            const conclusionRef = ref(storage, `empleados/${empleado.id}/descargos/${timestamp}_conclusion.pdf`);
+                            uploadPromises.push(uploadBytes(conclusionRef, conclusionFile).then(snap => getDownloadURL(snap.ref)).then(url => fileData.conclusionUrl = url));
+                        }
+
+                        await Promise.all(uploadPromises);
+
+                        const nuevoDescargo = {
+                            fecha,
+                            motivo,
+                            ...fileData,
+                            timestamp: new Date().toISOString()
+                        };
+
+                        await updateDoc(doc(db, "users", empleado.id), {
+                            descargos: arrayUnion(nuevoDescargo)
+                        });
+                        
+                        e.target.reset();
+                        showModalMessage("Descargo registrado con éxito.", false, 2000);
+
+                    } catch (error) {
+                        console.error("Error al registrar descargo:", error);
+                        showModalMessage("Error al guardar el descargo.");
+                    }
+                });
             }
 
 
@@ -1878,6 +2165,123 @@
                         renderContratacionTab(currentEmpleadoData, contratacionView);
                         renderPagosTab(currentEmpleadoData, pagosView);
                         renderDescargosTab(currentEmpleadoData, descargosView);
+                    }
+                });
+            }
+
+            function showDiscountModal(remision) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                const maxDiscount = remision.subtotal * 0.05;
+
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Aplicar Descuento</h2>
+                            <button id="close-discount-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">Remisión N°: <span class="font-bold">${remision.numeroRemision}</span></p>
+                        <p class="text-sm text-gray-600 mb-4">Subtotal: <span class="font-bold">${formatCurrency(remision.subtotal)}</span></p>
+                        <form id="discount-form" class="space-y-4">
+                            <div>
+                                <label for="discount-amount" class="block text-sm font-medium">Valor del Descuento (COP)</label>
+                                <input type="text" id="discount-amount" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required placeholder="Ej: 10000">
+                                <p class="text-xs text-gray-500 mt-1">Máximo descuento permitido: <span class="font-semibold">${formatCurrency(maxDiscount)}</span> (5%)</p>
+                            </div>
+                            <button type="submit" class="w-full bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-700">Aplicar Descuento</button>
+                        </form>
+                    </div>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-discount-modal').addEventListener('click', hideModal);
+                
+                const amountInput = document.getElementById('discount-amount');
+                amountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+                amountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+
+                document.getElementById('discount-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const discountAmount = unformatCurrency(amountInput.value);
+                    
+                    if (isNaN(discountAmount) || discountAmount <= 0) {
+                        showModalMessage("Por favor, ingresa un valor de descuento válido.");
+                        return;
+                    }
+                    if (discountAmount > maxDiscount) {
+                         showModalMessage(`El descuento no puede superar el 5% (${formatCurrency(maxDiscount)}).`);
+                        return;
+                    }
+
+                    const discountPercentage = (discountAmount / remision.subtotal) * 100;
+                    
+                    showModalMessage("Aplicando descuento...", true);
+                    const applyDiscountFn = httpsCallable(functions, 'applyDiscount');
+                    try {
+                        const result = await applyDiscountFn({ remisionId: remision.id, discountPercentage: discountPercentage });
+                        if (result.data.success) {
+                            hideModal();
+                            showModalMessage("¡Descuento aplicado con éxito!", false, 2000);
+                        } else {
+                            throw new Error(result.data.message || 'Error desconocido');
+                        }
+                    } catch (error) {
+                        console.error("Error al aplicar descuento:", error);
+                        showModalMessage(`Error: ${error.message}`);
+                    }
+                });
+            }
+
+            function showFacturaModal(remisionId) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-md w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Registrar Factura</h2>
+                            <button id="close-factura-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <form id="factura-form" class="space-y-4">
+                            <div>
+                                <label for="factura-numero" class="block text-sm font-medium">Número de Factura</label>
+                                <input type="text" id="factura-numero" class="w-full p-2 border rounded-lg mt-1" required>
+                            </div>
+                            <div>
+                                <label for="factura-pdf" class="block text-sm font-medium">Adjuntar PDF de la Factura</label>
+                                <input type="file" id="factura-pdf" class="w-full p-2 border rounded-lg mt-1" accept=".pdf" required>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Marcar como Facturado</button>
+                        </form>
+                    </div>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-factura-modal').addEventListener('click', hideModal);
+                document.getElementById('factura-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const numeroFactura = document.getElementById('factura-numero').value;
+                    const fileInput = document.getElementById('factura-pdf');
+                    const file = fileInput.files[0];
+
+                    if (!file) {
+                        showModalMessage("Debes seleccionar un archivo PDF.");
+                        return;
+                    }
+
+                    showModalMessage("Subiendo factura y actualizando...", true);
+                    try {
+                        const storageRef = ref(storage, `facturas/${remisionId}-${file.name}`);
+                        const snapshot = await uploadBytes(storageRef, file);
+                        const downloadURL = await getDownloadURL(snapshot.ref);
+
+                        await updateDoc(doc(db, "remisiones", remisionId), {
+                            facturado: true,
+                            numeroFactura: numeroFactura,
+                            facturaPdfUrl: downloadURL,
+                            fechaFacturado: new Date()
+                        });
+
+                        hideModal();
+                        showModalMessage("¡Remisión facturada con éxito!", false, 2000);
+                    } catch (error) {
+                        console.error("Error al facturar:", error);
+                        showModalMessage("Error al procesar la factura.");
                     }
                 });
             }
