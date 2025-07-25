@@ -1,5 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/tu_usuario_cpanel/public_html/
+    - export DEPLOYPATH=/home4/jonat148/repositories/prisma/
     - /bin/cp -R * $DEPLOYPATH
