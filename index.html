@@ -98,6 +98,7 @@
                     <p id="user-info" class="text-gray-600 mt-1">Cargando usuario...</p>
                 </div>
                 <div class="flex items-center gap-4">
+                    <button id="loan-request-btn" class="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600">Solicitar Préstamo</button>
                     <button id="summary-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Resumen</button>
                     <button id="edit-profile-btn" class="bg-gray-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-800">Editar Perfil</button>
                     <button id="logout-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600">Cerrar Sesión</button>
@@ -140,7 +141,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
@@ -180,7 +181,7 @@
         let profitLossChart = null;
         let dynamicElementCounter = 0;
         const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
-        const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'empleados'];
+        const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'empleados', 'prestamos'];
        
         const RRHH_DOCUMENT_TYPES = [
             { id: 'contrato', name: 'Contrato' },
@@ -360,6 +361,8 @@
             if(ivaCheckbox) ivaCheckbox.addEventListener('input', calcularTotales);
             document.getElementById('summary-btn').addEventListener('click', showDashboardModal);
             document.getElementById('edit-profile-btn').addEventListener('click', showEditProfileModal);
+            document.getElementById('loan-request-btn').addEventListener('click', showLoanRequestModal);
+
 
             // Listeners para buscadores
             document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
@@ -1872,6 +1875,40 @@
                         <td class="p-2">${p.fuentePago}</td>
                     </tr>
                 `).join('') : '<tr><td colspan="4" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>';
+                
+                // Fetch and render pending loans
+                const q = query(collection(db, "prestamos"), where("employeeId", "==", empleado.id), where("status", "==", "aprobado"));
+                getDocs(q).then(snapshot => {
+                    const prestamos = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+                    const prestamosContainer = container.querySelector('#prestamos-pendientes-container');
+                    if (prestamosContainer) {
+                        if (prestamos.length > 0) {
+                            prestamosContainer.innerHTML = `
+                                <h4 class="font-semibold text-md mb-2">Préstamos Pendientes de Cobro</h4>
+                                <div class="space-y-2">
+                                    ${prestamos.map(p => `
+                                        <div class="bg-yellow-100 p-3 rounded-lg flex justify-between items-center">
+                                            <div>
+                                                <p class="font-semibold">${formatCurrency(p.amount)}</p>
+                                                <p class="text-xs text-yellow-800">${p.reason}</p>
+                                            </div>
+                                            <button data-loan-id="${p.id}" class="cobrar-prestamo-btn bg-yellow-500 text-white text-xs px-3 py-1 rounded-full hover:bg-yellow-600">Marcar Cancelado</button>
+                                        </div>
+                                    `).join('')}
+                                </div>`;
+                            prestamosContainer.querySelectorAll('.cobrar-prestamo-btn').forEach(btn => {
+                                btn.addEventListener('click', async (e) => {
+                                    const loanId = e.currentTarget.dataset.loanId;
+                                    if (confirm("¿Estás seguro de que quieres marcar este préstamo como cancelado?")) {
+                                        await handleLoanAction(loanId, 'cancelado');
+                                    }
+                                });
+                            });
+                        } else {
+                            prestamosContainer.innerHTML = '';
+                        }
+                    }
+                });
 
                 container.innerHTML = `
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1890,6 +1927,7 @@
                             <div class="bg-gray-50 p-4 rounded-lg">
                                 <h3 class="text-lg font-semibold mb-2">Registrar Nuevo Pago</h3>
                                 <form id="rrhh-pago-form" class="space-y-3">
+                                    <div id="prestamos-pendientes-container" class="mb-4"></div>
                                     <div><label class="text-sm">Motivo</label><select id="rrhh-pago-motivo" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Sueldo</option><option>Prima</option><option>Horas Extra</option><option>Liquidación</option></select></div>
                                     <div>
                                         <label class="text-sm">Valor</label>
@@ -2103,6 +2141,79 @@
                 });
             }
 
+            // +++ NUEVA FUNCIÓN: Renderiza la pestaña de préstamos en el modal de RRHH +++
+            function renderPrestamosTab(empleado, container) {
+                container.innerHTML = `<h3 class="text-lg font-semibold mb-2">Solicitudes de Préstamo</h3><div id="rrhh-prestamos-list" class="space-y-3">Cargando...</div>`;
+                const prestamosListEl = document.getElementById('rrhh-prestamos-list');
+
+                // CORRECCIÓN: Se elimina el orderBy para evitar el error de índice.
+                const q = query(collection(db, "prestamos"), where("employeeId", "==", empleado.id));
+                onSnapshot(q, (snapshot) => {
+                    const prestamos = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+                    
+                    // CORRECCIÓN: Se ordena manualmente después de recibir los datos.
+                    prestamos.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+
+                    if (prestamos.length === 0) {
+                        prestamosListEl.innerHTML = '<p class="text-center text-gray-500 py-4">Este empleado no tiene solicitudes de préstamo.</p>';
+                        return;
+                    }
+                    prestamosListEl.innerHTML = '';
+                    prestamos.forEach(p => {
+                        const el = document.createElement('div');
+                        el.className = 'border p-3 rounded-lg';
+                        
+                        let statusBadge = '';
+                        let actions = '';
+                        switch(p.status) {
+                            case 'solicitado':
+                                statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Solicitado</span>`;
+                                actions = `
+                                    <button data-loan-json='${JSON.stringify(p)}' class="approve-loan-btn bg-green-500 text-white text-xs px-3 py-1 rounded-full hover:bg-green-600">Aprobar</button>
+                                    <button data-loan-id="${p.id}" data-action="denegado" class="loan-action-btn bg-red-500 text-white text-xs px-3 py-1 rounded-full hover:bg-red-600">Denegar</button>
+                                `;
+                                break;
+                            case 'aprobado':
+                                statusBadge = `<span class="text-xs font-semibold bg-blue-200 text-blue-800 px-2 py-1 rounded-full">Aprobado</span>`;
+                                break;
+                            case 'cancelado':
+                                statusBadge = `<span class="text-xs font-semibold bg-gray-200 text-gray-800 px-2 py-1 rounded-full">Cancelado</span>`;
+                                break;
+                        }
+
+                        el.innerHTML = `
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                                <div>
+                                    <p class="font-bold text-lg">${formatCurrency(p.amount)}</p>
+                                    <p class="text-sm text-gray-600">${p.reason}</p>
+                                    <p class="text-xs text-gray-400">Solicitado el: ${p.requestDate}</p>
+                                </div>
+                                <div class="flex items-center gap-2 mt-2 sm:mt-0">
+                                    ${statusBadge}
+                                    ${actions}
+                                </div>
+                            </div>
+                        `;
+                        prestamosListEl.appendChild(el);
+                    });
+
+                    prestamosListEl.querySelectorAll('.approve-loan-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const loan = JSON.parse(e.currentTarget.dataset.loanJson);
+                            showApproveLoanModal(loan);
+                        });
+                    });
+
+                    prestamosListEl.querySelectorAll('.loan-action-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const loanId = e.currentTarget.dataset.loanId;
+                            const action = e.currentTarget.dataset.action;
+                            handleLoanAction(loanId, action);
+                        });
+                    });
+                });
+            }
+
             function showRRHHModal(empleado) {
                 const modalContentWrapper = document.getElementById('modal-content-wrapper');
                 let unsubscribe; 
@@ -2119,12 +2230,14 @@
                                 <button id="rrhh-tab-contratacion" class="dashboard-tab-btn active py-3 px-1 font-semibold">Datos y Contratación</button>
                                 <button id="rrhh-tab-pagos" class="dashboard-tab-btn py-3 px-1 font-semibold">Pagos y Liquidaciones</button>
                                 <button id="rrhh-tab-descargos" class="dashboard-tab-btn py-3 px-1 font-semibold">Descargos</button>
+                                <button id="rrhh-tab-prestamos" class="dashboard-tab-btn py-3 px-1 font-semibold">Préstamos</button>
                             </nav>
                         </div>
                         <div class="p-6 overflow-y-auto flex-grow">
                             <div id="rrhh-view-contratacion"></div>
                             <div id="rrhh-view-pagos" class="hidden"></div>
                             <div id="rrhh-view-descargos" class="hidden"></div>
+                            <div id="rrhh-view-prestamos" class="hidden"></div>
                         </div>
                     </div>
                 `;
@@ -2139,12 +2252,14 @@
                 const contratacionTab = document.getElementById('rrhh-tab-contratacion');
                 const pagosTab = document.getElementById('rrhh-tab-pagos');
                 const descargosTab = document.getElementById('rrhh-tab-descargos');
+                const prestamosTab = document.getElementById('rrhh-tab-prestamos');
                 const contratacionView = document.getElementById('rrhh-view-contratacion');
                 const pagosView = document.getElementById('rrhh-view-pagos');
                 const descargosView = document.getElementById('rrhh-view-descargos');
+                const prestamosView = document.getElementById('rrhh-view-prestamos');
 
-                const tabs = [contratacionTab, pagosTab, descargosTab];
-                const views = [contratacionView, pagosView, descargosView];
+                const tabs = [contratacionTab, pagosTab, descargosTab, prestamosTab];
+                const views = [contratacionView, pagosView, descargosView, prestamosView];
 
                 const switchRrhhTab = (activeIndex) => {
                     tabs.forEach((tab, index) => tab.classList.toggle('active', index === activeIndex));
@@ -2154,21 +2269,19 @@
                 contratacionTab.addEventListener('click', () => switchRrhhTab(0));
                 pagosTab.addEventListener('click', () => switchRrhhTab(1));
                 descargosTab.addEventListener('click', () => switchRrhhTab(2));
+                prestamosTab.addEventListener('click', () => switchRrhhTab(3));
                 
                 unsubscribe = onSnapshot(doc(db, "users", empleado.id), (docSnapshot) => {
                     if (docSnapshot.exists() && document.getElementById('close-rrhh-modal')) {
                         currentEmpleadoData = { id: docSnapshot.id, ...docSnapshot.data() };
-                        
-                        const activeIndex = tabs.findIndex(tab => tab.classList.contains('active'));
-
                         renderContratacionTab(currentEmpleadoData, contratacionView);
                         renderPagosTab(currentEmpleadoData, pagosView);
                         renderDescargosTab(currentEmpleadoData, descargosView);
+                        renderPrestamosTab(currentEmpleadoData, prestamosView);
                     }
                 });
             }
             
-            // +++ FUNCIÓN AÑADIDA PARA CORREGIR EL ERROR +++
             async function downloadAllDocsAsZip(empleado) {
                 const documentos = empleado.contratacion?.documentos;
                 if (!documentos || Object.keys(documentos).length === 0) {
@@ -2353,6 +2466,205 @@
                         showModalMessage("Error al procesar la factura.");
                     }
                 });
+            }
+
+            // +++ NUEVA FUNCIÓN: Muestra el modal de solicitud de préstamo +++
+            function showLoanRequestModal() {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full mx-auto text-left">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Solicitud de Préstamo</h2>
+                            <button id="close-loan-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                        </div>
+                        <form id="loan-request-form" class="space-y-4 mb-6">
+                            <div>
+                                <label for="loan-amount" class="block text-sm font-medium">Monto a Solicitar</label>
+                                <input type="text" id="loan-amount" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required>
+                            </div>
+                            <div>
+                                <label for="loan-reason" class="block text-sm font-medium">Motivo</label>
+                                <textarea id="loan-reason" class="w-full p-2 border rounded-lg mt-1" rows="3" required></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-700">Enviar Solicitud</button>
+                        </form>
+                        <div>
+                            <h3 class="text-lg font-semibold border-t pt-4">Mis Solicitudes</h3>
+                            <div id="my-loans-list" class="space-y-2 mt-2 max-h-60 overflow-y-auto">Cargando...</div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('close-loan-modal').addEventListener('click', hideModal);
+                
+                const amountInput = document.getElementById('loan-amount');
+                amountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+                amountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+
+                document.getElementById('loan-request-form').addEventListener('submit', handleLoanRequestSubmit);
+
+                // Cargar historial de préstamos del usuario
+                const loansListEl = document.getElementById('my-loans-list');
+                // CORRECCIÓN: Se elimina el orderBy para evitar el error de índice.
+                const q = query(collection(db, "prestamos"), where("employeeId", "==", currentUser.uid));
+                onSnapshot(q, (snapshot) => {
+                    const prestamos = snapshot.docs.map(d => d.data());
+                    
+                    // CORRECCIÓN: Se ordena manualmente después de recibir los datos.
+                    prestamos.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+
+                    if (prestamos.length === 0) {
+                        loansListEl.innerHTML = '<p class="text-center text-gray-500 py-4">No tienes solicitudes de préstamo.</p>';
+                        return;
+                    }
+                    loansListEl.innerHTML = '';
+                    prestamos.forEach(p => {
+                        const el = document.createElement('div');
+                        el.className = 'border p-3 rounded-lg flex justify-between items-center';
+                        let statusBadge = '';
+                        switch(p.status) {
+                            case 'solicitado': statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Solicitado</span>`; break;
+                            case 'aprobado': statusBadge = `<span class="text-xs font-semibold bg-blue-200 text-blue-800 px-2 py-1 rounded-full">Aprobado</span>`; break;
+                            case 'cancelado': statusBadge = `<span class="text-xs font-semibold bg-gray-200 text-gray-800 px-2 py-1 rounded-full">Cancelado</span>`; break;
+                            case 'denegado': statusBadge = `<span class="text-xs font-semibold bg-red-200 text-red-800 px-2 py-1 rounded-full">Denegado</span>`; break;
+                        }
+                        el.innerHTML = `
+                            <div>
+                                <p class="font-bold">${formatCurrency(p.amount)}</p>
+                                <p class="text-xs text-gray-500">${p.requestDate}</p>
+                            </div>
+                            ${statusBadge}
+                        `;
+                        loansListEl.appendChild(el);
+                    });
+                });
+            }
+            
+            // +++ NUEVA FUNCIÓN: Maneja el envío de la solicitud de préstamo +++
+            async function handleLoanRequestSubmit(e) {
+                e.preventDefault();
+                const amount = unformatCurrency(document.getElementById('loan-amount').value);
+                const reason = document.getElementById('loan-reason').value;
+
+                if (amount <= 0) {
+                    showModalMessage("El monto debe ser mayor a cero.");
+                    return;
+                }
+
+                const newLoan = {
+                    employeeId: currentUser.uid,
+                    employeeName: currentUserData.nombre,
+                    amount: amount,
+                    reason: reason,
+                    requestDate: new Date().toISOString().split('T')[0],
+                    status: 'solicitado' // Estados: solicitado, aprobado, denegado, cancelado
+                };
+
+                showModalMessage("Enviando solicitud...", true);
+                try {
+                    await addDoc(collection(db, "prestamos"), newLoan);
+                    hideModal();
+                    showModalMessage("¡Solicitud enviada con éxito!", false, 2000);
+                } catch (error) {
+                    console.error("Error al solicitar préstamo:", error);
+                    showModalMessage("Error al enviar la solicitud.");
+                }
+            }
+
+            // +++ NUEVA FUNCIÓN: Muestra el modal para aprobar un préstamo y seleccionar el método de pago +++
+            function showApproveLoanModal(loan) {
+                const modalContentWrapper = document.getElementById('modal-content-wrapper');
+                modalContentWrapper.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+                        <h2 class="text-xl font-semibold mb-4">Aprobar Préstamo</h2>
+                        <p class="mb-1"><span class="font-semibold">Empleado:</span> ${loan.employeeName}</p>
+                        <p class="mb-4"><span class="font-semibold">Monto:</span> ${formatCurrency(loan.amount)}</p>
+                        <form id="approve-loan-form">
+                            <div>
+                                <label for="loan-payment-method" class="block text-sm font-medium">Fuente del Pago</label>
+                                <select id="loan-payment-method" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-white" required>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Nequi">Nequi</option>
+                                    <option value="Davivienda">Davivienda</option>
+                                </select>
+                            </div>
+                            <div class="flex gap-4 justify-end pt-4 mt-4 border-t">
+                                <button type="button" id="cancel-approve-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button>
+                                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold">Confirmar Aprobación</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                document.getElementById('modal').classList.remove('hidden');
+                document.getElementById('cancel-approve-btn').addEventListener('click', hideModal);
+                document.getElementById('approve-loan-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const paymentMethod = document.getElementById('loan-payment-method').value;
+                    handleApproveLoan(loan, paymentMethod);
+                });
+            }
+
+            // +++ NUEVA FUNCIÓN: Aprueba el préstamo y lo registra como gasto +++
+            async function handleApproveLoan(loan, paymentMethod) {
+                showModalMessage("Aprobando y registrando gasto...", true);
+                try {
+                    // 1. Crear el registro del gasto
+                    const nuevoGasto = {
+                        fecha: new Date().toISOString().split('T')[0],
+                        proveedorId: loan.employeeId, 
+                        proveedorNombre: `Adelanto de nómina: ${loan.employeeName}`,
+                        numeroFactura: `Préstamo RRHH`,
+                        valorTotal: loan.amount,
+                        fuentePago: paymentMethod,
+                        registradoPor: currentUser.uid,
+                        timestamp: new Date(),
+                        isLoanAdvance: true
+                    };
+                    await addDoc(collection(db, "gastos"), nuevoGasto);
+
+                    // 2. Actualizar el estado del préstamo
+                    const updateData = {
+                        status: 'aprobado',
+                        paymentMethod: paymentMethod,
+                        aprobadoBy: currentUser.uid,
+                        aprobadoDate: new Date().toISOString().split('T')[0]
+                    };
+                    await updateDoc(doc(db, "prestamos", loan.id), updateData);
+
+                    hideModal();
+                    showModalMessage("Préstamo aprobado y registrado como gasto.", false, 2500);
+
+                } catch (error) {
+                    console.error("Error al aprobar préstamo:", error);
+                    showModalMessage("Error al procesar la aprobación.");
+                }
+            }
+
+
+            // +++ FUNCIÓN MODIFICADA: Maneja las acciones del admin sobre los préstamos +++
+            async function handleLoanAction(loanId, action) {
+                // La aprobación ahora tiene su propio flujo, esta función maneja el resto.
+                if (action === 'aprobado') return; 
+
+                showModalMessage("Actualizando préstamo...", true);
+                try {
+                    if (action === 'denegado') {
+                        await deleteDoc(doc(db, "prestamos", loanId));
+                        showModalMessage("Préstamo denegado y eliminado.", false, 2000);
+                    } else { // 'cancelado'
+                        const updateData = {
+                            status: action,
+                            [`${action}By`]: currentUser.uid,
+                            [`${action}Date`]: new Date().toISOString().split('T')[0]
+                        };
+                        await updateDoc(doc(db, "prestamos", loanId), updateData);
+                        showModalMessage(`Préstamo marcado como ${action}.`, false, 2000);
+                    }
+                } catch (error) {
+                    console.error(`Error al ${action} el préstamo:`, error);
+                    showModalMessage("Error al actualizar el estado del préstamo.");
+                }
             }
 
     </script>
