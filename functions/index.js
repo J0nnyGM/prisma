@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
 const {jsPDF} = require("jspdf");
 require("jspdf-autotable");
+const axios = require("axios"); // Importar axios
 
 // Inicializar Firebase Admin SDK
 admin.initializeApp();
@@ -16,6 +17,10 @@ admin.initializeApp();
 const SENDGRID_API_KEY = functions.config().sendgrid.key;
 const FROM_EMAIL = functions.config().sendgrid.from_email;
 sgMail.setApiKey(SENDGRID_API_KEY);
+
+// --- NUEVO: Configuración de WhatsApp ---
+const WHATSAPP_TOKEN = functions.config().whatsapp.token;
+const WHATSAPP_PHONE_NUMBER_ID = functions.config().whatsapp.phone_number_id;
 
 const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 
@@ -31,6 +36,86 @@ function formatCurrency(value) {
     minimumFractionDigits: 0,
   }).format(value || 0);
 }
+
+/**
+ * --- NUEVO: Formatea un número de teléfono de Colombia al formato E.164. ---
+ * @param {string} phone El número de teléfono.
+ * @return {string|null} El número formateado o null si es inválido.
+ */
+function formatColombianPhone(phone) {
+    if (!phone || typeof phone !== "string") {
+        return null;
+    }
+    let cleanPhone = phone.replace(/[\s-()]/g, "");
+    if (cleanPhone.startsWith("57")) {
+        return cleanPhone;
+    }
+    if (cleanPhone.length === 10) {
+        return `57${cleanPhone}`;
+    }
+    return null;
+}
+
+/**
+ * --- NUEVO: Envía un mensaje de plantilla de WhatsApp con un documento. ---
+ * @param {string} toPhoneNumber Número del destinatario en formato E.164.
+ * @param {string} customerName Nombre del cliente para la plantilla.
+ * @param {string} remisionNumber Número de la remisión.
+ * @param {string} status Estado actual de la remisión.
+ * @param {string} pdfUrl URL pública del PDF a enviar.
+ * @return {Promise<object>} La respuesta de la API de Meta.
+ */
+async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber, status, pdfUrl) {
+    const formattedPhone = formatColombianPhone(toPhoneNumber);
+    if (!formattedPhone) {
+        throw new Error("Número de teléfono inválido o no proporcionado.");
+    }
+
+    const API_VERSION = "v19.0";
+    const url = `https://graph.facebook.com/${API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const payload = {
+        messaging_product: "whatsapp",
+        to: formattedPhone,
+        type: "template",
+        template: {
+            name: "envio_remision", // Asegúrate que este sea el nombre de tu plantilla aprobada
+            language: {
+                code: "es",
+            },
+            components: [
+                {
+                    type: "header",
+                    parameters: [
+                        {
+                            type: "document",
+                            document: {
+                                link: pdfUrl,
+                                filename: `Remision-${remisionNumber}.pdf`,
+                            },
+                        },
+                    ],
+                },
+                {
+                    type: "body",
+                    parameters: [
+                        {type: "text", text: customerName},
+                        {type: "text", text: remisionNumber},
+                        {type: "text", text: status},
+                    ],
+                },
+            ],
+        },
+    };
+
+    const headers = {
+        "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+    };
+
+    return axios.post(url, payload, {headers});
+}
+
 
 /**
  * Función para generar un PDF de la remisión.
@@ -175,84 +260,130 @@ function generarPDF(remision, isForPlanta = false) {
 exports.onRemisionCreate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onCreate(async (snap, context) => {
-      const remisionData = snap.data();
-      const remisionId = context.params.remisionId;
-      const log = (message) => {
-        functions.logger.log(`[${remisionId}] ${message}`);
-      };
-      log("Iniciando procesamiento de nueva remisión.");
-
-      try {
-        const pdfBuffer = generarPDF(remisionData, false);
-        log("PDF de cliente generado en memoria.");
-        const pdfPlantaBuffer = generarPDF(remisionData, true);
-        log("PDF de planta generado en memoria.");
-
-        const bucket = admin.storage().bucket(BUCKET_NAME);
+        const remisionData = snap.data();
+        const remisionId = context.params.remisionId;
+        const log = (message) => functions.logger.log(`[${remisionId}] ${message}`);
         
-        // Guardar PDF de cliente
-        const filePath = `remisiones/${remisionData.numeroRemision}.pdf`;
-        const file = bucket.file(filePath);
-        await file.save(pdfBuffer, {metadata: {contentType: "application/pdf"}});
-        log(`PDF de cliente guardado en Storage en: ${filePath}`);
-        
-        // Guardar PDF de planta
-        const filePathPlanta = `remisiones/planta-${remisionData.numeroRemision}.pdf`;
-        const filePlanta = bucket.file(filePathPlanta);
-        await filePlanta.save(pdfPlantaBuffer, {metadata: {contentType: "application/pdf"}});
-        log(`PDF de planta guardado en Storage en: ${filePathPlanta}`);
+        log("Ejecutando v4 - Despliegue Limpio");
 
-        const [url] = await file.getSignedUrl({
-          action: "read",
-          expires: "03-09-2491",
-        });
-        const [urlPlanta] = await filePlanta.getSignedUrl({
-          action: "read",
-          expires: "03-09-2491",
-        });
-        log("URLs públicas de PDFs obtenidas.");
+        let emailStatus = "pending";
+        let whatsappStatus = "pending";
 
-        const msg = {
-          to: remisionData.clienteEmail,
-          from: FROM_EMAIL,
-          subject: `Confirmación de Remisión N° ${remisionData.numeroRemision}`,
-          html: `<p>Hola ${remisionData.clienteNombre},</p>
-          <p>Hemos recibido tu orden y adjuntamos la remisión de servicio.</p>
-          <p>El estado actual es: <strong>${remisionData.estado}</strong>.</p>
-          <p>Gracias por confiar en nosotros.</p>
-          <p><strong>Prismacolor S.A.S.</strong></p>`,
-          attachments: [{
-            content: pdfBuffer.toString("base64"),
-            filename: `Remision-${remisionData.numeroRemision}.pdf`,
-            type: "application/pdf",
-            disposition: "attachment",
-          }],
-        };
-        await sgMail.send(msg);
-        log(`Correo enviado exitosamente a ${remisionData.clienteEmail}.`);
-        
-        // --- LÓGICA ACTUALIZADA ---
-        // Enviar una copia a un correo específico para cada remisión creada
-        const printerMsg = {
-            to: "oficinavidriosexito@print.brother.com",
-            from: FROM_EMAIL,
-            subject: `Nueva Remisión N° ${remisionData.numeroRemision} para Imprimir`,
-            html: `<p>Se ha generado la remisión N° ${remisionData.numeroRemision}. Adjunto para impresión.</p>`,
-            attachments: [{
-                content: pdfBuffer.toString("base64"),
-                filename: `Remision-${remisionData.numeroRemision}.pdf`,
-                type: "application/pdf",
-                disposition: "attachment",
-            }],
-        };
-        await sgMail.send(printerMsg);
-        log(`Copia de remisión enviada a la impresora.`);
+        try {
+            const pdfBuffer = generarPDF(remisionData, false);
+            log("PDF de cliente generado.");
+            const pdfPlantaBuffer = generarPDF(remisionData, true);
+            log("PDF de planta generado.");
 
-        return snap.ref.update({pdfUrl: url, pdfPlantaUrl: urlPlanta, emailStatus: "sent"});
-      } catch (error) {
-        functions.logger.error(`[${remisionId}] Error:`, error);
-        return snap.ref.update({emailStatus: "error"});
-      }
+            const bucket = admin.storage().bucket(BUCKET_NAME);
+            const filePath = `remisiones/${remisionData.numeroRemision}.pdf`;
+            const file = bucket.file(filePath);
+            await file.save(pdfBuffer, {metadata: {contentType: "application/pdf"}});
+            log(`PDF de cliente guardado en Storage: ${filePath}`);
+
+            const filePathPlanta = `remisiones/planta-${remisionData.numeroRemision}.pdf`;
+            const filePlanta = bucket.file(filePathPlanta);
+            await filePlanta.save(pdfPlantaBuffer, {metadata: {contentType: "application/pdf"}});
+            log(`PDF de planta guardado en Storage: ${filePathPlanta}`);
+
+            const [url] = await file.getSignedUrl({action: "read", expires: "03-09-2491"});
+            const [urlPlanta] = await filePlanta.getSignedUrl({action: "read", expires: "03-09-2491"});
+            log("URLs públicas de PDFs obtenidas.");
+            
+            await snap.ref.update({pdfUrl: url, pdfPlantaUrl: urlPlanta});
+
+            // --- Lógica de envío de Correo Electrónico ---
+            try {
+                const msg = {
+                    to: remisionData.clienteEmail,
+                    from: FROM_EMAIL,
+                    subject: `Confirmación de Remisión N° ${remisionData.numeroRemision}`,
+                    html: `<p>Hola ${remisionData.clienteNombre},</p><p>Hemos recibido tu orden y adjuntamos la remisión de servicio.</p><p>El estado actual es: <strong>${remisionData.estado}</strong>.</p><p>Gracias por confiar en nosotros.</p><p><strong>Prismacolor S.A.S.</strong></p>`,
+                    attachments: [{
+                        content: pdfBuffer.toString("base64"),
+                        filename: `Remision-${remisionData.numeroRemision}.pdf`,
+                        type: "application/pdf",
+                        disposition: "attachment",
+                    }],
+                };
+                await sgMail.send(msg);
+                log(`Correo enviado exitosamente a ${remisionData.clienteEmail}.`);
+                emailStatus = "sent";
+            } catch (emailError) {
+                log("Error al enviar correo:", emailError);
+                emailStatus = "error";
+            }
+            
+            // --- Lógica de envío a Impresora ---
+            try {
+                const printerMsg = {
+                    to: "oficinavidriosexito@print.brother.com",
+                    from: FROM_EMAIL,
+                    subject: `Nueva Remisión N° ${remisionData.numeroRemision} para Imprimir`,
+                    html: `<p>Se ha generado la remisión N° ${remisionData.numeroRemision}. Adjunto para impresión.</p>`,
+                    attachments: [{
+                        content: pdfBuffer.toString("base64"),
+                        filename: `Remision-${remisionData.numeroRemision}.pdf`,
+                        type: "application/pdf",
+                        disposition: "attachment",
+                    }],
+                };
+                await sgMail.send(printerMsg);
+                log(`Copia de remisión enviada a la impresora.`);
+            } catch (printerError) {
+                log("Error al enviar a la impresora:", printerError);
+            }
+
+            // --- Lógica de envío de WhatsApp ---
+            try {
+                const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
+                const docExists = clienteDoc && (typeof clienteDoc.exists === "function" ? clienteDoc.exists() : clienteDoc.exists);
+                
+                if (docExists) {
+                    const clienteData = clienteDoc.data();
+                    const telefono = clienteData.telefono1 || clienteData.telefono2;
+                    if (telefono) {
+                        await sendWhatsAppRemision(
+                            telefono,
+                            remisionData.clienteNombre,
+                            remisionData.numeroRemision.toString(),
+                            remisionData.estado,
+                            url
+                        );
+                        log(`Mensaje de WhatsApp enviado a ${telefono}.`);
+                        whatsappStatus = "sent";
+                    } else {
+                        log("El cliente no tiene un número de teléfono registrado.");
+                        whatsappStatus = "no_phone";
+                    }
+                } else {
+                    log("No se encontró el documento del cliente para obtener el teléfono.");
+                    whatsappStatus = "client_not_found";
+                }
+            } catch (whatsappError) {
+                functions.logger.error(
+                    `[${remisionId}] Error al enviar WhatsApp:`,
+                    {
+                        errorMessage: whatsappError.message,
+                        responseData: whatsappError.response ? whatsappError.response.data : "No response data",
+                        statusCode: whatsappError.response ? whatsappError.response.status : "No status code",
+                    },
+                );
+                whatsappStatus = "error";
+            }
+
+            return snap.ref.update({
+                emailStatus: emailStatus,
+                whatsappStatus: whatsappStatus,
+            });
+
+        } catch (error) {
+            functions.logger.error(`[${remisionId}] Error General:`, error);
+            return snap.ref.update({
+                emailStatus: "error",
+                whatsappStatus: "error",
+            });
+        }
     });
 
 exports.onRemisionUpdate = functions.region("us-central1").firestore
@@ -414,7 +545,8 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
     
     try {
         const remisionDoc = await remisionRef.get();
-        if (!remisionDoc.exists) {
+        const docExists = remisionDoc && (typeof remisionDoc.exists === "function" ? remisionDoc.exists() : remisionDoc.exists);
+        if (!docExists) {
             throw new functions.https.HttpsError("not-found", "La remisión no existe.");
         }
         
@@ -497,7 +629,8 @@ exports.onResendEmailRequest = functions.region("us-central1").firestore
       try {
         const remisionDoc = await admin.firestore()
             .collection("remisiones").doc(remisionId).get();
-        if (!remisionDoc.exists) {
+        const docExists = remisionDoc && (typeof remisionDoc.exists === "function" ? remisionDoc.exists() : remisionDoc.exists);
+        if (!docExists) {
           log("La remisión no existe.");
           return snap.ref.delete();
         }
