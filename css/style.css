@@ -1,0 +1,83 @@
+body { 
+    font-family: 'Inter', sans-serif; 
+    background-color: #f3f4f6; 
+}
+.modal { 
+    transition: opacity 0.3s ease; 
+}
+.remision-id, .cliente-id, .item-ref { 
+    font-family: monospace; 
+    font-size: 0.8rem; 
+    background-color: #e5e7eb; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+    color: #4b5563; 
+}
+.item-row:not(:last-child) { 
+    border-bottom: 1px solid #e5e7eb; 
+    padding-bottom: 1rem; 
+    margin-bottom: 1rem; 
+}
+.tab-btn { 
+    transition: all 0.2s ease-in-out; 
+    border-bottom: 4px solid transparent; 
+}
+.tab-btn.active { 
+    border-bottom-color: #4f46e5; 
+    color: #111827; 
+}
+.dashboard-tab-btn { 
+    transition: all 0.2s ease-in-out; 
+    border-bottom: 2px solid transparent; 
+}
+.dashboard-tab-btn.active { 
+    border-color: #4f46e5; 
+    color: #4f46e5; 
+}
+.btn-disabled { 
+    cursor: not-allowed; 
+    background-color: #9ca3af !important; 
+}
+.remision-anulada { 
+    background-color: #fee2e2; 
+    border-left: 4px solid #ef4444; 
+}
+.status-badge { 
+    font-size: 0.75rem; 
+    padding: 0.2rem 0.6rem; 
+    border-radius: 9999px; 
+    font-weight: 600; 
+}
+.status-recibido { background-color: #e0e7ff; color: #4338ca; }
+.status-en-proceso { background-color: #fef3c7; color: #b45309; }
+.status-procesado { background-color: #dbeafe; color: #1d4ed8; }
+.status-entregado { background-color: #dcfce7; color: #166534; }
+.payment-status { 
+    font-size: 0.7rem; 
+    padding: 0.1rem 0.5rem; 
+    border-radius: 9999px; 
+    font-weight: 600; 
+    border-width: 1px; 
+}
+.payment-pagado { background-color: #dcfce7; color: #166534; border-color: #166534; }
+.payment-abono { background-color: #fef9c3; color: #a16207; border-color: #a16207; }
+.payment-pendiente { background-color: #fee2e2; color: #991b1b; border-color: #991b1b; }
+.search-results {
+    position: absolute;
+    z-index: 10;
+    width: 100%;
+    background-color: white;
+    border: 1px solid #d1d5db; /* gray-300 */
+    border-top: none;
+    border-radius: 0 0 0.5rem 0.5rem;
+    margin-top: -2px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.search-result-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+}
+.search-result-item:hover {
+    background-color: #f3f4f6; /* gray-100 */
+}
