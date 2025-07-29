@@ -12,6 +12,11 @@ export function setupGastosEventListeners() {
     const valorTotalInput = document.getElementById('gasto-valor-total');
     valorTotalInput.addEventListener('input', autoFormatCurrency);
 
+    flatpickr("#gasto-fecha", {
+        defaultDate: "today",
+        dateFormat: "Y-m-d",
+    });
+
     const proveedorSearchInput = document.getElementById('proveedor-search-input');
     const proveedorSearchResults = document.getElementById('proveedor-search-results');
     const proveedorIdHidden = document.getElementById('proveedor-id-hidden');

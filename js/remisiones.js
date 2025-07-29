@@ -18,7 +18,11 @@ export function setupRemisionesEventListeners() {
     document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
     document.getElementById('filter-remisiones-month').addEventListener('change', renderRemisiones);
     document.getElementById('filter-remisiones-year').addEventListener('change', renderRemisiones);
-    document.getElementById('fecha-recibido').value = new Date().toISOString().split('T')[0];
+    
+    flatpickr("#fecha-recibido", {
+        defaultDate: "today",
+        dateFormat: "Y-m-d",
+    });
     
     // Setup initial item row
     const itemsContainer = document.getElementById('items-container');
@@ -228,7 +232,7 @@ async function handleRemisionSubmit(e) {
         calcularTotales();
         hideModal();
         showModalMessage("¡Remisión guardada! Se está procesando el correo.", false, 3000);
-        document.getElementById('fecha-recibido').value = new Date().toISOString().split('T')[0];
+        flatpickr("#fecha-recibido", { defaultDate: "today", dateFormat: "Y-m-d" });
     } catch (error) {
         console.error("Error en la transacción o al crear la remisión: ", error);
         hideModal();
@@ -382,7 +386,7 @@ function showPaymentModal(remision) {
                     <h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>
                     <form id="add-payment-form" class="space-y-3 p-4 border rounded-lg">
                         <input type="text" id="payment-amount" inputmode="numeric" placeholder="Monto del abono" class="w-full p-2 border rounded-lg" required>
-                        <input type="date" id="payment-date" class="w-full p-2 border rounded-lg" required>
+                        <input type="text" id="payment-date" class="w-full p-2 border rounded-lg" placeholder="Seleccionar fecha..." required>
                         <select id="payment-method" class="w-full p-2 border rounded-lg bg-white" required>
                             <option value="Efectivo">Efectivo</option>
                             <option value="Nequi">Nequi</option>
@@ -406,7 +410,11 @@ function showPaymentModal(remision) {
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-payment-modal').addEventListener('click', hideModal);
     
-    document.getElementById('payment-date').value = new Date().toISOString().split('T')[0];
+    flatpickr("#payment-date", {
+        defaultDate: "today",
+        dateFormat: "Y-m-d",
+    });
+
     const amountInput = document.getElementById('payment-amount');
     amountInput.addEventListener('input', autoFormatCurrency);
 

@@ -16,7 +16,7 @@ const viewTemplates = {
                     </div>
                     <div>
                         <label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label>
-                        <input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly>
+                        <input type="text" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1" placeholder="Seleccionar fecha...">
                     </div>
                     <div class="border-t border-b border-gray-200 py-4">
                         <h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3>
@@ -156,7 +156,7 @@ const viewTemplates = {
             <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md">
                 <h2 class="text-xl font-semibold mb-4">Nuevo Gasto</h2>
                 <form id="add-gasto-form" class="space-y-4">
-                    <div><label for="gasto-fecha">Fecha</label><input type="date" id="gasto-fecha" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div>
+                    <div><label for="gasto-fecha">Fecha</label><input type="text" id="gasto-fecha" class="w-full p-3 border border-gray-300 rounded-lg mt-1" placeholder="Seleccionar fecha..." required></div>
                     <div class="relative">
                         <label for="proveedor-search-input">Proveedor</label>
                         <input type="text" id="proveedor-search-input" autocomplete="off" placeholder="Buscar proveedor..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" required>
