@@ -23,7 +23,6 @@ try {
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app, 'us-central1');
-    console.log("Firebase inicializado correctamente.");
 } catch (e) {
     console.error("Error al inicializar Firebase.", e);
     document.body.innerHTML = `<h1>Error Crítico: No se pudo inicializar la aplicación.</h1>`;
@@ -32,63 +31,74 @@ try {
 // --- VISTAS Y ESTADO GLOBAL ---
 const authView = document.getElementById('auth-view');
 const appView = document.getElementById('app-view');
+const deniedView = document.getElementById('denied-view');
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 let currentUser = null;
 let currentUserData = null;
-let allGastos = [];
-let allRemisiones = [];
-let allPendingLoans = []; // <--- AÑADE ESTA LÍNEA
-let profitLossChart = null;
-let allItems = [];
-let allColores = [];
-let allClientes = [];
-let allProveedores = [];
+let allItems = [], allColores = [], allClientes = [], allProveedores = [], allGastos = [], allRemisiones = [], allUsers = [], allPendingLoans = [], profitLossChart = null;
 let dynamicElementCounter = 0;
 const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
 const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'prestamos', 'empleados'];
 const RRHH_DOCUMENT_TYPES = [
     { id: 'contrato', name: 'Contrato' }, { id: 'hojaDeVida', name: 'Hoja de Vida' }, { id: 'examenMedico', name: 'Examen Médico' }, { id: 'cedula', name: 'Cédula (PDF)' }, { id: 'certificadoARL', name: 'Certificado ARL' }, { id: 'certificadoEPS', name: 'Certificado EPS' }, { id: 'certificadoAFP', name: 'Certificado AFP' }, { id: 'cartaRetiro', name: 'Carta de renuncia o despido' }, { id: 'liquidacionDoc', name: 'Liquidación' },
 ];
-let allUsers = []; // <-- Nueva variable global para almacenar todos los usuarios
-
-
-// **** INICIO DE LA SECCIÓN CORREGIDA ****
-
-// Array para guardar las funciones de desuscripción de los listeners
-let activeListeners = [];
-
-// Función para desuscribirse de todos los listeners activos
-function unsubscribeAllListeners() {
-    activeListeners.forEach(unsubscribe => unsubscribe());
-    activeListeners = []; // Limpiar el array
-    console.log("Todos los listeners de Firestore han sido desconectados.");
-}
 
 // --- MANEJO DE AUTENTICACIÓN Y VISTAS ---
+let activeListeners = [];
+function unsubscribeAllListeners() {
+    activeListeners.forEach(unsubscribe => unsubscribe());
+    activeListeners = [];
+}
+
 onAuthStateChanged(auth, async (user) => {
+    unsubscribeAllListeners();
     if (user) {
         currentUser = user;
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
             currentUserData = {id: user.uid, ...userDoc.data()};
-            document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
-            
-            authView.classList.add('hidden');
-            appView.classList.remove('hidden');
-            startApp();
+            if (currentUserData.status === 'active') {
+                document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
+                authView.classList.add('hidden');
+                deniedView.classList.add('hidden');
+                appView.classList.remove('hidden');
+                startApp();
+            } else {
+                let message = "Tu cuenta está pendiente de aprobación por un administrador.";
+                if (currentUserData.status === 'inactive') message = "Tu cuenta ha sido desactivada temporalmente.";
+                if (currentUserData.status === 'archived') message = "Tu cuenta ha sido archivada y no puedes acceder.";
+                document.getElementById('denied-message').textContent = message;
+                authView.classList.add('hidden');
+                appView.classList.add('hidden');
+                deniedView.classList.remove('hidden');
+            }
+        } else {
+            signOut(auth);
         }
     } else {
         currentUser = null;
         currentUserData = null;
-        authView.classList.remove('hidden');
         appView.classList.add('hidden');
+        deniedView.classList.add('hidden');
+        authView.classList.remove('hidden');
         isAppInitialized = false;
-        // Si el usuario ya no está autenticado, nos aseguramos de limpiar los listeners
-        unsubscribeAllListeners();
     }
 });
 
+// **** INICIO DE LA CORRECCIÓN ****
+// Listeners para los elementos que siempre están presentes en la página
+document.getElementById('logout-denied-user').addEventListener('click', () => {
+    signOut(auth);
+});
+document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
+document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+loginForm.addEventListener('submit', handleLoginSubmit);
+registerForm.addEventListener('submit', handleRegisterSubmit);
+// **** FIN DE LA CORRECCIÓN ****
+
+
+// --- LÓGICA DE INICIALIZACIÓN DE LA APP ---
 let isAppInitialized = false;
 function startApp() {
     if (isAppInitialized) return;
@@ -182,7 +192,7 @@ function updateUIVisibility(userData) {
     document.getElementById('view-all-loans-btn').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('summary-btn').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('loan-request-btn').style.display = isAdmin ? 'none' : 'block';
-    
+
     // Ajusta la vista de remisiones para el rol de planta
     const isPlanta = userData.role?.toLowerCase() === 'planta';
     const remisionFormContainer = document.getElementById('remision-form-container');
@@ -213,8 +223,98 @@ function loadInitialData() {
 }
 
 // --- LÓGICA DE LOGIN/REGISTRO/LOGOUT ---
-    document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
-    document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
+document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+
+loginForm.addEventListener('submit', handleLoginSubmit); // Asegúrate de tener la función handleLoginSubmit
+registerForm.addEventListener('submit', handleRegisterSubmit); // Asegúrate de tener la función handleRegisterSubmit
+
+function handleLoginSubmit(e) {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    signInWithEmailAndPassword(auth, email, password).catch(error => {
+        console.error(error);
+        showModalMessage("Error: " + error.message);
+    });
+}
+
+async function handleRegisterSubmit(e) {
+    e.preventDefault();
+    
+    const politicaCheckbox = document.getElementById('register-politica');
+    if (!politicaCheckbox || !politicaCheckbox.checked) {
+        showModalMessage("Debes aceptar la Política de Tratamiento de Datos para registrarte.");
+        return;
+    }
+
+    const nombre = document.getElementById('register-name').value;
+    const cedula = document.getElementById('register-cedula').value;
+    const telefono = document.getElementById('register-phone').value;
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
+    const dob = document.getElementById('register-dob').value;
+    const direccion = document.getElementById('register-address').value;
+    
+    showModalMessage("Registrando...", true);
+
+    try {
+        const usersCollection = collection(db, "users");
+        const existingUsersSnapshot = await getDocs(query(usersCollection));
+        const isFirstUser = existingUsersSnapshot.empty;
+
+        // --- Lógica de Roles y Estado Corregida ---
+        let role, status, permissions;
+        if (isFirstUser) {
+            // El primer usuario es admin y está activo por defecto.
+            role = 'admin';
+            status = 'active';
+            permissions = { 
+                remisiones: true, facturacion: true, clientes: true, 
+                items: true, colores: true, gastos: true, 
+                proveedores: true, empleados: true, prestamos: true 
+            };
+        } else {
+            // Los siguientes usuarios son de planta y quedan pendientes de aprobación.
+            role = 'planta';
+            status = 'pending';
+            permissions = { 
+                remisiones: true, prestamos: true,
+                facturacion: false, clientes: false, items: false, 
+                colores: false, gastos: false, proveedores: false, empleados: false
+            };
+        }
+
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        await setDoc(doc(db, "users", user.uid), { 
+            nombre, cedula, telefono, email, dob, direccion: direccion || '', 
+            role, 
+            status, // Se guarda el estado correcto
+            permissions,
+            creadoEn: new Date() 
+        });
+        
+        hideModal();
+        let successMessage = isFirstUser 
+            ? "¡Registro de administrador exitoso! Ya puedes iniciar sesión."
+            : "¡Registro exitoso! Tu cuenta está pendiente de aprobación por un administrador.";
+        showModalMessage(successMessage, false, 5000);
+        
+        registerForm.reset();
+        registerForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        
+        // Se cierra la sesión para forzar un nuevo login y la verificación de estado
+        await signOut(auth);
+
+    } catch (error) { 
+        hideModal(); 
+        console.error("Error de registro:", error); 
+        showModalMessage("Error de registro: " + error.message); 
+    }
+}
 
 loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -229,11 +329,10 @@ loginForm.addEventListener('submit', (e) => {
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // 1. Validar que el checkbox de políticas esté marcado
     const politicaCheckbox = document.getElementById('register-politica');
     if (!politicaCheckbox.checked) {
         showModalMessage("Debes aceptar la Política de Tratamiento de Datos para registrarte.");
-        return; // Detiene el proceso de registro
+        return;
     }
 
     const nombre = document.getElementById('register-name').value;
@@ -245,16 +344,32 @@ registerForm.addEventListener('submit', async (e) => {
     const direccion = document.getElementById('register-address').value;
 
     showModalMessage("Registrando...", true);
+
     try {
-        const usersCollection = collection(db, "users");
-        const existingUsers = await getDocs(query(usersCollection));
-        const isFirstUser = existingUsers.empty;
-        const role = isFirstUser ? 'admin' : 'planta';
-        const permissions = { remisiones: true, facturacion: isFirstUser, clientes: !isFirstUser, items: !isFirstUser, colores: !isFirstUser, gastos: !isFirstUser, proveedores: !isFirstUser, empleados: isFirstUser };
+        // --- LÓGICA SIMPLIFICADA ---
+        // Se asigna el rol de 'planta' por defecto. La función en la nube se encargará de promover al admin.
+        const role = 'planta';
+        const permissions = {
+            remisiones: true,
+            prestamos: true,
+            facturacion: false,
+            clientes: false,
+            items: false,
+            colores: false,
+            gastos: false,
+            proveedores: false,
+            empleados: false
+        };
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        await setDoc(doc(db, "users", user.uid), { nombre, cedula, email, telefono, dob, direccion: direccion || '', role, creadoEn: new Date(), permissions });
+
+        await setDoc(doc(db, "users", user.uid), {
+            nombre, cedula, telefono, email, dob, direccion: direccion || '',
+            role,
+            permissions,
+            creadoEn: new Date()
+        });
 
         hideModal();
         showModalMessage("¡Registro exitoso! Ahora puedes iniciar sesión.", false, 3000);
@@ -263,23 +378,23 @@ registerForm.addEventListener('submit', async (e) => {
         loginForm.classList.remove('hidden');
     } catch (error) {
         hideModal();
-        console.error(error);
+        console.error("Error de registro:", error);
         showModalMessage("Error de registro: " + error.message);
     }
 });
 
-    // Corregimos la función de logout
-    
-    document.getElementById('logout-btn').addEventListener('click', () => {
-        unsubscribeAllListeners();
-        signOut(auth);
-    });
+// Corregimos la función de logout
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+    unsubscribeAllListeners();
+    signOut(auth);
+});
 
 // --- LÓGICA DE NAVEGACIÓN Y EVENTOS ---
 function setupEventListeners() {
     const tabs = { remisiones: document.getElementById('tab-remisiones'), facturacion: document.getElementById('tab-facturacion'), clientes: document.getElementById('tab-clientes'), items: document.getElementById('tab-items'), colores: document.getElementById('tab-colores'), gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'), empleados: document.getElementById('tab-empleados') };
     const views = { remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'), clientes: document.getElementById('view-clientes'), items: document.getElementById('view-items'), colores: document.getElementById('view-colores'), gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'), empleados: document.getElementById('view-empleados') };
-    Object.keys(tabs).forEach(key => { if(tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
+    Object.keys(tabs).forEach(key => { if (tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
     const policyModal = document.getElementById('policy-modal');
 
 
@@ -322,23 +437,44 @@ function setupEventListeners() {
     document.getElementById('loan-request-btn').addEventListener('click', showLoanRequestModal);
     document.getElementById('show-policy-link').addEventListener('click', (e) => {
         e.preventDefault();
-        document.getElementById('policy-modal').classList.remove('hidden');
+        policyModal.classList.remove('hidden');
     });
 
     document.getElementById('close-policy-modal').addEventListener('click', () => {
-        document.getElementById('policy-modal').classList.add('hidden');
+        policyModal.classList.add('hidden');
     });
-
     document.getElementById('accept-policy-btn').addEventListener('click', () => {
-        document.getElementById('policy-modal').classList.add('hidden');
+        policyModal.classList.add('hidden');
     });
 
-    // Aseguramos que el enlace para volver a login desde registro funcione
-    document.getElementById('show-login-link-register').addEventListener('click', (e) => {
-        e.preventDefault();
-        registerForm.classList.add('hidden');
-        loginForm.classList.remove('hidden');
-    });
+    // Delegación de eventos para los botones de la sección de empleados
+    const empleadosView = document.getElementById('view-empleados');
+    if (empleadosView) {
+        empleadosView.addEventListener('click', async (e) => {
+            const target = e.target;
+
+            // Lógica para los botones de estado
+            if (target.classList.contains('user-status-btn')) {
+                const uid = target.dataset.uid;
+                const newStatus = target.dataset.status;
+                if (confirm(`¿Estás seguro de que quieres cambiar el estado de este usuario a "${newStatus}"?`)) {
+                    try {
+                        await updateDoc(doc(db, "users", uid), { status: newStatus });
+                        showTemporaryMessage("Estado del usuario actualizado.", "success");
+                    } catch (error) {
+                        console.error("Error al actualizar estado:", error);
+                        showTemporaryMessage("No se pudo actualizar el estado.", "error");
+                    }
+                }
+            }
+
+            // Lógica para el botón de gestionar
+            if (target.classList.contains('manage-user-btn')) {
+                showAdminEditUserModal(JSON.parse(target.dataset.userJson));
+            }
+        });
+    }
+
 
     // Listeners para buscadores
     document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
@@ -385,13 +521,13 @@ function switchView(viewName, tabs, views) {
 function loadEmpleados() {
     const empleadosListEl = document.getElementById('empleados-list');
     if (!currentUserData || currentUserData.role !== 'admin' || !empleadosListEl) {
-        return () => {}; // Retorna una función vacía si no hay nada que hacer
+        return () => { }; // Retorna una función vacía si no hay nada que hacer
     }
     const q = query(collection(db, "users"));
     // Añadir 'return' aquí
     return onSnapshot(q, (snapshot) => {
-        const users = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
-        allUsers = snapshot.docs.map(d => ({id: d.id, ...d.data()})); // Guardamos los usuarios en la variable global
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        allUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); // Guardamos los usuarios en la variable global
         empleadosListEl.innerHTML = '';
         users.filter(u => u.id !== currentUser.uid).forEach(empleado => {
             const el = document.createElement('div');
@@ -436,7 +572,7 @@ function renderColores() {
     });
 }
 function loadItems() {
-     const q = query(collection(db, "items"), orderBy("referencia", "asc"));
+    const q = query(collection(db, "items"), orderBy("referencia", "asc"));
     return onSnapshot(q, (snapshot) => {
         allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderItems();
@@ -472,21 +608,51 @@ function renderEmpleados(users) {
     if (!empleadosListEl) return;
 
     empleadosListEl.innerHTML = '';
-    users.filter(u => u.id !== currentUser.uid).forEach(empleado => {
+    // Ordenar usuarios para mostrar los pendientes primero
+    users.sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return a.nombre.localeCompare(b.nombre);
+    });
+
+    users.filter(u => u.id !== currentUser.uid && u.status !== 'archived').forEach(empleado => {
         const el = document.createElement('div');
-        el.className = 'border p-4 rounded-lg flex justify-between items-center';
+        let statusBadge = '';
+        let actionButtons = '';
+
+        switch (empleado.status) {
+            case 'pending':
+                statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Pendiente</span>`;
+                actionButtons = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white text-xs px-3 py-1 rounded-full hover:bg-green-600">Activar</button>`;
+                break;
+            case 'active':
+                statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Activo</span>`;
+                actionButtons = `<button data-uid="${empleado.id}" data-status="inactive" class="user-status-btn bg-yellow-500 text-white text-xs px-3 py-1 rounded-full hover:bg-yellow-600">Desactivar</button>`;
+                break;
+            case 'inactive':
+                statusBadge = `<span class="text-xs font-semibold bg-gray-200 text-gray-800 px-2 py-1 rounded-full">Inactivo</span>`;
+                actionButtons = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white text-xs px-3 py-1 rounded-full hover:bg-green-600">Activar</button>`;
+                break;
+        }
+
+        el.className = 'border p-3 rounded-lg';
         el.innerHTML = `
-            <div>
-                <p class="font-semibold">${empleado.nombre} <span class="text-sm font-normal text-gray-500">(${empleado.role})</span></p>
-                <p class="text-sm text-gray-600">${empleado.email}</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-                <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700">Recursos Humanos</button>
-                <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Gestionar</button>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <div>
+                    <p class="font-semibold">${empleado.nombre} <span class="text-sm font-normal text-gray-500">(${empleado.role})</span></p>
+                    <p class="text-sm text-gray-600">${empleado.email}</p>
+                </div>
+                <div class="flex items-center gap-2 mt-2 sm:mt-0">
+                    ${statusBadge}
+                    ${actionButtons}
+                    <button data-uid="${empleado.id}" data-status="archived" class="user-status-btn bg-red-500 text-white text-xs px-3 py-1 rounded-full hover:bg-red-600">Archivar</button>
+                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white text-xs px-3 py-1 rounded-full hover:bg-blue-700">Gestionar</button>
+                </div>
             </div>`;
         empleadosListEl.appendChild(el);
     });
 }
+
 
 function renderClientes() {
     const clientesListEl = document.getElementById('clientes-list');
@@ -2894,7 +3060,7 @@ async function handleLoanAction(loanId, action) {
 function loadAllLoanRequests() {
     const q = query(collection(db, "prestamos"), where("status", "==", "solicitado"));
     return onSnapshot(q, (snapshot) => {
-        allPendingLoans = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+        allPendingLoans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const badge = document.getElementById('header-loan-badge');
         if (badge) {
             if (allPendingLoans.length > 0) {
