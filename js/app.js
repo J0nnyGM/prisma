@@ -169,21 +169,19 @@ function updateUIVisibility(userData) {
     const permissions = userData.permissions || {};
     const isAdmin = userData.role?.toLowerCase() === 'admin';
 
-    // Muestra u oculta las pestañas de navegación
+    // Oculta/Muestra las pestañas de navegación
     ALL_MODULES.forEach(module => {
         const tab = document.getElementById(`tab-${module}`);
         if (tab) {
-            const hasPermission = isAdmin || permissions[module];
+            const hasPermission = isAdmin || (userData.permissions && userData.permissions[module]);
             tab.classList.toggle('hidden', !hasPermission);
         }
     });
 
-    // Muestra el grupo de botones del encabezado correcto
-    document.getElementById('admin-header-buttons').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('user-header-buttons').style.display = isAdmin ? 'none' : 'flex';
-    
-    // Oculta/Muestra el botón de resumen
-    document.getElementById('summary-btn').style.display = isAdmin ? '' : 'none';
+    // Muestra los botones correctos del encabezado según el rol
+    document.getElementById('view-all-loans-btn').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('summary-btn').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('loan-request-btn').style.display = isAdmin ? 'none' : 'block';
     
     // Ajusta la vista de remisiones para el rol de planta
     const isPlanta = userData.role?.toLowerCase() === 'planta';
@@ -215,8 +213,8 @@ function loadInitialData() {
 }
 
 // --- LÓGICA DE LOGIN/REGISTRO/LOGOUT ---
-document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
-document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+    document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
+    document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
 
 loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -271,8 +269,8 @@ registerForm.addEventListener('submit', async (e) => {
 });
 
     // Corregimos la función de logout
-    document.getElementById('edit-profile-btn-user').addEventListener('click', showEditProfileModal);
-    document.getElementById('logout-btn-user').addEventListener('click', () => {
+    
+    document.getElementById('logout-btn').addEventListener('click', () => {
         unsubscribeAllListeners();
         signOut(auth);
     });
@@ -281,9 +279,9 @@ registerForm.addEventListener('submit', async (e) => {
 function setupEventListeners() {
     const tabs = { remisiones: document.getElementById('tab-remisiones'), facturacion: document.getElementById('tab-facturacion'), clientes: document.getElementById('tab-clientes'), items: document.getElementById('tab-items'), colores: document.getElementById('tab-colores'), gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'), empleados: document.getElementById('tab-empleados') };
     const views = { remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'), clientes: document.getElementById('view-clientes'), items: document.getElementById('view-items'), colores: document.getElementById('view-colores'), gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'), empleados: document.getElementById('view-empleados') };
+    Object.keys(tabs).forEach(key => { if(tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
     const policyModal = document.getElementById('policy-modal');
 
-    Object.keys(tabs).forEach(key => { if (tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
 
     const facturacionPendientesTab = document.getElementById('tab-pendientes');
     const facturacionRealizadasTab = document.getElementById('tab-realizadas');

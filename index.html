@@ -81,33 +81,17 @@
                         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Sistema de Gestión Integral</h1>
                         <p id="user-info" class="text-gray-600 mt-1">Cargando usuario...</p>
                     </div>
-                    <div class="flex items-center gap-3 flex-wrap justify-end"></div>
 
-                    <div class="flex items-center gap-3 flex-wrap justify-end">
-                        <div id="admin-header-buttons" class="hidden items-center gap-3 flex-wrap justify-end">
-                            <button id="view-all-loans-btn"
-                                class="header-btn bg-blue-600 text-white hover:bg-blue-700 relative">
-                                Préstamos Pendientes
-                                <span id="header-loan-badge"
-                                    class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center hidden"></span>
-                            </button>
-                            <button id="summary-btn"
-                                class="header-btn bg-green-600 text-white hover:bg-green-700">Resumen</button>
-                            <button id="edit-profile-btn"
-                                class="header-btn bg-gray-700 text-white hover:bg-gray-800">Editar Perfil</button>
-                            <button id="logout-btn" class="header-btn bg-red-500 text-white hover:bg-red-600">Cerrar
-                                Sesión</button>
-                        </div>
-                        <div id="user-header-buttons" class="hidden items-center gap-3 flex-wrap justify-end">
-                            <button id="loan-request-btn"
-                                class="header-btn bg-yellow-500 text-white hover:bg-yellow-600">Solicitar
-                                Préstamo</button>
-                            <button id="edit-profile-btn-user"
-                                class="header-btn bg-gray-700 text-white hover:bg-gray-800">Editar Perfil</button>
-                            <button id="logout-btn-user"
-                                class="header-btn bg-red-500 text-white hover:bg-red-600">Cerrar Sesión</button>
-                        </div>
-                    </div>
+<div class="flex items-center gap-3 flex-wrap justify-end">
+    <button id="view-all-loans-btn" class="header-btn bg-blue-600 text-white hover:bg-blue-700 relative hidden">
+        Préstamos Pendientes
+        <span id="header-loan-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center hidden"></span>
+    </button>
+    <button id="loan-request-btn" class="header-btn bg-yellow-500 text-white hover:bg-yellow-600 hidden">Solicitar Préstamo</button>
+    <button id="summary-btn" class="header-btn bg-green-600 text-white hover:bg-green-700 hidden">Resumen</button>
+    <button id="edit-profile-btn" class="header-btn bg-gray-700 text-white hover:bg-gray-800">Editar Perfil</button>
+    <button id="logout-btn" class="header-btn bg-red-500 text-white hover:bg-red-600">Cerrar Sesión</button>
+</div>
                 </div>
             </header>
 
