@@ -24,6 +24,37 @@ const WHATSAPP_PHONE_NUMBER_ID = functions.config().whatsapp.phone_number_id;
 
 const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 
+// **** INICIO DE LA NUEVA FUNCIÓN ****
+/**
+ * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
+ * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin'.
+ */
+exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+  const usersCollection = admin.firestore().collection("users");
+  
+  // Revisa cuántos documentos hay en la colección de usuarios.
+  const snapshot = await usersCollection.limit(2).get();
+
+  // Si solo hay 1 documento (el que se acaba de crear), es el primer usuario.
+  if (snapshot.size === 1) {
+    functions.logger.log(`Asignando rol de 'admin' al primer usuario: ${user.uid}`);
+    // Actualiza el documento del usuario para cambiar su rol a 'admin'.
+    return usersCollection.doc(user.uid).update({
+      role: "admin",
+      "permissions.facturacion": true,
+      "permissions.clientes": true,
+      "permissions.items": true,
+      "permissions.colores": true,
+      "permissions.gastos": true,
+      "permissions.proveedores": true,
+      "permissions.empleados": true,
+    });
+  }
+  
+  functions.logger.log(`Asignando rol de 'planta' al nuevo usuario: ${user.uid}`);
+  return null; // No hace nada para los siguientes usuarios.
+});
+
 /**
  * Formatea un número como moneda colombiana (COP).
  * @param {number} value El valor numérico a formatear.
