@@ -86,27 +86,48 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// **** INICIO DE LA CORRECCIÓN ****
-// Listeners para los elementos que siempre están presentes en la página
-document.getElementById('logout-denied-user').addEventListener('click', () => {
-    signOut(auth);
-});
+// Listeners para los elementos que siempre están presentes
+document.getElementById('logout-denied-user').addEventListener('click', () => signOut(auth));
 document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
 document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
 loginForm.addEventListener('submit', handleLoginSubmit);
 registerForm.addEventListener('submit', handleRegisterSubmit);
-// **** FIN DE LA CORRECCIÓN ****
 
 
 // --- LÓGICA DE INICIALIZACIÓN DE LA APP ---
 let isAppInitialized = false;
 function startApp() {
     if (isAppInitialized) return;
+
+    // 1. Crear toda la estructura HTML de las vistas
     loadViewTemplates();
+    
+    // 2. Actualizar la visibilidad basada en el rol del usuario
     updateUIVisibility(currentUserData);
+    
+    // 3. Añadir todos los event listeners a los elementos que ya existen
     setupEventListeners();
+    
+    // 4. Empezar a cargar los datos desde Firebase
     loadAllData();
+
+    // 5. Inicializar los buscadores interactivos AHORA que todo está listo
+    setupSearchInputs();
+
     isAppInitialized = true;
+}
+
+function loadAllData() {
+    activeListeners.push(loadClientes());
+    activeListeners.push(loadProveedores());
+    activeListeners.push(loadItems());
+    activeListeners.push(loadColores());
+    activeListeners.push(loadRemisiones());
+    activeListeners.push(loadGastos());
+    if (currentUserData && currentUserData.role === 'admin') {
+        activeListeners.push(loadEmpleados());
+        activeListeners.push(loadAllLoanRequests());
+    }
 }
 
 function loadViewTemplates() {
@@ -151,23 +172,6 @@ function loadViewTemplates() {
     activeListeners.push(loadGastos());
     if (currentUserData && currentUserData.role === 'admin') {
         activeListeners.push(loadEmpleados());
-    }
-}
-
-// **** NUEVA FUNCIÓN QUE FALTABA ****
-function loadAllData() {
-    // Nos aseguramos de limpiar listeners anteriores por si acaso
-    unsubscribeAllListeners();
-    // Al cargar los datos, guardamos la función de desuscripción que retorna cada listener
-    activeListeners.push(loadClientes());
-    activeListeners.push(loadProveedores());
-    activeListeners.push(loadItems());
-    activeListeners.push(loadColores());
-    activeListeners.push(loadRemisiones());
-    activeListeners.push(loadGastos());
-    if (currentUserData && currentUserData.role === 'admin') {
-        activeListeners.push(loadEmpleados());
-        activeListeners.push(loadAllLoanRequests()); // <--- AÑADE ESTA LÍNEA
     }
 }
 
@@ -593,15 +597,14 @@ function renderItems() {
         itemsListEl.appendChild(itemDiv);
     });
 }
+// --- FUNCIONES DE CARGA DE DATOS (ACTUALIZADAS) ---
 function loadClientes() {
     const q = query(collection(db, "clientes"), orderBy("nombre", "asc"));
-    // La función onSnapshot devuelve la función para desuscribirse, y la retornamos
     return onSnapshot(q, (snapshot) => {
         allClientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderClientes();
     });
 }
-
 // **** FUNCIÓN AÑADIDA QUE FALTABA ****
 function renderEmpleados(users) {
     const empleadosListEl = document.getElementById('empleados-list');
@@ -1214,6 +1217,7 @@ function initSearchableInput(searchInput, resultsContainer, getDataFn, displayFn
     });
 }
 
+// Esta función ahora se llama una sola vez
 function setupSearchInputs() {
     // Cliente en Remisiones
     initSearchableInput(
@@ -1223,7 +1227,7 @@ function setupSearchInputs() {
         (cliente) => cliente.nombre,
         (selectedCliente) => {
             const hiddenInput = document.getElementById('cliente-id-hidden');
-            hiddenInput.value = selectedCliente ? selectedCliente.id : '';
+            if (hiddenInput) hiddenInput.value = selectedCliente ? selectedCliente.id : '';
         }
     );
 
@@ -1235,7 +1239,7 @@ function setupSearchInputs() {
         (proveedor) => proveedor.nombre,
         (selectedProveedor) => {
             const hiddenInput = document.getElementById('proveedor-id-hidden');
-            hiddenInput.value = selectedProveedor ? selectedProveedor.id : '';
+            if (hiddenInput) hiddenInput.value = selectedProveedor ? selectedProveedor.id : '';
         }
     );
 }
