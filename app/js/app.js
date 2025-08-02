@@ -5,6 +5,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
 
 // --- INICIALIZACIÓN Y CONFIGURACIÓN ---
 const firebaseConfig = {
@@ -16,13 +17,14 @@ const firebaseConfig = {
     appId: "1:907757501037:web:ab61eb771e12add9a29d64",
     measurementId: "G-T2RKG90GC5"
 };
-let app, auth, db, storage, functions;
+let app, auth, db, storage, functions, analytics;
 try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app, 'us-central1');
+    analytics = getAnalytics(app); // Inicializa Analytics
 } catch (e) {
     console.error("Error al inicializar Firebase.", e);
     document.body.innerHTML = `<h1>Error Crítico: No se pudo inicializar la aplicación.</h1>`;
@@ -52,6 +54,8 @@ function unsubscribeAllListeners() {
     activeListeners = [];
 }
 
+
+
 onAuthStateChanged(auth, async (user) => {
     unsubscribeAllListeners();
     if (user) {
@@ -61,6 +65,11 @@ onAuthStateChanged(auth, async (user) => {
             currentUserData = { id: user.uid, ...userDoc.data() };
             if (currentUserData.status === 'active') {
                 document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
+                // Registrar evento de inicio de sesión en Analytics
+                logEvent(analytics, 'login', {
+                    method: 'email',
+                    user_role: currentUserData.role // Puedes añadir datos personalizados
+                });
                 authView.classList.add('hidden');
                 deniedView.classList.add('hidden');
                 appView.classList.remove('hidden');
