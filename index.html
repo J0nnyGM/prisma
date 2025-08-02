@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pinturas Industriales Prismacolor SAS - Servicio de Pintura Electrostática</title>
-    <meta name="description" content="Pintura Electrostática Profesional, Ofrecemos acabados de máxima durabilidad y estética para todo tipo de piezas metálicas. Calidad y eficiencia para la industria en Bogotá.">
+    <meta name="description"
+        content="Pintura Electrostática Profesional, Ofrecemos acabados de máxima durabilidad y estética para todo tipo de piezas metálicas. Calidad y eficiencia para la industria en Bogotá.">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Google Fonts: Inter & Anton (for logo) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700&display=swap"
+        rel="stylesheet">
 
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-T2RKG90GC5"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-T2RKG90GC5"></script>
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-T2RKG90GC5');
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-T2RKG90GC5');
     </script>
 
     <style>
@@ -27,52 +30,74 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+
         .font-logo {
             font-family: 'Anton', sans-serif;
             letter-spacing: 0.05em;
         }
+
         .hero-bg {
             background-image: linear-gradient(rgba(17, 24, 39, 0.85), rgba(17, 24, 39, 0.85)), url('https://placehold.co/1920x1080/111827/4b5563?text=Pintura+en+Acción');
             background-size: cover;
             background-position: center;
         }
-        /* Custom orange color from logo */
-        .bg-custom-orange { background-color: #F58220; }
-        .text-custom-orange { color: #F58220; }
-        .border-custom-orange { border-color: #F58220; }
-        .hover\:bg-custom-orange-dark:hover { background-color: #d97706; } /* amber-600 */
-        .focus\:ring-custom-orange:focus { --tw-ring-color: #F58220; }
 
-         /* Estilos para el botón flotante de acceso al aplicativo */
-    .acceso-app-btn {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        background-color: #4F46E5; /* Color índigo (puedes cambiarlo) */
-        color: white;
-        padding: 14px 22px;
-        border-radius: 50px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        font-family: 'Inter', sans-serif; /* Usa la misma fuente para consistencia */
-        font-weight: 600;
-        font-size: 16px;
-        text-decoration: none;
-        z-index: 1000;
-        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .acceso-app-btn:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-    }
+        /* Custom orange color from logo */
+        .bg-custom-orange {
+            background-color: #F58220;
+        }
+
+        .text-custom-orange {
+            color: #F58220;
+        }
+
+        .border-custom-orange {
+            border-color: #F58220;
+        }
+
+        .hover\:bg-custom-orange-dark:hover {
+            background-color: #d97706;
+        }
+
+        /* amber-600 */
+        .focus\:ring-custom-orange:focus {
+            --tw-ring-color: #F58220;
+        }
+
+        /* Estilos para el botón flotante de acceso al aplicativo */
+        .acceso-app-btn {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background-color: #4F46E5;
+            /* Color índigo (puedes cambiarlo) */
+            color: white;
+            padding: 14px 22px;
+            border-radius: 50px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            font-family: 'Inter', sans-serif;
+            /* Usa la misma fuente para consistencia */
+            font-weight: 600;
+            font-size: 16px;
+            text-decoration: none;
+            z-index: 1000;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .acceso-app-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+        }
     </style>
 </head>
 
 <a href="/app/" class="acceso-app-btn">
     <!-- Icono SVG opcional para el botón -->
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
         <polyline points="10 17 15 12 10 7" />
         <line x1="15" y1="12" x2="3" y2="12" />
@@ -93,21 +118,24 @@
             <nav class="hidden md:flex space-x-8">
                 <a href="#servicios" class="hover:text-custom-orange transition-colors duration-300">Servicios</a>
                 <a href="#proceso" class="hover:text-custom-orange transition-colors duration-300">Proceso</a>
-                <a href="#galeria" class="hover:text-custom-orange transition-colors duration-300">Galería</a>
                 <a href="#contacto" class="hover:text-custom-orange transition-colors duration-300">Contacto</a>
             </nav>
-            <a href="#contacto" class="hidden md:inline-block bg-custom-orange text-white font-semibold px-5 py-2 rounded-lg hover:bg-custom-orange-dark transition-colors duration-300">
+            <a href="#contacto"
+                class="hidden md:inline-block bg-custom-orange text-white font-semibold px-5 py-2 rounded-lg hover:bg-custom-orange-dark transition-colors duration-300">
                 Cotizar Ahora
             </a>
             <button id="mobile-menu-button" class="md:hidden text-white focus:outline-none">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7">
+                    </path>
+                </svg>
             </button>
         </div>
         <!-- Mobile Menu -->
         <div id="mobile-menu" class="hidden md:hidden">
             <a href="#servicios" class="block text-center py-2 px-4 text-sm hover:bg-gray-700">Servicios</a>
             <a href="#proceso" class="block text-center py-2 px-4 text-sm hover:bg-gray-700">Proceso</a>
-            <a href="#galeria" class="block text-center py-2 px-4 text-sm hover:bg-gray-700">Galería</a>
             <a href="#contacto" class="block text-center py-2 px-4 text-sm hover:bg-gray-700">Contacto</a>
         </div>
     </header>
@@ -117,8 +145,11 @@
         <section id="inicio" class="hero-bg text-white">
             <div class="container mx-auto px-6 py-32 text-center">
                 <h1 class="text-4xl md:text-6xl font-bold leading-tight mb-4">Pintura Electrostática Profesional</h1>
-                <p class="text-lg md:text-xl text-gray-300 max-w-3xl mx-auto mb-8">Ofrecemos acabados de máxima durabilidad y estética para todo tipo de piezas metálicas. Calidad y eficiencia para la industria en Bogotá.</p>
-                <a href="#contacto" class="bg-custom-orange text-white font-semibold px-8 py-4 rounded-lg hover:bg-custom-orange-dark transition-colors duration-300 text-lg">
+                <p class="text-lg md:text-xl text-gray-300 max-w-3xl mx-auto mb-8">Ofrecemos acabados de máxima
+                    durabilidad y estética para todo tipo de piezas metálicas. Calidad y eficiencia para la industria en
+                    Bogotá.</p>
+                <a href="#contacto"
+                    class="bg-custom-orange text-white font-semibold px-8 py-4 rounded-lg hover:bg-custom-orange-dark transition-colors duration-300 text-lg">
                     Obtener una Cotización
                 </a>
             </div>
@@ -127,177 +158,177 @@
         <!-- Services Section -->
         <section id="servicios" class="py-20 bg-gray-800">
             <div class="container mx-auto px-6 text-center">
-                <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Nuestro Servicio de Pintura Electrostática</h2>
-                <p class="max-w-3xl mx-auto text-gray-400 mb-12">La pintura en polvo electrostática ofrece un acabado uniforme, resistente a la corrosión, rayones e intemperie, siendo una solución ecológica y de alta eficiencia.</p>
+                <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Nuestro Servicio de Pintura Electrostática
+                </h2>
+                <p class="max-w-3xl mx-auto text-gray-400 mb-12">La pintura en polvo electrostática ofrece un acabado
+                    uniforme, resistente a la corrosión, rayones e intemperie, siendo una solución ecológica y de alta
+                    eficiencia.</p>
                 <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
                     <!-- Service Card 1 -->
-                    <div class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
-                        <div class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    <div
+                        class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
+                        <div
+                            class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
+                                </path>
+                            </svg>
                         </div>
                         <h3 class="text-xl font-bold text-white mb-2">Industria Metalmecánica</h3>
                         <p class="text-gray-400">Acabados para maquinaria, estanterías, estructuras y componentes.</p>
                     </div>
                     <!-- Service Card 2 -->
-                    <div class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
-                        <div class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    <div
+                        class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
+                        <div
+                            class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+                                </path>
+                            </svg>
                         </div>
                         <h3 class="text-xl font-bold text-white mb-2">Construcción</h3>
-                        <p class="text-gray-400">Protección y color para perfiles, rejas, barandas y fachadas metálicas.</p>
+                        <p class="text-gray-400">Protección y color para perfiles, rejas, barandas y fachadas metálicas.
+                        </p>
                     </div>
                     <!-- Service Card 3 -->
-                    <div class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
-                        <div class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2-2h8zM18 8h2a1 1 0 011 1v6a1 1 0 01-1 1h-2v-3l-3-3V8h4z"></path></svg>
+                    <div
+                        class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
+                        <div
+                            class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2-2h8zM18 8h2a1 1 0 011 1v6a1 1 0 01-1 1h-2v-3l-3-3V8h4z">
+                                </path>
+                            </svg>
                         </div>
                         <h3 class="text-xl font-bold text-white mb-2">Automotriz</h3>
-                        <p class="text-gray-400">Renovación y protección de alta resistencia para rines y autopartes.</p>
+                        <p class="text-gray-400">Renovación y protección de alta resistencia para rines y autopartes.
+                        </p>
                     </div>
                     <!-- Service Card 4 -->
-                    <div class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
-                        <div class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"></path></svg>
+                    <div
+                        class="bg-gray-900 p-8 rounded-lg transform hover:-translate-y-2 transition-transform duration-300">
+                        <div
+                            class="bg-orange-500/20 text-custom-orange rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7">
+                                </path>
+                            </svg>
                         </div>
                         <h3 class="text-xl font-bold text-white mb-2">Mobiliario y Diseño</h3>
-                        <p class="text-gray-400">Acabados perfectos para muebles metálicos, lámparas y objetos de diseño.</p>
+                        <p class="text-gray-400">Acabados perfectos para muebles metálicos, lámparas y objetos de
+                            diseño.</p>
                     </div>
                 </div>
             </div>
         </section>
-        
+
         <!-- Process Section -->
         <section id="proceso" class="py-20 bg-gray-900">
             <div class="container mx-auto px-6">
                 <div class="text-center mb-12">
                     <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Nuestro Proceso de Calidad</h2>
-                    <p class="max-w-2xl mx-auto text-gray-400">Seguimos un proceso meticuloso para garantizar un resultado impecable y duradero en cada proyecto.</p>
+                    <p class="max-w-2xl mx-auto text-gray-400">Seguimos un proceso meticuloso para garantizar un
+                        resultado impecable y duradero en cada proyecto.</p>
                 </div>
                 <div class="relative">
                     <!-- The connecting line -->
-                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-0.5 bg-gray-700 -translate-y-1/2"></div>
+                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-0.5 bg-gray-700 -translate-y-1/2">
+                    </div>
                     <div class="grid md:grid-cols-4 gap-16 relative">
                         <!-- Step 1 -->
                         <div class="text-center">
                             <div class="relative">
-                                <div class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">1</div>
+                                <div
+                                    class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">
+                                    1</div>
                             </div>
                             <h3 class="mt-6 text-xl font-bold text-white">Preparación</h3>
-                            <p class="mt-2 text-gray-400">Limpieza química y/o mecánica de la superficie para asegurar una adherencia perfecta.</p>
+                            <p class="mt-2 text-gray-400">Limpieza química y/o mecánica de la superficie para asegurar
+                                una adherencia perfecta.</p>
                         </div>
                         <!-- Step 2 -->
                         <div class="text-center">
                             <div class="relative">
-                                <div class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">2</div>
+                                <div
+                                    class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">
+                                    2</div>
                             </div>
                             <h3 class="mt-6 text-xl font-bold text-white">Aplicación</h3>
-                            <p class="mt-2 text-gray-400">La pintura en polvo se aplica con pistolas electrostáticas, cubriendo uniformemente toda la pieza.</p>
+                            <p class="mt-2 text-gray-400">La pintura en polvo se aplica con pistolas electrostáticas,
+                                cubriendo uniformemente toda la pieza.</p>
                         </div>
                         <!-- Step 3 -->
                         <div class="text-center">
                             <div class="relative">
-                                <div class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">3</div>
+                                <div
+                                    class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">
+                                    3</div>
                             </div>
                             <h3 class="mt-6 text-xl font-bold text-white">Curado</h3>
-                            <p class="mt-2 text-gray-400">La pieza se introduce en un horno a alta temperatura para polimerizar la pintura, creando una capa sólida.</p>
+                            <p class="mt-2 text-gray-400">La pieza se introduce en un horno a alta temperatura para
+                                polimerizar la pintura, creando una capa sólida.</p>
                         </div>
                         <!-- Step 4 -->
                         <div class="text-center">
                             <div class="relative">
-                                <div class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">4</div>
+                                <div
+                                    class="mx-auto w-24 h-24 rounded-full bg-gray-800 border-4 border-custom-orange flex items-center justify-center text-custom-orange text-3xl font-bold">
+                                    4</div>
                             </div>
                             <h3 class="mt-6 text-xl font-bold text-white">Inspección</h3>
-                            <p class="mt-2 text-gray-400">Control de calidad final para verificar el espesor, adherencia y acabado visual de la pintura.</p>
+                            <p class="mt-2 text-gray-400">Control de calidad final para verificar el espesor, adherencia
+                                y acabado visual de la pintura.</p>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Gallery Section -->
-        <section id="galeria" class="py-20 bg-gray-800">
-            <div class="container mx-auto px-6">
-                <div class="text-center mb-12">
-                    <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Galería de Proyectos</h2>
-                    <p class="max-w-2xl mx-auto text-gray-400">Resultados que hablan por sí mismos. Vea la calidad y versatilidad de nuestros acabados.</p>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Rines+Negro+Mate" alt="Rines pintados con pintura electrostática" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Rines Automotrices</p>
-                        </div>
-                    </div>
-                     <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Estructura+Azul" alt="Estructura metálica azul" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Estructura Industrial</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Piezas+Rojas" alt="Piezas metálicas rojas" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Componentes de Maquinaria</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Reja+Blanca" alt="Reja metálica blanca" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Rejas y Barandas</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Mueble+Gris" alt="Mueble metálico gris" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Mobiliario Metálico</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Perfil+Aluminio" alt="Perfil de aluminio" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Perfiles de Aluminio</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Autopartes" alt="Autopartes varias" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Chasis y Autopartes</p>
-                        </div>
-                    </div>
-                    <div class="group relative">
-                        <img src="https://placehold.co/600x400/374151/e5e7eb?text=Panel+Decorativo" alt="Panel decorativo metálico" class="w-full h-full object-cover rounded-lg">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-lg">
-                            <p class="text-white font-bold">Paneles Decorativos</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
 
         <!-- Contact Section -->
         <section id="contacto" class="py-20 bg-gray-900">
             <div class="container mx-auto px-6">
                 <div class="text-center mb-12">
                     <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Contáctanos</h2>
-                    <p class="max-w-2xl mx-auto text-gray-400">¿Listo para empezar tu proyecto? Envíanos un mensaje o llámanos. Estamos para ayudarte.</p>
+                    <p class="max-w-2xl mx-auto text-gray-400">¿Listo para empezar tu proyecto? Envíanos un mensaje o
+                        llámanos. Estamos para ayudarte.</p>
                 </div>
                 <div class="bg-gray-800 rounded-lg p-8 md:p-12 shadow-2xl max-w-5xl mx-auto">
                     <div class="grid md:grid-cols-2 gap-12">
                         <!-- Contact Form -->
                         <form id="contact-form">
                             <div class="mb-5">
-                                <label for="name" class="block mb-2 text-sm font-medium text-gray-300">Nombre Completo</label>
-                                <input type="text" id="name" name="name" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5" placeholder="John Doe" required>
+                                <label for="name" class="block mb-2 text-sm font-medium text-gray-300">Nombre
+                                    Completo</label>
+                                <input type="text" id="name" name="name"
+                                    class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5"
+                                    placeholder="John Doe" required>
                             </div>
                             <div class="mb-5">
                                 <label for="phone" class="block mb-2 text-sm font-medium text-gray-300">Teléfono</label>
-                                <input type="tel" id="phone" name="phone" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5" placeholder="300 123 4567">
+                                <input type="tel" id="phone" name="phone"
+                                    class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5"
+                                    placeholder="300 123 4567">
                             </div>
                             <div class="mb-5">
-                                <label for="message" class="block mb-2 text-sm font-medium text-gray-300">Mensaje</label>
-                                <textarea id="message" name="message" rows="4" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5" placeholder="Describe brevemente tu proyecto o consulta..." required></textarea>
+                                <label for="message"
+                                    class="block mb-2 text-sm font-medium text-gray-300">Mensaje</label>
+                                <textarea id="message" name="message" rows="4"
+                                    class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-custom-orange focus:border-custom-orange block w-full p-2.5"
+                                    placeholder="Describe brevemente tu proyecto o consulta..." required></textarea>
                             </div>
-                            <button type="submit" class="w-full bg-custom-orange text-white font-semibold px-5 py-3 rounded-lg hover:bg-custom-orange-dark focus:ring-4 focus:outline-none focus:ring-orange-300/50 transition-colors duration-300">
+                            <button type="submit"
+                                class="w-full bg-custom-orange text-white font-semibold px-5 py-3 rounded-lg hover:bg-custom-orange-dark focus:ring-4 focus:outline-none focus:ring-orange-300/50 transition-colors duration-300">
                                 Enviar Mensaje
                             </button>
                             <p id="form-status" class="text-center mt-4"></p>
@@ -307,21 +338,44 @@
                             <div>
                                 <h3 class="text-xl font-bold text-white mb-2">Información de Contacto</h3>
                                 <p class="text-gray-400 flex items-center justify-center md:justify-start mb-2">
-                                    <svg class="w-5 h-5 mr-3 text-custom-orange" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path></svg>
-                                    KR 27 # 68 - 80, Bogotá, D.C.
+                                    <svg class="w-5 h-5 mr-3 text-custom-orange" fill="currentColor" viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path fill-rule="evenodd"
+                                            d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                                            clip-rule="evenodd"></path>
+                                    </svg>
+                                    <a href="https://maps.app.goo.gl/oZKsijg1yRUGMAbD7">Carrera 27 # 68 - 80, Bogotá, D.C.</a>
                                 </p>
                                 <p class="text-gray-400 flex items-center justify-center md:justify-start mb-2">
-                                    <svg class="w-5 h-5 mr-3 text-custom-orange" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.518.759a11.024 11.024 0 005.462 5.462l.759-1.518a1 1 0 011.06-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-                                    (601) 238-1073
+                                    <svg class="w-5 h-5 mr-3 text-custom-orange" fill="currentColor" viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path
+                                            d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.518.759a11.024 11.024 0 005.462 5.462l.759-1.518a1 1 0 011.06-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z">
+                                        </path>
+                                    </svg>
+                                    310 255 7543
+                                </p>
+                                <p class="text-gray-400 flex items-center justify-center md:justify-start mb-2">
+                                    <svg class="w-5 h-5 mr-3 text-custom-orange" fill="currentColor" viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path
+                                            d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.518.759a11.024 11.024 0 005.462 5.462l.759-1.518a1 1 0 011.06-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z">
+                                        </path>
+                                    </svg>
+                                    313 252 2810
                                 </p>
                             </div>
                             <div>
                                 <h3 class="text-xl font-bold text-white mb-2">Horario de Atención</h3>
-                                <p class="text-gray-400">Lunes a Viernes: 8:00 AM - 5:00 PM</p>
+                                <p class="text-gray-400">Lunes a Viernes: 8:00 AM - 5:30 PM</p>
                                 <p class="text-gray-400">Sábados: 8:00 AM - 12:00 PM</p>
                             </div>
                             <div>
-                                <img src="https://placehold.co/600x400/1f2937/4b5563?text=Mapa+de+Ubicación" alt="Mapa de ubicación de la empresa" class="rounded-lg w-full h-auto">
+                                <iframe
+                                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3976.6224185685737!2d-74.07351592375161!3d4.66122834199587!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8e3f9a51568ae2af%3A0x4fda25ba351911ca!2zQ3JhLiAyN2EgIyA2OC04MCwgQmFycmlvcyBVbmlkb3MsIEJvZ290w6EsIEQuQy4sIEJvZ290w6EsIEJvZ290w6EsIEQuQy4!5e0!3m2!1ses-419!2sco!4v1754103235267!5m2!1ses-419!2sco"
+                                    style="border:0;" allowfullscreen="" loading="lazy"
+                                    referrerpolicy="no-referrer-when-downgrade" alt="Mapa de ubicación de la empresa" class="rounded-lg w-full h-auto"></iframe>
+                                    
                             </div>
                         </div>
                     </div>
@@ -333,7 +387,7 @@
     <!-- Footer -->
     <footer class="bg-gray-800 border-t border-gray-700">
         <div class="container mx-auto px-6 py-6 text-center text-gray-400">
-            <p>&copy; 2024 Pinturas Industriales Prismacolor SAS. Todos los derechos reservados.</p>
+            <p>&copy; 2025 Pinturas Industriales Prismacolor SAS. Todos los derechos reservados.</p>
         </div>
     </footer>
 
@@ -345,7 +399,7 @@
         mobileMenuButton.addEventListener('click', () => {
             mobileMenu.classList.toggle('hidden');
         });
-        
+
         // Close mobile menu when a link is clicked
         document.querySelectorAll('#mobile-menu a').forEach(link => {
             link.addEventListener('click', () => {
@@ -357,9 +411,9 @@
         const contactForm = document.getElementById('contact-form');
         const formStatus = document.getElementById('form-status');
 
-        contactForm.addEventListener('submit', function(e) {
+        contactForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            
+
             // Basic simulation of form submission
             formStatus.textContent = 'Enviando...';
             formStatus.style.color = '#fb923c'; // orange-400
@@ -373,4 +427,5 @@
     </script>
 
 </body>
+
 </html>
