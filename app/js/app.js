@@ -38,12 +38,12 @@ let currentUser = null;
 let currentUserData = null;
 let allItems = [], allColores = [], allClientes = [], allProveedores = [], allGastos = [], allRemisiones = [], allUsers = [], allPendingLoans = [], profitLossChart = null;
 let dynamicElementCounter = 0;
+let isRegistering = false; // <-- Variable de "cerradura" para el registro
 const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
 const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'prestamos', 'empleados'];
 const RRHH_DOCUMENT_TYPES = [
     { id: 'contrato', name: 'Contrato' }, { id: 'hojaDeVida', name: 'Hoja de Vida' }, { id: 'examenMedico', name: 'Examen Médico' }, { id: 'cedula', name: 'Cédula (PDF)' }, { id: 'certificadoARL', name: 'Certificado ARL' }, { id: 'certificadoEPS', name: 'Certificado EPS' }, { id: 'certificadoAFP', name: 'Certificado AFP' }, { id: 'cartaRetiro', name: 'Carta de renuncia o despido' }, { id: 'liquidacionDoc', name: 'Liquidación' },
 ];
-
 // --- MANEJO DE AUTENTICACIÓN Y VISTAS ---
 let activeListeners = [];
 function unsubscribeAllListeners() {
@@ -246,9 +246,26 @@ function handleLoginSubmit(e) {
 async function handleRegisterSubmit(e) {
     e.preventDefault();
     
+    // 1. Verificar la "cerradura". Si ya se está registrando, no hacer nada.
+    if (isRegistering) {
+        console.warn("Registro ya en proceso. Se ignoró el segundo clic.");
+        return;
+    }
+    // 2. Activar la "cerradura" y deshabilitar el botón.
+    isRegistering = true;
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Registrando...';
+    submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+
     const politicaCheckbox = document.getElementById('register-politica');
     if (!politicaCheckbox || !politicaCheckbox.checked) {
         showModalMessage("Debes aceptar la Política de Tratamiento de Datos para registrarte.");
+        // 4. Liberar la "cerradura" si hay un error de validación.
+        isRegistering = false;
+        submitButton.disabled = false;
+        submitButton.textContent = 'Registrarse';
+        submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
         return;
     }
 
@@ -263,60 +280,42 @@ async function handleRegisterSubmit(e) {
     showModalMessage("Registrando...", true);
 
     try {
-        const usersCollection = collection(db, "users");
-        const existingUsersSnapshot = await getDocs(query(usersCollection));
-        const isFirstUser = existingUsersSnapshot.empty;
-
-        // --- Lógica de Roles y Estado Corregida ---
-        let role, status, permissions;
-        if (isFirstUser) {
-            // El primer usuario es admin y está activo por defecto.
-            role = 'admin';
-            status = 'active';
-            permissions = { 
-                remisiones: true, facturacion: true, clientes: true, 
-                items: true, colores: true, gastos: true, 
-                proveedores: true, empleados: true, prestamos: true 
-            };
-        } else {
-            // Los siguientes usuarios son de planta y quedan pendientes de aprobación.
-            role = 'planta';
-            status = 'pending';
-            permissions = { 
-                remisiones: true, prestamos: true,
-                facturacion: false, clientes: false, items: false, 
-                colores: false, gastos: false, proveedores: false, empleados: false
-            };
-        }
+        // Lógica simplificada: siempre se crea como 'planta' y 'pendiente'.
+        // La función en la nube se encargará de promover al primer usuario a admin.
+        const role = 'planta';
+        const status = 'pending';
+        const permissions = { 
+            remisiones: true, prestamos: true,
+            facturacion: false, clientes: false, items: false, 
+            colores: false, gastos: false, proveedores: false, empleados: false
+        };
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
         await setDoc(doc(db, "users", user.uid), { 
             nombre, cedula, telefono, email, dob, direccion: direccion || '', 
-            role, 
-            status, // Se guarda el estado correcto
-            permissions,
-            creadoEn: new Date() 
+            role, status, permissions, creadoEn: new Date() 
         });
         
         hideModal();
-        let successMessage = isFirstUser 
-            ? "¡Registro de administrador exitoso! Ya puedes iniciar sesión."
-            : "¡Registro exitoso! Tu cuenta está pendiente de aprobación por un administrador.";
-        showModalMessage(successMessage, false, 5000);
-        
+        showModalMessage("¡Registro exitoso! Tu cuenta está pendiente de aprobación.", false, 5000);
         registerForm.reset();
         registerForm.classList.add('hidden');
         loginForm.classList.remove('hidden');
         
-        // Se cierra la sesión para forzar un nuevo login y la verificación de estado
         await signOut(auth);
 
     } catch (error) { 
         hideModal(); 
         console.error("Error de registro:", error); 
         showModalMessage("Error de registro: " + error.message); 
+    } finally {
+        // 3. Liberar la "cerradura" y rehabilitar el botón al final del proceso.
+        isRegistering = false;
+        submitButton.disabled = false;
+        submitButton.textContent = 'Registrarse';
+        submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
     }
 }
 
@@ -330,62 +329,6 @@ loginForm.addEventListener('submit', (e) => {
     });
 });
 
-registerForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const politicaCheckbox = document.getElementById('register-politica');
-    if (!politicaCheckbox.checked) {
-        showModalMessage("Debes aceptar la Política de Tratamiento de Datos para registrarte.");
-        return;
-    }
-
-    const nombre = document.getElementById('register-name').value;
-    const cedula = document.getElementById('register-cedula').value;
-    const telefono = document.getElementById('register-phone').value;
-    const email = document.getElementById('register-email').value;
-    const password = document.getElementById('register-password').value;
-    const dob = document.getElementById('register-dob').value;
-    const direccion = document.getElementById('register-address').value;
-
-    showModalMessage("Registrando...", true);
-
-    try {
-        // --- LÓGICA SIMPLIFICADA ---
-        // Se asigna el rol de 'planta' por defecto. La función en la nube se encargará de promover al admin.
-        const role = 'planta';
-        const permissions = {
-            remisiones: true,
-            prestamos: true,
-            facturacion: false,
-            clientes: false,
-            items: false,
-            colores: false,
-            gastos: false,
-            proveedores: false,
-            empleados: false
-        };
-
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        await setDoc(doc(db, "users", user.uid), {
-            nombre, cedula, telefono, email, dob, direccion: direccion || '',
-            role,
-            permissions,
-            creadoEn: new Date()
-        });
-
-        hideModal();
-        showModalMessage("¡Registro exitoso! Ahora puedes iniciar sesión.", false, 3000);
-        registerForm.reset();
-        registerForm.classList.add('hidden');
-        loginForm.classList.remove('hidden');
-    } catch (error) {
-        hideModal();
-        console.error("Error de registro:", error);
-        showModalMessage("Error de registro: " + error.message);
-    }
-});
 
 // Corregimos la función de logout
 

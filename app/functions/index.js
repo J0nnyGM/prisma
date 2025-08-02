@@ -10,8 +10,36 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios"); // Importar axios
 
-// Inicializar Firebase Admin SDK
-admin.initializeApp();
+/**
+ * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
+ * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
+ */
+exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+  const usersCollection = admin.firestore().collection("users");
+  
+  // Revisa cuántos documentos hay en la colección de usuarios.
+  const snapshot = await usersCollection.limit(2).get();
+
+  // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
+  if (snapshot.size === 1) {
+    functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
+    // Actualiza el documento del usuario para cambiar su rol y estado.
+    return usersCollection.doc(user.uid).update({
+      role: "admin",
+      status: "active",
+      "permissions.facturacion": true,
+      "permissions.clientes": true,
+      "permissions.items": true,
+      "permissions.colores": true,
+      "permissions.gastos": true,
+      "permissions.proveedores": true,
+      "permissions.empleados": true,
+    });
+  }
+  
+  functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
+  return null; // No hace nada para los siguientes usuarios.
+});
 
 // Configurar SendGrid
 const SENDGRID_API_KEY = functions.config().sendgrid.key;
