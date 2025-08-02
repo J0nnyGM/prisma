@@ -1,4 +1,4 @@
-// js/app.js (Versión Completa y Definitiva)
+// js/app.js (Versión Completa y Final)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -23,13 +23,13 @@ try {
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app, 'us-central1');
-    console.log("Firebase inicializado correctamente.");
 } catch (e) {
     console.error("Error al inicializar Firebase.", e);
     document.body.innerHTML = `<h1>Error Crítico: No se pudo inicializar la aplicación.</h1>`;
 }
 
 // --- VISTAS Y ESTADO GLOBAL ---
+
 const authView = document.getElementById('auth-view');
 const appView = document.getElementById('app-view');
 const deniedView = document.getElementById('denied-view');
@@ -39,13 +39,12 @@ let currentUser = null;
 let currentUserData = null;
 let allItems = [], allColores = [], allClientes = [], allProveedores = [], allGastos = [], allRemisiones = [], allUsers = [], allPendingLoans = [], profitLossChart = null;
 let dynamicElementCounter = 0;
-let isRegistering = false; // Variable para prevenir registro doble
+let isRegistering = false; // <-- Variable de "cerradura" para el registro
 const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
 const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores', 'gastos', 'proveedores', 'prestamos', 'empleados'];
 const RRHH_DOCUMENT_TYPES = [
     { id: 'contrato', name: 'Contrato' }, { id: 'hojaDeVida', name: 'Hoja de Vida' }, { id: 'examenMedico', name: 'Examen Médico' }, { id: 'cedula', name: 'Cédula (PDF)' }, { id: 'certificadoARL', name: 'Certificado ARL' }, { id: 'certificadoEPS', name: 'Certificado EPS' }, { id: 'certificadoAFP', name: 'Certificado AFP' }, { id: 'cartaRetiro', name: 'Carta de renuncia o despido' }, { id: 'liquidacionDoc', name: 'Liquidación' },
 ];
-
 // --- MANEJO DE AUTENTICACIÓN Y VISTAS ---
 let activeListeners = [];
 function unsubscribeAllListeners() {
@@ -59,7 +58,7 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = user;
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
-            currentUserData = {id: user.uid, ...userDoc.data()};
+            currentUserData = { id: user.uid, ...userDoc.data() };
             if (currentUserData.status === 'active') {
                 document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
                 authView.classList.add('hidden');
@@ -76,7 +75,6 @@ onAuthStateChanged(auth, async (user) => {
                 deniedView.classList.remove('hidden');
             }
         } else {
-            // Si el usuario existe en Auth pero no en Firestore, cerrar sesión para evitar errores.
             signOut(auth);
         }
     } else {
@@ -89,14 +87,34 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
+// Listeners para los elementos que siempre están presentes
+document.getElementById('logout-denied-user').addEventListener('click', () => signOut(auth));
+document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
+document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
+loginForm.addEventListener('submit', handleLoginSubmit);
+registerForm.addEventListener('submit', handleRegisterSubmit);
+
+
 // --- LÓGICA DE INICIALIZACIÓN DE LA APP ---
 let isAppInitialized = false;
 function startApp() {
     if (isAppInitialized) return;
+
+    // 1. Crear toda la estructura HTML de las vistas
     loadViewTemplates();
+
+    // 2. Actualizar la visibilidad basada en el rol del usuario
     updateUIVisibility(currentUserData);
+
+    // 3. Añadir todos los event listeners a los elementos que ya existen
     setupEventListeners();
+
+    // 4. Empezar a cargar los datos desde Firebase
     loadAllData();
+
+    // 5. Inicializar los buscadores interactivos AHORA que todo está listo
+    setupSearchInputs();
+
     isAppInitialized = true;
 }
 
@@ -112,13 +130,6 @@ function loadAllData() {
         activeListeners.push(loadAllLoanRequests());
     }
 }
-
-// Listeners para los elementos que siempre están presentes
-document.getElementById('logout-denied-user').addEventListener('click', () => signOut(auth));
-document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
-document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); });
-loginForm.addEventListener('submit', handleLoginSubmit);
-registerForm.addEventListener('submit', handleRegisterSubmit);
 
 function loadViewTemplates() {
     registerForm.innerHTML = `
