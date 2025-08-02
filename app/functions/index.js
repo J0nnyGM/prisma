@@ -10,6 +10,9 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios"); // Importar axios
 
+admin.initializeApp();
+
+// **** INICIO DE LA NUEVA FUNCIÓN ****
 /**
  * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
  * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
