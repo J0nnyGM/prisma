@@ -272,15 +272,20 @@ async function handleRegisterSubmit(e) {
         return;
     }
 
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Se capturan todos los valores del formulario
     const nombre = document.getElementById('register-name').value;
+    const cedula = document.getElementById('register-cedula').value;
+    const telefono = document.getElementById('register-phone').value;
+    const direccion = document.getElementById('register-address').value;
     const email = document.getElementById('register-email').value;
     const password = document.getElementById('register-password').value;
-    // ... (captura los otros campos del formulario)
+    const dob = document.getElementById('register-dob').value;
+    // --- FIN DE LA CORRECCIÓN ---
 
     showModalMessage("Registrando...", true);
 
     try {
-        // --- LÓGICA SIMPLIFICADA ---
         const role = 'planta';
         const status = 'pending';
         const permissions = {
@@ -292,11 +297,21 @@ async function handleRegisterSubmit(e) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Se guardan todos los campos capturados en la base de datos
         await setDoc(doc(db, "users", user.uid), {
-            nombre, email, role, status, permissions,
-            // ... (guarda los otros campos del formulario)
+            nombre: nombre,
+            cedula: cedula,
+            telefono: telefono,
+            direccion: direccion,
+            email: email,
+            dob: dob,
+            role: role,
+            status: status,
+            permissions: permissions,
             creadoEn: new Date()
         });
+        // --- FIN DE LA CORRECCIÓN ---
 
         hideModal();
         showModalMessage("¡Registro exitoso! Tu cuenta está pendiente de aprobación.", false, 5000);
@@ -598,11 +613,22 @@ function renderEmpleados(users) {
     });
 }
 
+/**
+ * Normaliza un texto: lo convierte a minúsculas y le quita las tildes.
+ * @param {string} text - El texto a normalizar.
+ * @returns {string} El texto normalizado.
+ */
+function normalizeText(text) {
+    if (!text) return '';
+    return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
 
 function renderClientes() {
     const clientesListEl = document.getElementById('clientes-list');
     if (!clientesListEl) return;
-    const searchTerm = document.getElementById('search-clientes').value.toLowerCase();
+
+    // 1. Normalizamos el término de búsqueda una sola vez
+    const normalizedSearchTerm = normalizeText(document.getElementById('search-clientes').value);
 
     const clientesConHistorial = allClientes.map(cliente => {
         const remisionesCliente = allRemisiones.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
@@ -615,12 +641,21 @@ function renderClientes() {
         return { ...cliente, totalComprado, ultimaCompra };
     });
 
-    const filtered = clientesConHistorial.filter(c =>
-        c.nombre.toLowerCase().includes(searchTerm) ||
-        c.email.toLowerCase().includes(searchTerm) ||
-        (c.telefono1 && c.telefono1.includes(searchTerm)) ||
-        (c.telefono2 && c.telefono2.includes(searchTerm))
-    );
+    const filtered = clientesConHistorial.filter(c => {
+        // 2. Creamos una cadena unificada con todos los datos del cliente y la normalizamos
+        const clientDataString = [
+            c.nombre,
+            c.email,
+            c.telefono1,
+            c.telefono2,
+            c.nit
+        ].join(' ');
+
+        const normalizedClientData = normalizeText(clientDataString);
+
+        // 3. Comparamos los textos ya normalizados
+        return normalizedClientData.includes(normalizedSearchTerm);
+    });
 
     clientesListEl.innerHTML = '';
     if (filtered.length === 0) {
@@ -630,23 +665,24 @@ function renderClientes() {
 
     filtered.forEach(cliente => {
         const clienteDiv = document.createElement('div');
-        clienteDiv.className = 'border p-4 rounded-lg flex justify-between items-start';
+        clienteDiv.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between sm:items-start gap-4';
+
         const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
         const editButton = (currentUserData && currentUserData.role === 'admin')
             ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300 w-full text-center">Editar</button>`
             : '';
 
         clienteDiv.innerHTML = `
-            <div class="flex-grow">
-                <p class="font-semibold text-lg">${cliente.nombre}</p>
-                <p class="text-sm text-gray-600">${cliente.email} | ${telefonos}</p>
+            <div class="flex-grow min-w-0">
+                <p class="font-semibold text-lg truncate" title="${cliente.nombre}">${cliente.nombre}</p>
+                <p class="text-sm text-gray-600">${cliente.email || 'Sin correo'} | ${telefonos}</p>
                 ${cliente.nit ? `<p class="text-sm text-gray-500">NIT: ${cliente.nit}</p>` : ''}
                 <div class="mt-2 pt-2 border-t border-gray-100 text-sm">
                     <p><span class="font-semibold">Última Compra:</span> ${cliente.ultimaCompra}</p>
                     <p><span class="font-semibold">Total Comprado:</span> ${formatCurrency(cliente.totalComprado)}</p>
                 </div>
             </div>
-            <div class="flex-shrink-0 flex flex-col items-end gap-2">
+            <div class="flex-shrink-0 w-full sm:w-auto">
                  ${editButton}
             </div>
         `;
@@ -654,6 +690,7 @@ function renderClientes() {
     });
     document.querySelectorAll('.edit-client-btn').forEach(btn => btn.addEventListener('click', (e) => showEditClientModal(JSON.parse(e.currentTarget.dataset.clientJson))));
 }
+
 function loadProveedores() {
     const q = query(collection(db, "proveedores"), orderBy("nombre", "asc"));
     return onSnapshot(q, (snapshot) => {
@@ -661,6 +698,7 @@ function loadProveedores() {
         renderProveedores();
     });
 }
+
 function renderProveedores() {
     const proveedoresListEl = document.getElementById('proveedores-list');
     if (!proveedoresListEl) return;
