@@ -444,6 +444,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             }
 
             // --- Lógica de envío de WhatsApp ---
+            
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
                 const docExists = clienteDoc && (typeof clienteDoc.exists === "function" ? clienteDoc.exists() : clienteDoc.exists);
@@ -459,7 +460,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                             remisionData.estado,
                             url
                         );
-                        log(`Mensaje de WhatsApp enviado a ${telefono}.`);
+                        log(`Mensaje de WhatsApp enviado a ${"57" + telefono}.`);
                         whatsappStatus = "sent";
                     } else {
                         log("El cliente no tiene un número de teléfono registrado.");
