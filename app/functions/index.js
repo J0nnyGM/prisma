@@ -18,30 +18,30 @@ admin.initializeApp();
  * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
  */
 exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-  const usersCollection = admin.firestore().collection("users");
-  
-  // Revisa cuántos documentos hay en la colección de usuarios.
-  const snapshot = await usersCollection.limit(2).get();
+    const usersCollection = admin.firestore().collection("users");
 
-  // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
-  if (snapshot.size === 1) {
-    functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
-    // Actualiza el documento del usuario para cambiar su rol y estado.
-    return usersCollection.doc(user.uid).update({
-      role: "admin",
-      status: "active",
-      "permissions.facturacion": true,
-      "permissions.clientes": true,
-      "permissions.items": true,
-      "permissions.colores": true,
-      "permissions.gastos": true,
-      "permissions.proveedores": true,
-      "permissions.empleados": true,
-    });
-  }
-  
-  functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
-  return null; // No hace nada para los siguientes usuarios.
+    // Revisa cuántos documentos hay en la colección de usuarios.
+    const snapshot = await usersCollection.limit(2).get();
+
+    // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
+    if (snapshot.size === 1) {
+        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
+        // Actualiza el documento del usuario para cambiar su rol y estado.
+        return usersCollection.doc(user.uid).update({
+            role: "admin",
+            status: "active",
+            "permissions.facturacion": true,
+            "permissions.clientes": true,
+            "permissions.items": true,
+            "permissions.colores": true,
+            "permissions.gastos": true,
+            "permissions.proveedores": true,
+            "permissions.empleados": true,
+        });
+    }
+
+    functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
+    return null; // No hace nada para los siguientes usuarios.
 });
 
 // Configurar SendGrid
@@ -61,29 +61,29 @@ const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
  * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin'.
  */
 exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-  const usersCollection = admin.firestore().collection("users");
-  
-  // Revisa cuántos documentos hay en la colección de usuarios.
-  const snapshot = await usersCollection.limit(2).get();
+    const usersCollection = admin.firestore().collection("users");
 
-  // Si solo hay 1 documento (el que se acaba de crear), es el primer usuario.
-  if (snapshot.size === 1) {
-    functions.logger.log(`Asignando rol de 'admin' al primer usuario: ${user.uid}`);
-    // Actualiza el documento del usuario para cambiar su rol a 'admin'.
-    return usersCollection.doc(user.uid).update({
-      role: "admin",
-      "permissions.facturacion": true,
-      "permissions.clientes": true,
-      "permissions.items": true,
-      "permissions.colores": true,
-      "permissions.gastos": true,
-      "permissions.proveedores": true,
-      "permissions.empleados": true,
-    });
-  }
-  
-  functions.logger.log(`Asignando rol de 'planta' al nuevo usuario: ${user.uid}`);
-  return null; // No hace nada para los siguientes usuarios.
+    // Revisa cuántos documentos hay en la colección de usuarios.
+    const snapshot = await usersCollection.limit(2).get();
+
+    // Si solo hay 1 documento (el que se acaba de crear), es el primer usuario.
+    if (snapshot.size === 1) {
+        functions.logger.log(`Asignando rol de 'admin' al primer usuario: ${user.uid}`);
+        // Actualiza el documento del usuario para cambiar su rol a 'admin'.
+        return usersCollection.doc(user.uid).update({
+            role: "admin",
+            "permissions.facturacion": true,
+            "permissions.clientes": true,
+            "permissions.items": true,
+            "permissions.colores": true,
+            "permissions.gastos": true,
+            "permissions.proveedores": true,
+            "permissions.empleados": true,
+        });
+    }
+
+    functions.logger.log(`Asignando rol de 'planta' al nuevo usuario: ${user.uid}`);
+    return null; // No hace nada para los siguientes usuarios.
 });
 
 // **** INICIO DE LA NUEVA FUNCIÓN ****
@@ -92,30 +92,30 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
  * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
  */
 exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-  const usersCollection = admin.firestore().collection("users");
-  
-  // Revisa cuántos documentos hay en la colección de usuarios.
-  const snapshot = await usersCollection.limit(2).get();
+    const usersCollection = admin.firestore().collection("users");
 
-  // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
-  if (snapshot.size === 1) {
-    functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
-    // Actualiza el documento del usuario para cambiar su rol y estado.
-    return usersCollection.doc(user.uid).update({
-      role: "admin",
-      status: "active",
-      "permissions.facturacion": true,
-      "permissions.clientes": true,
-      "permissions.items": true,
-      "permissions.colores": true,
-      "permissions.gastos": true,
-      "permissions.proveedores": true,
-      "permissions.empleados": true,
-    });
-  }
-  
-  functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
-  return null; // No hace nada para los siguientes usuarios.
+    // Revisa cuántos documentos hay en la colección de usuarios.
+    const snapshot = await usersCollection.limit(2).get();
+
+    // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
+    if (snapshot.size === 1) {
+        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
+        // Actualiza el documento del usuario para cambiar su rol y estado.
+        return usersCollection.doc(user.uid).update({
+            role: "admin",
+            status: "active",
+            "permissions.facturacion": true,
+            "permissions.clientes": true,
+            "permissions.items": true,
+            "permissions.colores": true,
+            "permissions.gastos": true,
+            "permissions.proveedores": true,
+            "permissions.empleados": true,
+        });
+    }
+
+    functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
+    return null; // No hace nada para los siguientes usuarios.
 });
 
 /**
@@ -133,17 +133,17 @@ function formatCurrency(value) {
 
 // Función HTTP que devuelve la configuración de Firebase del lado del cliente.
 exports.getFirebaseConfig = functions.https.onRequest((request, response) => {
-  // Usamos cors para permitir que tu página web llame a esta función.
-  cors(request, response, () => {
-    // Verifica que la configuración exista antes de enviarla.
-    if (!functions.config().prisma) {
-      return response.status(500).json({
-        error: "La configuración de Firebase no está definida en el servidor.",
-      });
-    }
-    // Envía la configuración como una respuesta JSON.
-    return response.status(200).json(functions.config().prisma);
-  });
+    // Usamos cors para permitir que tu página web llame a esta función.
+    cors(request, response, () => {
+        // Verifica que la configuración exista antes de enviarla.
+        if (!functions.config().prisma) {
+            return response.status(500).json({
+                error: "La configuración de Firebase no está definida en el servidor.",
+            });
+        }
+        // Envía la configuración como una respuesta JSON.
+        return response.status(200).json(functions.config().prisma);
+    });
 });
 
 /**
@@ -216,6 +216,9 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
             ],
         },
     };
+
+    console.log("Token que se está usando para WhatsApp:", WHATSAPP_TOKEN);
+
 
     const headers = {
         "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
@@ -444,26 +447,50 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             }
 
             // --- Lógica de envío de WhatsApp ---
-            
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
                 const docExists = clienteDoc && (typeof clienteDoc.exists === "function" ? clienteDoc.exists() : clienteDoc.exists);
 
                 if (docExists) {
                     const clienteData = clienteDoc.data();
-                    const telefono = clienteData.telefono1 || clienteData.telefono2;
-                    if (telefono) {
-                        await sendWhatsAppRemision(
-                            telefono,
-                            remisionData.clienteNombre,
-                            remisionData.numeroRemision.toString(),
-                            remisionData.estado,
-                            url
-                        );
-                        log(`Mensaje de WhatsApp enviado a ${"57" + telefono}.`);
-                        whatsappStatus = "sent";
+                    // Creamos una lista con los teléfonos que existan
+                    const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
+
+                    if (telefonos.length > 0) {
+                        let successfulSends = 0;
+                        // Iteramos sobre cada teléfono y enviamos un mensaje
+                        for (const telefono of telefonos) {
+                            try {
+                                await sendWhatsAppRemision(
+                                    telefono,
+                                    remisionData.clienteNombre,
+                                    remisionData.numeroRemision.toString(),
+                                    remisionData.estado,
+                                    url
+                                );
+                                log(`Mensaje de WhatsApp enviado exitosamente a ${telefono}.`);
+                                successfulSends++;
+                            } catch (whatsappError) {
+                                functions.logger.error(
+                                    `[${remisionId}] Error al enviar WhatsApp al número ${telefono}:`,
+                                    {
+                                        errorMessage: whatsappError.message,
+                                        responseData: whatsappError.response ? whatsappError.response.data : "No response data",
+                                    }
+                                );
+                            }
+                        }
+                        // Actualizamos el estado basado en los resultados
+                        if (successfulSends === telefonos.length) {
+                            whatsappStatus = "sent_all";
+                        } else if (successfulSends > 0) {
+                            whatsappStatus = "sent_partial";
+                        } else {
+                            whatsappStatus = "error";
+                        }
+
                     } else {
-                        log("El cliente no tiene un número de teléfono registrado.");
+                        log("El cliente no tiene ningún número de teléfono registrado.");
                         whatsappStatus = "no_phone";
                     }
                 } else {
@@ -472,11 +499,9 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                 }
             } catch (whatsappError) {
                 functions.logger.error(
-                    `[${remisionId}] Error al enviar WhatsApp:`,
+                    `[${remisionId}] Error general en el proceso de WhatsApp:`,
                     {
                         errorMessage: whatsappError.message,
-                        responseData: whatsappError.response ? whatsappError.response.data : "No response data",
-                        statusCode: whatsappError.response ? whatsappError.response.status : "No status code",
                     },
                 );
                 whatsappStatus = "error";
@@ -506,37 +531,77 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             functions.logger.log(`[Actualización ${remisionId}] ${message}`);
         };
 
+        // Función de notificaciones refactorizada para ser secuencial y más robusta
+        const sendNotifications = async (motivo, pdfUrlToSend) => {
+            try {
+                const clienteDoc = await admin.firestore().collection("clientes").doc(afterData.idCliente).get();
+                if (!clienteDoc.exists) {
+                    log(`Cliente ${afterData.idCliente} no encontrado para notificar (${motivo}).`);
+                    return;
+                }
+
+                const clienteData = clienteDoc.data();
+                const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
+
+                if (telefonos.length === 0) {
+                    log(`El cliente no tiene números para notificar (${motivo}).`);
+                    return;
+                }
+
+                log(`Iniciando envío SECUENCIAL de notificaciones (${motivo}) a ${telefonos.length} número(s): [${telefonos.join(', ')}]`);
+
+                // Usamos un bucle for...of secuencial para garantizar que cada envío se complete
+                for (const [index, telefono] of telefonos.entries()) {
+                    log(`[Envío ${index + 1}/${telefonos.length}] Preparando para enviar a ${telefono}...`);
+                    try {
+                        // "await" aquí detiene el bucle hasta que este envío termine
+                        await sendWhatsAppRemision(
+                            telefono,
+                            afterData.clienteNombre,
+                            afterData.numeroRemision.toString(),
+                            afterData.estado,
+                            pdfUrlToSend
+                        );
+                        log(`[Envío ${index + 1}/${telefonos.length}] Éxito al enviar a ${telefono}.`);
+                    } catch (error) {
+                        functions.logger.error(
+                            `[${remisionId}] [Envío ${index + 1}/${telefonos.length}] Falló el envío de WhatsApp (${motivo}) al número ${telefono}:`,
+                            { errorMessage: error.message }
+                        );
+                    }
+                }
+                log(`Proceso de envío de notificaciones (${motivo}) completado.`);
+
+            } catch (error) {
+                functions.logger.error(`Error crítico en la función sendNotifications (${motivo}):`, error);
+            }
+        };
+
         // Disparador para anulación
+         // Disparador para anulación
         if (beforeData.estado !== "Anulada" && afterData.estado === "Anulada") {
-            log("Detectada anulación. Generando PDF y enviando correo.");
+            log("Detectada anulación. Generando PDF y enviando notificaciones.");
             try {
                 const pdfBuffer = generarPDF(afterData, false);
-                const pdfPlantaBuffer = generarPDF(afterData, true);
-                log("PDFs de anulación generados.");
-
                 const bucket = admin.storage().bucket(BUCKET_NAME);
-                const filePath = `remisiones/${afterData.numeroRemision}.pdf`;
-                const file = bucket.file(filePath);
+                const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-
-                const filePathPlanta = `remisiones/planta-${afterData.numeroRemision}.pdf`;
-                const filePlanta = bucket.file(filePathPlanta);
-                await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-
                 const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+                await change.after.ref.update({ pdfUrl: url });
+                
+                const pdfPlantaBuffer = generarPDF(afterData, true);
+                const filePlanta = bucket.file(`remisiones/planta-${afterData.numeroRemision}.pdf`);
+                await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
                 const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+                await change.after.ref.update({ pdfPlantaUrl: urlPlanta });
 
-                await change.after.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
-                log("PDFs de anulación actualizados en Storage y Firestore.");
+                log("PDFs de anulación actualizados.");
 
                 const msg = {
                     to: afterData.clienteEmail,
                     from: FROM_EMAIL,
                     subject: `Anulación de Remisión N° ${afterData.numeroRemision}`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p>
-                <p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p>
-                <p>Adjuntamos una copia del documento anulado para tus registros.</p>
-                <p><strong>Prismacolor S.A.S.</strong></p>`,
+                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos una copia del documento anulado para tus registros.</p><p><strong>Prismacolor S.A.S.</strong></p>`,
                     attachments: [{
                         content: pdfBuffer.toString("base64"),
                         filename: `Remision-ANULADA-${afterData.numeroRemision}.pdf`,
@@ -545,34 +610,33 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(msg);
-                log(`Correo de anulación con PDF enviado a ${afterData.clienteEmail}.`);
+                await sendNotifications("Anulación", url);
+
             } catch (error) {
-                log("Error al procesar anulación:", error);
+                functions.logger.error("Error al procesar anulación:", error);
             }
         }
 
         // Disparador para "Entregado"
         if (beforeData.estado !== "Entregado" && afterData.estado === "Entregado") {
-            log("Detectado cambio a 'Entregado'. Generando PDF y enviando correo.");
+            log("Detectado cambio a 'Entregado'. Generando PDF y enviando notificaciones.");
             try {
                 const pdfBuffer = generarPDF(afterData, false);
-                log("PDF de entrega generado.");
 
                 const bucket = admin.storage().bucket(BUCKET_NAME);
-                const filePath = `remisiones/${afterData.numeroRemision}.pdf`;
-                const file = bucket.file(filePath);
+                const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-                log(`PDF actualizado en Storage en: ${filePath}`);
+                
+                const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+                await change.after.ref.update({ pdfUrl: url });
+                log(`PDF de entrega actualizado en Storage y Firestore.`);
 
+                // Enviar correo de entrega
                 const msg = {
                     to: afterData.clienteEmail,
                     from: FROM_EMAIL,
                     subject: `Tu orden N° ${afterData.numeroRemision} ha sido entregada`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p>
-            <p>Te informamos que tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido completada y marcada como <strong>entregada</strong>.</p>
-            <p>Adjuntamos una copia final de la remisión para tus registros.</p>
-            <p>¡Gracias por tu preferencia!</p>
-            <p><strong>Prismacolor S.A.S.</strong></p>`,
+                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido completada y marcada como <strong>entregada</strong>.</p><p>Adjuntamos una copia final de la remisión para tus registros.</p><p>¡Gracias por tu preferencia!</p><p><strong>Prismacolor S.A.S.</strong></p>`,
                     attachments: [{
                         content: pdfBuffer.toString("base64"),
                         filename: `Remision-ENTREGADA-${afterData.numeroRemision}.pdf`,
@@ -582,12 +646,16 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 };
                 await sgMail.send(msg);
                 log(`Correo de entrega enviado a ${afterData.clienteEmail}.`);
+
+                // Enviar WhatsApp de entrega
+                await sendNotifications("Entrega", url);
+
             } catch (error) {
-                log("Error al enviar correo de entrega:", error);
+                functions.logger.error("Error al procesar entrega:", error);
             }
         }
-
-        // Disparador para PAGO FINAL
+        
+        // El resto de la función para PAGO FINAL se mantiene igual...
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
 
@@ -640,11 +708,11 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
 // Función HTTP invocable que devuelve la configuración de Firebase del lado del cliente.
 exports.getFirebaseConfig = functions.https.onCall((data, context) => {
     // Asegurarse de que el usuario esté autenticado para solicitar la configuración es una buena práctica.
-     if (!context.auth) {
-       throw new functions.https.HttpsError(
-         "unauthenticated",
-         "El usuario debe estar autenticado para solicitar la configuración."
-       );
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "El usuario debe estar autenticado para solicitar la configuración."
+        );
     }
 
     // Devuelve la configuración guardada en el entorno.
