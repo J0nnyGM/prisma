@@ -499,9 +499,9 @@ function loadEmpleados() {
                     <p class="text-sm text-gray-600">${empleado.email}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700">Recursos Humanos</button>
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700">Gestionar</button>
-                    <button data-uid="${empleado.id}" class="delete-user-btn bg-red-600 text-white p-2 rounded hover:bg-red-700">Eliminar</button>
+                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn w-full bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-600 transition">Recursos Humanos</button>
+                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn w-full bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition">Gestionar</button>
+                    <button data-uid="${empleado.id}" class="delete-user-btn w-full bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition">Eliminar</button>
                 </div>`;
             empleadosListEl.appendChild(el);
         });
