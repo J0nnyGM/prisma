@@ -1,0 +1,4 @@
+/app/functions/node_modules/
+/app/functions/subirjs/
+/app/functions/serviceAccountKey.json
+*.local

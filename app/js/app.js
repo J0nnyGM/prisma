@@ -11,8 +11,8 @@ import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12
 const firebaseConfig = {
     apiKey: "AIzaSyAOeIv-PnETZIs5NFrsxsBnqf2_Gt6hbKM",
     authDomain: "prismacolorsas.firebaseapp.com",
-    storageBucket: "prismacolorsas.firebasestorage.app",
     projectId: "prismacolorsas",
+    storageBucket: "prismacolorsas.firebasestorage.app",
     messagingSenderId: "907757501037",
     appId: "1:907757501037:web:ab61eb771e12add9a29d64",
     measurementId: "G-T2RKG90GC5"
@@ -358,6 +358,84 @@ function setupEventListeners() {
     Object.keys(tabs).forEach(key => { if (tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
     const policyModal = document.getElementById('policy-modal');
 
+    // Manejador de clics para la lista de remisiones (Delegación de Eventos)
+    const remisionesListContainer = document.getElementById('remisiones-list-container');
+    if (remisionesListContainer) {
+        remisionesListContainer.addEventListener('click', async (e) => {
+            const target = e.target;
+
+            // Delegación para el botón "Ver Remisión"
+            const viewPdfBtn = target.closest('.view-pdf-btn');
+            if (viewPdfBtn) {
+                const numeroRemision = viewPdfBtn.dataset.remisionNum;
+                const originalContent = viewPdfBtn.innerHTML;
+
+                viewPdfBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                viewPdfBtn.disabled = true;
+
+                try {
+                    if (!numeroRemision || numeroRemision === 'undefined') {
+                        throw new Error("El número de remisión no es válido.");
+                    }
+                    const url = 'https://us-central1-prismacolorsas.cloudfunctions.net/getRemisionPdfUrl';
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data: { numeroRemision: numeroRemision } })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ data: { error: 'Respuesta inválida.' } }));
+                        throw new Error(errorData.data.error || `Error del servidor.`);
+                    }
+
+                    const result = await response.json();
+                    if (result && result.data && result.data.url) {
+                        showPdfModal(result.data.url, `Remisión N° ${numeroRemision}`);
+                    } else {
+                        throw new Error(result.data.error || "La respuesta no contenía una URL.");
+                    }
+                } catch (error) {
+                    console.error("Error al obtener la URL del PDF:", error);
+                    alert(`No se pudo cargar la remisión. Error: ${error.message}`);
+                } finally {
+                    viewPdfBtn.innerHTML = originalContent;
+                    viewPdfBtn.disabled = false;
+                }
+            }
+
+            // Delegación para el botón "Anular"
+            const anularBtn = target.closest('.anular-btn');
+            if (anularBtn) {
+                const remisionId = anularBtn.dataset.remisionId;
+                if (confirm(`¿Estás seguro de que quieres ANULAR esta remisión?`)) {
+                    handleAnularRemision(remisionId);
+                }
+            }
+            
+            // Delegación para el botón "Actualizar Estado"
+            const statusUpdateBtn = target.closest('.status-update-btn');
+            if(statusUpdateBtn) {
+                const remisionId = statusUpdateBtn.dataset.remisionId;
+                const currentStatus = statusUpdateBtn.dataset.currentStatus;
+                handleStatusUpdate(remisionId, currentStatus);
+            }
+
+            // Delegación para el botón "Pagos"
+            const paymentBtn = target.closest('.payment-btn');
+            if (paymentBtn) {
+                const remision = JSON.parse(paymentBtn.dataset.remisionJson);
+                showPaymentModal(remision);
+            }
+
+            // Delegación para el botón "Descuento"
+            const discountBtn = target.closest('.discount-btn');
+            if(discountBtn) {
+                const remision = JSON.parse(discountBtn.dataset.remisionJson);
+                showDiscountModal(remision);
+            }
+        });
+    }
 
     const facturacionPendientesTab = document.getElementById('tab-pendientes');
     const facturacionRealizadasTab = document.getElementById('tab-realizadas');
@@ -408,13 +486,10 @@ function setupEventListeners() {
         policyModal.classList.add('hidden');
     });
 
-    // Delegación de eventos para los botones de la sección de empleados
     const empleadosView = document.getElementById('view-empleados');
     if (empleadosView) {
         empleadosView.addEventListener('click', async (e) => {
             const target = e.target;
-
-            // Lógica para los botones de estado
             if (target.classList.contains('user-status-btn')) {
                 const uid = target.dataset.uid;
                 const newStatus = target.dataset.status;
@@ -428,16 +503,12 @@ function setupEventListeners() {
                     }
                 }
             }
-
-            // Lógica para el botón de gestionar
             if (target.classList.contains('manage-user-btn')) {
                 showAdminEditUserModal(JSON.parse(target.dataset.userJson));
             }
         });
     }
 
-
-    // Listeners para buscadores
     document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
     document.getElementById('search-clientes').addEventListener('input', renderClientes);
     document.getElementById('search-proveedores').addEventListener('input', renderProveedores);
@@ -445,7 +516,6 @@ function setupEventListeners() {
     document.getElementById('search-colores').addEventListener('input', renderColores);
     document.getElementById('search-gastos').addEventListener('input', renderGastos);
 
-    // Listeners para filtros de fecha
     populateDateFilters('filter-remisiones');
     populateDateFilters('filter-gastos');
     document.getElementById('filter-remisiones-month').addEventListener('change', renderRemisiones);
@@ -453,19 +523,16 @@ function setupEventListeners() {
     document.getElementById('filter-gastos-month').addEventListener('change', renderGastos);
     document.getElementById('filter-gastos-year').addEventListener('change', renderGastos);
 
-    // Fecha de recibido
     const fechaRecibidoInput = document.getElementById('fecha-recibido');
     if (fechaRecibidoInput) {
         fechaRecibidoInput.value = new Date().toISOString().split('T')[0];
     }
 
-    // Listeners para formateo de moneda
     document.getElementById('view-gastos').addEventListener('focusout', (e) => { if (e.target.id === 'gasto-valor-total') { formatCurrencyInput(e.target); } });
     document.getElementById('view-gastos').addEventListener('focus', (e) => { if (e.target.id === 'gasto-valor-total') { unformatCurrencyInput(e.target); } });
     document.getElementById('view-remisiones').addEventListener('focusout', (e) => { if (e.target.classList.contains('item-valor-unitario')) { formatCurrencyInput(e.target); calcularTotales(); } });
     document.getElementById('view-remisiones').addEventListener('focus', (e) => { if (e.target.classList.contains('item-valor-unitario')) { unformatCurrencyInput(e.target); } });
-
-    // Listener para el nuevo botón de préstamos del admin
+    
     document.getElementById('view-all-loans-btn').addEventListener('click', () => {
         showAllLoansModal(allPendingLoans);
     });
@@ -726,12 +793,18 @@ function renderProveedores() {
     document.querySelectorAll('.edit-provider-btn').forEach(btn => btn.addEventListener('click', (e) => showEditProviderModal(JSON.parse(e.currentTarget.dataset.providerJson))));
 }
 function loadRemisiones() {
+    // ESTA ES LA LÍNEA CORREGIDA CON SINTAXIS MODERNA (v9)
     const q = query(collection(db, "remisiones"), orderBy("numeroRemision", "desc"));
+
+    // El resto del código ya era compatible
     return onSnapshot(q, (snapshot) => {
         allRemisiones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderRemisiones();
-        renderFacturacion();
-        renderClientes();
+        renderRemisiones(); // Llama a la función que dibuja la tabla
+        renderFacturacion(); // Actualiza la vista de facturación
+        renderClientes(); // Actualiza los datos de los clientes
+    }, (error) => {
+        console.error("Error al cargar remisiones:", error);
+        // Aquí podrías mostrar un error en la UI si lo deseas
     });
 }
 function renderRemisiones() {
@@ -750,7 +823,6 @@ function renderRemisiones() {
         const allowedStates = ['Recibido', 'En Proceso', 'Procesado'];
         filtered = filtered.filter(r => allowedStates.includes(r.estado));
     }
-
     if (year !== 'all') {
         filtered = filtered.filter(r => new Date(r.fechaRecibido).getFullYear() == year);
     }
@@ -758,11 +830,15 @@ function renderRemisiones() {
         filtered = filtered.filter(r => new Date(r.fechaRecibido).getMonth() == month);
     }
     if (searchTerm) {
-        filtered = filtered.filter(r => r.clienteNombre.toLowerCase().includes(searchTerm) || r.numeroRemision.toString().includes(searchTerm));
+        filtered = filtered.filter(r => r.clienteNombre.toLowerCase().includes(searchTerm) || (r.numeroRemision && r.numeroRemision.toString().includes(searchTerm)));
     }
 
     remisionesListEl.innerHTML = '';
-    if (filtered.length === 0) { remisionesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No se encontraron remisiones.</p>'; return; }
+    if (filtered.length === 0) {
+        remisionesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No se encontraron remisiones.</p>';
+        return;
+    }
+
     filtered.forEach((remision) => {
         const el = document.createElement('div');
         const esAnulada = remision.estado === 'Anulada';
@@ -770,48 +846,21 @@ function renderRemisiones() {
         el.className = `border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${esAnulada ? 'remision-anulada' : ''}`;
 
         const totalPagadoConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
-        const totalAbonado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
         const saldoPendiente = remision.valorTotal - totalPagadoConfirmado;
 
-        let paymentStatusBadge = '';
-        if (!esAnulada) {
-            if (saldoPendiente <= 0) {
-                paymentStatusBadge = `<span class="payment-status payment-pagado">Pagado</span>`;
-            } else if (isPlanta) {
-                paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
-            } else if (totalAbonado > 0) {
-                paymentStatusBadge = `<span class="payment-status payment-abono">Abono</span>`;
-            } else {
-                paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
-            }
-        }
+        // El botón ahora guarda el número de la remisión para usarlo en la llamada a la función
+        const pdfButton = `<button data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>`;
 
-        const pdfUrl = isPlanta ? remision.pdfPlantaUrl : remision.pdfUrl;
-        const pdfButton = pdfUrl ? `<button data-pdf-url="${pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
-
-        const anularButton = (esAnulada || esEntregada || isPlanta || (remision.payments && remision.payments.length > 0))
-            ? ''
-            : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
-
+        const anularButton = (esAnulada || esEntregada || isPlanta || (remision.payments && remision.payments.length > 0)) ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
         const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">Pagos (${formatCurrency(saldoPendiente)})</button>`;
-
-        const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount)
-            ? ''
-            : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
-
+        const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount) ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
         const statusClasses = { 'Recibido': 'status-recibido', 'En Proceso': 'status-en-proceso', 'Procesado': 'status-procesado', 'Entregado': 'status-entregado' };
         const statusBadge = `<span class="status-badge ${statusClasses[remision.estado] || ''}">${remision.estado}</span>`;
-
         let statusButton = '';
         const currentIndex = ESTADOS_REMISION.indexOf(remision.estado);
         if (!esAnulada && currentIndex < ESTADOS_REMISION.length - 1) {
             const nextStatus = ESTADOS_REMISION[currentIndex + 1];
             statusButton = `<button data-remision-id="${remision.id}" data-current-status="${remision.estado}" class="status-update-btn w-full bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Mover a ${nextStatus}</button>`;
-        }
-
-        let discountInfo = '';
-        if (remision.discount && remision.discount.percentage > 0) {
-            discountInfo = `<span class="text-xs font-semibold bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full">DTO ${remision.discount.percentage.toFixed(2)}%</span>`;
         }
 
         el.innerHTML = `
@@ -820,28 +869,18 @@ function renderRemisiones() {
                     <span class="remision-id">N° ${remision.numeroRemision}</span>
                     <p class="font-semibold text-lg">${remision.clienteNombre}</p>
                     ${statusBadge}
-                    ${paymentStatusBadge}
-                    ${discountInfo}
-                    ${esAnulada ? '<span class="px-2 py-1 bg-red-200 text-red-800 text-xs font-bold rounded-full">ANULADA</span>' : ''}
                 </div>
-                <p class="text-sm text-gray-600 mt-1">Recibido: ${remision.fechaRecibido} &bull; ${remision.fechaEntrega ? `Entregado: ${remision.fechaEntrega}` : 'Entrega: Pendiente'}</p>
+                <p class="text-sm text-gray-600 mt-1">Recibido: ${remision.fechaRecibido}</p>
                 ${!isPlanta ? `<p class="text-sm text-gray-600 mt-1">Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>` : ''}
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0 w-full sm:max-w-xs">
-                ${statusButton}
-                ${pdfButton}
-                ${pagosButton}
-                ${descuentoButton}
-                ${anularButton}
+                ${statusButton} ${pdfButton} ${pagosButton} ${descuentoButton} ${anularButton}
             </div>`;
         remisionesListEl.appendChild(el);
     });
-    document.querySelectorAll('.anular-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; if (confirm(`¿Estás seguro de que quieres ANULAR esta remisión? Se enviará un correo de notificación al cliente.`)) { handleAnularRemision(remisionId); } }));
-    document.querySelectorAll('.status-update-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; const currentStatus = e.currentTarget.dataset.currentStatus; handleStatusUpdate(remisionId, currentStatus); }));
-    document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
-    document.querySelectorAll('.payment-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showPaymentModal(remision); }));
-    document.querySelectorAll('.discount-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showDiscountModal(remision); }));
+    // Ya no se añaden listeners aquí para evitar duplicados. Se manejan de forma centralizada.
 }
+
 function loadGastos() {
     const q = query(collection(db, "gastos"), orderBy("fecha", "desc"));
     return onSnapshot(q, (snapshot) => {
@@ -849,6 +888,7 @@ function loadGastos() {
         renderGastos();
     });
 }
+
 function renderGastos() {
     const gastosListEl = document.getElementById('gastos-list');
     if (!gastosListEl) return;
@@ -892,6 +932,7 @@ function renderGastos() {
         gastosListEl.appendChild(el);
     });
 }
+
 function renderFacturacion() {
     const pendientesListEl = document.getElementById('facturacion-pendientes-list');
     const realizadasListEl = document.getElementById('facturacion-realizadas-list');
@@ -918,7 +959,7 @@ function renderFacturacion() {
                     <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
                 </div>
                 <div class="flex-shrink-0 flex items-center gap-2">
-                    <button data-pdf-url="${remision.pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+                    <button data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
                     <button data-remision-id="${remision.id}" class="facturar-btn bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Facturar</button>
                 </div>
             `;
@@ -955,12 +996,16 @@ function renderFacturacion() {
                         ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
                     </div>
                     ${facturaButtons}
-                    <button data-pdf-url="${remision.pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+                    <button data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
                 </div>
             `;
             realizadasListEl.appendChild(el);
         });
     }
+    
+    // --- **** CORRECCIÓN CLAVE: ELIMINAMOS LOS LISTENERS DUPLICADOS **** ---
+    // El listener centralizado en 'setupEventListeners' se encargará de estos botones.
+    // Al borrar estas líneas, eliminamos el conflicto.
 
     document.querySelectorAll('.facturar-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -968,8 +1013,14 @@ function renderFacturacion() {
             showFacturaModal(remisionId);
         });
     });
-    document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
-    document.querySelectorAll('.view-factura-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); }));
+
+    // El listener para '.view-pdf-btn' ha sido BORRADO.
+
+    document.querySelectorAll('.view-factura-pdf-btn').forEach(button => button.addEventListener('click', (e) => { 
+        const pdfUrl = e.currentTarget.dataset.pdfUrl; 
+        const remisionNum = e.currentTarget.dataset.remisionNum; 
+        showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); 
+    }));
 }
 
 // --- FUNCIONES DE MANEJO DE ACCIONES ---
