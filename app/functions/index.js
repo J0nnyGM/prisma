@@ -235,7 +235,11 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
  * @param {boolean} isForPlanta Indica si el PDF es para el rol de planta.
  * @return {Buffer} El PDF como un buffer de datos.
  */
-function generarPDF(remision, isForPlanta = false) {
+function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
+    // A PARTIR DE TU CÓDIGO, LAS VARIABLES INTERNAS SON 'remision' y 'isForPlanta'
+    const remision = remisionData; 
+    const isForPlanta = esPlanta;
+
     // eslint-disable-next-line new-cap
     const doc = new jsPDF();
 
@@ -312,6 +316,22 @@ function generarPDF(remision, isForPlanta = false) {
     const finalY = doc.lastAutoTable.finalY;
     let yPos = finalY + 10;
 
+    // --- INICIO DEL BLOQUE AÑADIDO PARA OBSERVACIONES ---
+    if (remision.observaciones && remision.observaciones.trim() !== "") {
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Observaciones:", 20, yPos);
+        
+        doc.setFont("helvetica", "normal");
+        // 'splitTextToSize' divide el texto largo en múltiples líneas automáticamente
+        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170); // 170 es el ancho del texto
+        doc.text(textoObservaciones, 20, yPos + 5);
+        
+        // Ajustamos la posición 'y' para el contenido que sigue
+        yPos += (textoObservaciones.length * 5) + 5; 
+    }
+    // --- FIN DEL BLOQUE AÑADIDO ---
+
     if (!isForPlanta) {
         doc.setFontSize(12);
         doc.setFont("helvetica", "bold");
@@ -348,9 +368,9 @@ function generarPDF(remision, isForPlanta = false) {
     }
 
     // Signature Line
-    yPos = Math.max(yPos, finalY + 20); // Ensure there's enough space after the table
-    yPos = 250; // Set a fixed position for the signature line
-    doc.line(40, yPos, 120, yPos); // Draw the line for signature
+    yPos = Math.max(yPos, finalY + 20);
+    yPos = 250;
+    doc.line(40, yPos, 120, yPos);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.text("Firma y Sello de Recibido", 75, yPos + 5, { align: "center" });
@@ -382,6 +402,18 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
         let whatsappStatus = "pending";
 
         try {
+            // --- **** LÓGICA AÑADIDA PARA OBSERVACIONES **** ---
+            let observacionesHtml = '';
+            // Se revisa si el campo observaciones existe y no está vacío
+            if (remisionData.observaciones && remisionData.observaciones.trim() !== '') {
+                observacionesHtml = `
+                    <div style="border: 1px solid #ddd; padding: 10px; margin-top: 20px; background-color: #f9f9f9;">
+                        <h3 style="margin-top:0;">Observaciones:</h3>
+                        <p>${remisionData.observaciones.replace(/\n/g, '<br>')}</p>
+                    </div>
+                `;
+            }
+
             const pdfBuffer = generarPDF(remisionData, false);
             log("PDF de cliente generado.");
             const pdfPlantaBuffer = generarPDF(remisionData, true);
@@ -578,7 +610,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
         };
 
         // Disparador para anulación
-         // Disparador para anulación
+        // Disparador para anulación
         if (beforeData.estado !== "Anulada" && afterData.estado === "Anulada") {
             log("Detectada anulación. Generando PDF y enviando notificaciones.");
             try {
@@ -588,7 +620,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
                 const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
                 await change.after.ref.update({ pdfUrl: url });
-                
+
                 const pdfPlantaBuffer = generarPDF(afterData, true);
                 const filePlanta = bucket.file(`remisiones/planta-${afterData.numeroRemision}.pdf`);
                 await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
@@ -626,7 +658,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 const bucket = admin.storage().bucket(BUCKET_NAME);
                 const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-                
+
                 const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
                 await change.after.ref.update({ pdfUrl: url });
                 log(`PDF de entrega actualizado en Storage y Firestore.`);
@@ -654,7 +686,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 functions.logger.error("Error al procesar entrega:", error);
             }
         }
-        
+
         // El resto de la función para PAGO FINAL se mantiene igual...
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
@@ -897,4 +929,100 @@ exports.updateEmployeeDocument = functions.https.onCall(async (data, context) =>
         functions.logger.error(`Error al actualizar documento para ${employeeId}:`, error);
         throw new functions.https.HttpsError("internal", "No se pudo actualizar el documento del empleado.");
     }
+});
+
+exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) throw new functions.https.HttpsError("unauthenticated", "No autenticado.");
+
+    const userSnap = await admin.firestore().collection("users").doc(uid).get();
+    if (!userSnap.exists || userSnap.data().role !== "admin") {
+        throw new functions.https.HttpsError("permission-denied", "Solo admin.");
+    }
+
+    const { fromDate = "2025-08-14" } = data; // AJUSTA esta fecha al día anterior al fallo
+    const from = new Date(fromDate);
+
+    const bucket = admin.storage().bucket(BUCKET_NAME);
+    const remSnap = await admin.firestore()
+        .collection("remisiones")
+        .where("fechaRecibido", ">=", from) // O usa tu campo de fecha que corresponda
+        .get();
+
+    let fixed = 0, errors = 0;
+    for (const doc of remSnap.docs) {
+        const r = doc.data();
+        try {
+            const file = bucket.file(`remisiones/${r.numeroRemision}.pdf`);
+            const filePlanta = bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`);
+
+            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+
+            await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+            fixed++;
+        } catch (e) {
+            errors++;
+            console.error(`repairSignedUrls fallo remision ${r?.numeroRemision}:`, e.message);
+        }
+    }
+    return { fixed, errors, total: remSnap.size };
+});
+
+exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) throw new functions.https.HttpsError("unauthenticated", "No autenticado.");
+
+    const userSnap = await admin.firestore().collection("users").doc(uid).get();
+    if (!userSnap.exists || userSnap.data().role !== "admin") {
+        throw new functions.https.HttpsError("permission-denied", "Solo admin.");
+    }
+
+    // Parámetros
+    const { fromDate = "2025-08-14", onlyBroken = true } = data; // ajusta la fecha
+    const from = new Date(fromDate);
+
+    const bucket = admin.storage().bucket(BUCKET_NAME);
+
+    // IMPORTANTE: filtrar por 'timestamp' (Date), no por 'fechaRecibido' (string)
+    const remSnap = await admin.firestore()
+        .collection("remisiones")
+        .where("timestamp", ">=", from)
+        .get();
+
+    let fixed = 0, skipped = 0, errors = 0;
+    for (const doc of remSnap.docs) {
+        const r = doc.data();
+
+        try {
+            // Si onlyBroken=true, saltar las que ya estén con host correcto
+            if (onlyBroken && typeof r.pdfUrl === "string") {
+                try {
+                    const u = new URL(r.pdfUrl);
+                    // Firma V4 correcta normalmente usa storage.googleapis.com/<bucket>/...
+                    if (u.hostname === "storage.googleapis.com") {
+                        skipped++;
+                        continue;
+                    }
+                } catch (_) {
+                    // si no parsea, la intentamos re-firmar igual
+                }
+            }
+
+            // Refirmar
+            const file = bucket.file(`remisiones/${r.numeroRemision}.pdf`);
+            const filePlanta = bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`);
+
+            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+
+            await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+            fixed++;
+        } catch (e) {
+            errors++;
+            console.error(`repairSignedUrls fallo remision ${r?.numeroRemision}:`, e.message);
+        }
+    }
+
+    return { fixed, skipped, errors, total: remSnap.size };
 });

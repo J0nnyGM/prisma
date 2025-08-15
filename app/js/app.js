@@ -115,6 +115,21 @@ function startApp() {
     // 2. Actualizar la visibilidad basada en el rol del usuario
     updateUIVisibility(currentUserData);
 
+
+    //FUNCION EN CASO DE TENER REMISIONES EN MAL ESTADO
+    /**if (currentUserData?.role === 'admin') {
+        const btnRepair = document.createElement('button');
+        btnRepair.textContent = 'Reparar PDFs (solo admin)';
+        btnRepair.className = 'bg-red-600 text-white px-4 py-2 rounded fixed bottom-4 right-4 z-50 shadow-lg';
+        btnRepair.onclick = () => {
+            const fn = httpsCallable(functions, 'repairSignedUrls');
+            fn({ fromDate: '2025-08-1', onlyBroken: false })
+                .then(r => alert(`Reparadas: ${r.data.fixed}, Omitidas: ${r.data.skipped}, Errores: ${r.data.errors}`))
+                .catch(e => alert(`Error: ${e.message}`));
+        };
+        document.body.appendChild(btnRepair);
+    }*//
+
     // 3. Añadir todos los event listeners a los elementos que ya existen
     setupEventListeners();
 
@@ -163,7 +178,10 @@ function loadViewTemplates() {
         </div>
         <p class="text-center mt-4 text-sm">¿Ya tienes una cuenta? <a href="#" id="show-login-link-register" class="font-semibold text-indigo-600 hover:underline">Inicia sesión</a></p>
     `;
-    document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
+    document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div>
+<div><label for="remision-observaciones" class="block text-sm font-medium text-gray-700">Observaciones</label><textarea id="remision-observaciones" placeholder="Añadir notas especiales para el cliente o para planta..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" rows="3"></textarea></div>
+<button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
+
     document.getElementById('view-facturacion').innerHTML = `<div class="bg-white p-6 rounded-xl shadow-md max-w-6xl mx-auto"><h2 class="text-2xl font-semibold mb-4">Gestión de Facturación</h2><div class="border-b border-gray-200 mb-6"><nav id="facturacion-nav" class="-mb-px flex space-x-6"><button id="tab-pendientes" class="dashboard-tab-btn active py-3 px-1 font-semibold">Pendientes</button><button id="tab-realizadas" class="dashboard-tab-btn py-3 px-1 font-semibold">Realizadas</button></nav></div><div id="view-pendientes"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Pendientes de Facturar</h3><div id="facturacion-pendientes-list" class="space-y-3"></div></div><div id="view-realizadas" class="hidden"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Facturadas</h3><div id="facturacion-realizadas-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-clientes').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Cliente</h2><form id="add-cliente-form" class="space-y-4"><input type="text" id="nuevo-cliente-nombre" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="email" id="nuevo-cliente-email" placeholder="Correo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono1" placeholder="Teléfono 1" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono2" placeholder="Teléfono 2 (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="text" id="nuevo-cliente-nit" placeholder="NIT (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Clientes</h2><input type="search" id="search-clientes" placeholder="Buscar..." class="p-2 border rounded-lg"></div><div id="clientes-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-proveedores').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Proveedor</h2><form id="add-proveedor-form" class="space-y-4"><input type="text" id="nuevo-proveedor-nombre" placeholder="Nombre del Proveedor" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="text" id="nuevo-proveedor-contacto" placeholder="Nombre de Contacto" class="w-full p-3 border border-gray-300 rounded-lg"><input type="tel" id="nuevo-proveedor-telefono" placeholder="Teléfono" class="w-full p-3 border border-gray-300 rounded-lg"><input type="email" id="nuevo-proveedor-email" placeholder="Correo" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-teal-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Proveedores</h2><input type="search" id="search-proveedores" placeholder="Buscar..." class="p-2 border rounded-lg"></div><div id="proveedores-list" class="space-y-3"></div></div></div>`;
@@ -218,6 +236,7 @@ function updateUIVisibility(userData) {
 }
 
 
+
 function loadInitialData() {
     // Cargar plantillas HTML en las vistas
     document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
@@ -225,6 +244,20 @@ function loadInitialData() {
 
     // El orden es importante: primero se actualiza la UI y luego se cargan los datos y listeners
     updateUIVisibility(currentUserData);
+
+    if (currentUserData?.role === 'admin') {
+        const btnRepair = document.createElement('button');
+        btnRepair.textContent = 'Reparar PDFs (solo admin)';
+        btnRepair.className = 'bg-red-600 text-white px-4 py-2 rounded fixed bottom-4 right-4 z-50 shadow-lg';
+        btnRepair.onclick = () => {
+            const fn = httpsCallable(functions, 'repairSignedUrls');
+            fn({ fromDate: '2025-08-14' })
+                .then(r => alert(`Reparadas: ${r.data.fixed}, Errores: ${r.data.errors}`))
+                .catch(e => alert(`Error: ${e.message}`));
+        };
+        document.body.appendChild(btnRepair);
+    }
+
     loadClientes();
     loadProveedores();
     loadItems();
@@ -1071,7 +1104,9 @@ async function handleRemisionSubmit(e) {
             estado: 'Recibido',
             payments: initialPayments,
             facturado: false,
-            numeroFactura: null
+            numeroFactura: null,
+            // **** CAMPO AÑADIDO ****
+            observaciones: document.getElementById('remision-observaciones').value || ''
         };
         await addDoc(collection(db, "remisiones"), nuevaRemision);
 
@@ -1190,11 +1225,47 @@ function initSearchableInput(searchInput, resultsContainer, getDataFn, displayFn
         resultsContainer.classList.remove('hidden');
     }
 
-    document.addEventListener('click', (e) => {
-        if (!searchInput.contains(e.target) && !resultsContainer.contains(e.target)) {
-            resultsContainer.classList.add('hidden');
-        }
-    });
+    // --- CLICK GLOBAL PARA ABRIR PDFs DESDE data-pdf-url (usa modal interno) ---
+    if (!window.__pdfClickDelegationBound) {
+        window.__pdfClickDelegationBound = true;
+
+        // CAPTURA para interceptar antes que otros listeners
+        document.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-pdf-url]');
+            if (!el) return;
+
+            e.preventDefault();
+            if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            e.stopPropagation();
+
+            const pdfUrl = el.getAttribute('data-pdf-url');
+            const title = el.getAttribute('data-doc-name') || el.textContent?.trim() || 'Documento';
+
+            showPdfModal(pdfUrl, title);
+        }, true);
+    }
+    // --- FIN CLICK GLOBAL PDFs ---
+
+    if (!window.__pdfClickDelegationBound) {
+        window.__pdfClickDelegationBound = true;
+
+        // Usamos fase de CAPTURA (true) para interceptar antes que otros listeners
+        document.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-pdf-url]');
+            if (!el) return;
+
+            // Evitar cualquier otra ruta (href, otros listeners, delegados previos, etc.)
+            e.preventDefault();
+            // bloquear burbujeo y otros listeners en el mismo target
+            if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            e.stopPropagation();
+
+            const pdfUrl = el.getAttribute('data-pdf-url');
+            const title = el.getAttribute('data-doc-name') || el.textContent?.trim() || 'Documento';
+
+            showPdfModal(pdfUrl, title);
+        }, true); // <-- CAPTURA activada
+    }
 }
 
 // Esta función ahora se llama una sola vez
@@ -1276,7 +1347,80 @@ function createItemElement() {
 function calcularTotales() { const itemsContainer = document.getElementById('items-container'); const ivaCheckbox = document.getElementById('incluir-iva'); const subtotalEl = document.getElementById('subtotal'); const valorIvaEl = document.getElementById('valor-iva'); const valorTotalEl = document.getElementById('valor-total'); if (!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return { subtotalGeneral: 0, valorIVA: 0, total: 0 }; let subtotalGeneral = 0; itemsContainer.querySelectorAll('.item-row').forEach(row => { const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0; const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value); subtotalGeneral += cantidad * valorUnitario; }); const incluyeIVA = ivaCheckbox.checked; const valorIVA = incluyeIVA ? subtotalGeneral * 0.19 : 0; const total = subtotalGeneral + valorIVA; subtotalEl.textContent = formatCurrency(subtotalGeneral); valorIvaEl.textContent = formatCurrency(valorIVA); valorTotalEl.textContent = formatCurrency(total); return { subtotalGeneral, valorIVA, total }; }
 function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone1" class="block text-sm font-medium text-gray-700">Teléfono 1</label><input type="tel" id="edit-client-phone1" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono1 || ''}" required></div><div><label for="edit-client-phone2" class="block text-sm font-medium text-gray-700">Teléfono 2</label><input type="tel" id="edit-client-phone2" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono2 || ''}"></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono1: document.getElementById('edit-client-phone1').value, telefono2: document.getElementById('edit-client-phone2').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
 function showEditProviderModal(provider) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Proveedor</h2><form id="edit-provider-form" class="space-y-4 text-left"><input type="hidden" id="edit-provider-id" value="${provider.id}"><div><label for="edit-provider-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-provider-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.nombre}" required></div><div><label for="edit-provider-contact" class="block text-sm font-medium text-gray-700">Contacto</label><input type="text" id="edit-provider-contact" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.contacto || ''}"></div><div><label for="edit-provider-phone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="edit-provider-phone" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.telefono || ''}"></div><div><label for="edit-provider-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-provider-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.email || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-provider-form').addEventListener('submit', async (e) => { e.preventDefault(); const providerId = document.getElementById('edit-provider-id').value; const updatedData = { nombre: document.getElementById('edit-provider-name').value, contacto: document.getElementById('edit-provider-contact').value, telefono: document.getElementById('edit-provider-phone').value, email: document.getElementById('edit-provider-email').value, }; showModalMessage("Actualizando proveedor...", true); try { await updateDoc(doc(db, "proveedores", providerId), updatedData); hideModal(); showModalMessage("¡Proveedor actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar proveedor:", error); showModalMessage("Error al actualizar."); } }); }
-function showPdfModal(pdfUrl, title) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-xl font-semibold">Visor: ${title}</h2><button id="close-pdf-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="flex-grow p-2 bg-gray-200"><iframe id="pdf-iframe" src="${pdfUrl}" class="w-full h-full" frameborder="0" allow="fullscreen"></iframe></div></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('close-pdf-modal').addEventListener('click', hideModal); }
+function showPdfModal(pdfUrl, title) {
+    try {
+        // --- Normaliza host si es URL firmada v4 (Lógica avanzada que se mantiene) ---
+        try {
+            const u = new URL(pdfUrl);
+            if (u.searchParams.has('X-Goog-Algorithm') && u.hostname !== 'storage.googleapis.com') {
+                const bucketGuess = u.hostname;
+                const cleanPath = u.pathname.startsWith('/') ? u.pathname : `/${u.pathname}`;
+                u.hostname = 'storage.googleapis.com';
+                u.pathname = `/${bucketGuess}${cleanPath}`;
+                pdfUrl = u.toString();
+            }
+        } catch (_) { }
+
+        // --- Elementos base (Lógica avanzada que se mantiene) ---
+        const modal = document.getElementById('modal');
+        const modalContentWrapper = document.getElementById('modal-content-wrapper'); // Usamos el mismo contenedor que la primera función
+
+        if (!modal || !modalContentWrapper) {
+            // Fallback si los elementos no existen (Lógica avanzada que se mantiene)
+            window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+            return;
+        }
+
+        // --- Contenido del modal (Adaptado al estilo de la primera función) ---
+        modalContentWrapper.innerHTML = `
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;">
+                <div class="flex justify-between items-center p-4 border-b">
+                    <h2 class="text-xl font-semibold">Visor: ${title || 'Documento'}</h2>
+                    <button id="close-pdf-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                </div>
+                <div class="flex-grow p-2 bg-gray-200">
+                    <iframe id="pdf-iframe" src="${pdfUrl}" class="w-full h-full" frameborder="0" allow="fullscreen"></iframe>
+                </div>
+            </div>`;
+
+        // Hacemos visible el modal
+        modal.classList.remove('hidden');
+
+        // --- Funcionalidad de cierre (Combinando lo mejor de ambas) ---
+
+        // Función unificada para cerrar y limpiar
+        const closeModalAndCleanUp = () => {
+            modal.classList.add('hidden');
+            // Limpiamos los listeners para evitar fugas de memoria
+            modal.removeEventListener('click', backdropHandler);
+            document.removeEventListener('keydown', escHandler);
+        };
+
+        // 1. Cierre con el botón X (como en la primera función)
+        document.getElementById('close-pdf-modal').addEventListener('click', closeModalAndCleanUp);
+
+        // 2. Cierre al hacer clic fuera (Lógica avanzada que se mantiene)
+        const backdropHandler = (ev) => {
+            if (ev.target === modal) {
+                closeModalAndCleanUp();
+            }
+        };
+        modal.addEventListener('click', backdropHandler);
+
+        // 3. Cierre con la tecla ESC (Lógica avanzada que se mantiene)
+        const escHandler = (ev) => {
+            if (ev.key === 'Escape') {
+                closeModalAndCleanUp();
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+    } catch (err) {
+        // Fallback en caso de cualquier error (Lógica avanzada que se mantiene)
+        window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+        console.error('showPdfModal error:', err);
+    }
+}
 function showPaymentModal(remision) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const totalConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
@@ -1305,7 +1449,44 @@ function showPaymentModal(remision) {
         </tr>`;
     }).join('');
 
-    modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2><button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 text-center"><div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div><div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">PAGADO (CONF.)</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div><div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800">POR CONFIRMAR</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div><div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold mb-2">Historial de Pagos</h3><div class="border rounded-lg max-h-60 overflow-y-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th><th class="p-2 text-left">Estado</th><th></th></tr></thead><tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody></table></div></div><div><h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>${saldoRealPendiente > 0 ? `<form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg"><div><label for="new-payment-amount" class="text-sm font-medium">Monto del Abono</label><input type="text" inputmode="numeric" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" max="${saldoRealPendiente}" required></div><div><label for="new-payment-date" class="text-sm font-medium">Fecha del Pago</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div><div><label for="new-payment-method" class="text-sm font-medium">Método de Pago</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Registrar Pago</button></form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold">Esta remisión ya ha sido pagada en su totalidad.</div>'}</div></div></div>`;
+    // --- INICIO DE LA CORRECCIÓN ---
+    // 1. Se añade 'flex flex-col' y 'max-h-[85vh]' al contenedor principal para limitar su altura.
+    // 2. Se envuelve el contenido principal en un 'div' con la clase 'overflow-y-auto' para activar el scroll.
+    modalContentWrapper.innerHTML = `
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left flex flex-col max-h-[85vh]">
+            <div class="flex-shrink-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2>
+                    <button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 text-center">
+                    <div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div>
+                    <div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">PAGADO (CONF.)</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div>
+                    <div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800">POR CONFIRMAR</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div>
+                    <div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div>
+                </div>
+            </div>
+            
+            <div class="flex-grow overflow-y-auto pr-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-semibold mb-2">Historial de Pagos</h3>
+                        <div class="border rounded-lg max-h-60 overflow-y-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 sticky top-0"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th><th class="p-2 text-left">Estado</th><th></th></tr></thead>
+                                <tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>
+                        ${saldoRealPendiente > 0.01 ? `<form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg"><div><label for="new-payment-amount" class="text-sm font-medium">Monto del Abono</label><input type="text" inputmode="numeric" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" max="${saldoRealPendiente}" required></div><div><label for="new-payment-date" class="text-sm font-medium">Fecha del Pago</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div><div><label for="new-payment-method" class="text-sm font-medium">Método de Pago</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Registrar Pago</button></form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold">Esta remisión ya ha sido pagada en su totalidad.</div>'}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    // --- FIN DE LA CORRECCIÓN ---
+
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-payment-modal').addEventListener('click', hideModal);
 
@@ -1331,7 +1512,7 @@ function showPaymentModal(remision) {
         });
     });
 
-    if (saldoRealPendiente > 0) {
+    if (saldoRealPendiente > 0.01) {
         const paymentAmountInput = document.getElementById('new-payment-amount');
         paymentAmountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
         paymentAmountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
@@ -1364,6 +1545,7 @@ function showPaymentModal(remision) {
         });
     }
 }
+
 
 function showDashboardModal() {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
@@ -2698,7 +2880,7 @@ async function downloadAllDocsAsZip(empleado) {
 
 function showDiscountModal(remision) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
-    const maxDiscount = remision.subtotal * 0.05;
+    // const maxDiscount = remision.subtotal * 0.05; // LÍNEA ELIMINADA
 
     modalContentWrapper.innerHTML = `
             <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
@@ -2712,8 +2894,7 @@ function showDiscountModal(remision) {
                     <div>
                         <label for="discount-amount" class="block text-sm font-medium">Valor del Descuento (COP)</label>
                         <input type="text" id="discount-amount" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required placeholder="Ej: 10000">
-                        <p class="text-xs text-gray-500 mt-1">Máximo descuento permitido: <span class="font-semibold">${formatCurrency(maxDiscount)}</span> (5%)</p>
-                    </div>
+                        </div>
                     <button type="submit" class="w-full bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-700">Aplicar Descuento</button>
                 </form>
             </div>
@@ -2733,10 +2914,9 @@ function showDiscountModal(remision) {
             showModalMessage("Por favor, ingresa un valor de descuento válido.");
             return;
         }
-        if (discountAmount > maxDiscount) {
-            showModalMessage(`El descuento no puede superar el 5% (${formatCurrency(maxDiscount)}).`);
-            return;
-        }
+
+        // --- CONDICIÓN ELIMINADA ---
+        // if (discountAmount > maxDiscount) { ... } ya no existe.
 
         const discountPercentage = (discountAmount / remision.subtotal) * 100;
 
