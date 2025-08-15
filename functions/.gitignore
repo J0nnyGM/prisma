@@ -1,4 +1,0 @@
-node_modules/
-*.local
-app/subirjs/
-app/functions/serviceAccountKey.json
