@@ -117,7 +117,7 @@ function startApp() {
 
 
     //FUNCION EN CASO DE TENER REMISIONES EN MAL ESTADO
-    /**if (currentUserData?.role === 'admin') {
+    /*if (currentUserData?.role === 'admin') {
         const btnRepair = document.createElement('button');
         btnRepair.textContent = 'Reparar PDFs (solo admin)';
         btnRepair.className = 'bg-red-600 text-white px-4 py-2 rounded fixed bottom-4 right-4 z-50 shadow-lg';
@@ -128,7 +128,7 @@ function startApp() {
                 .catch(e => alert(`Error: ${e.message}`));
         };
         document.body.appendChild(btnRepair);
-    }*//
+    }*/
 
     // 3. Añadir todos los event listeners a los elementos que ya existen
     setupEventListeners();
