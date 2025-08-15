@@ -3,18 +3,15 @@
  * Debes desplegarlo usando Firebase CLI.
  */
 const functions = require("firebase-functions");
-const cors = require("cors")({origin: true});
+const cors = require("cors")({ origin: true });
 const admin = require("firebase-admin");
-const serviceAccount = require('./serviceAccountKey.json'); // <-- Agrega esta línea
 const sgMail = require("@sendgrid/mail");
 const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios"); // Importar axios
 
-admin.initializeApp({ // <-- Modifica esta parte
-  credential: admin.credential.cert(serviceAccount),
-  storageBucket: "prismacolorsas.firebasestorage.app" // <-- Reemplaza con tu bucket de Storage
-});
+admin.initializeApp();
+
 // **** INICIO DE LA NUEVA FUNCIÓN ****
 /**
  * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
@@ -401,16 +398,9 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
             log(`PDF de planta guardado en Storage: ${filePathPlanta}`);
 
-            const [url] = await file.getSignedUrl({
-                action: 'read',
-                // Establece la fecha de expiración para el 1 de enero de 2100
-                expires: '01-01-2100'
-            });
-            const [urlPlanta] = await file.getSignedUrl({
-                action: 'read',
-                // Establece la fecha de expiración para el 1 de enero de 2100
-                expires: '01-01-2100'
-            }); log("URLs públicas de PDFs obtenidas.");
+            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            log("URLs públicas de PDFs obtenidas.");
 
             await snap.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
 
@@ -588,7 +578,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
         };
 
         // Disparador para anulación
-        // Disparador para anulación
+         // Disparador para anulación
         if (beforeData.estado !== "Anulada" && afterData.estado === "Anulada") {
             log("Detectada anulación. Generando PDF y enviando notificaciones.");
             try {
@@ -598,7 +588,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
                 const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
                 await change.after.ref.update({ pdfUrl: url });
-
+                
                 const pdfPlantaBuffer = generarPDF(afterData, true);
                 const filePlanta = bucket.file(`remisiones/planta-${afterData.numeroRemision}.pdf`);
                 await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
@@ -636,7 +626,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 const bucket = admin.storage().bucket(BUCKET_NAME);
                 const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
                 await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-
+                
                 const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
                 await change.after.ref.update({ pdfUrl: url });
                 log(`PDF de entrega actualizado en Storage y Firestore.`);
@@ -664,7 +654,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 functions.logger.error("Error al procesar entrega:", error);
             }
         }
-
+        
         // El resto de la función para PAGO FINAL se mantiene igual...
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
@@ -907,45 +897,4 @@ exports.updateEmployeeDocument = functions.https.onCall(async (data, context) =>
         functions.logger.error(`Error al actualizar documento para ${employeeId}:`, error);
         throw new functions.https.HttpsError("internal", "No se pudo actualizar el documento del empleado.");
     }
-});
-
-exports.getRemisionPdfUrl = functions.https.onRequest((req, res) => {
-    cors(req, res, async () => {
-        if (req.method !== "POST") {
-            return res.status(405).send("Method Not Allowed");
-        }
-
-        // --- CORRECCIÓN AQUÍ ---
-        // Recibimos 'numeroRemision' en lugar de 'remisionId'
-        const numeroRemision = req.body.data.numeroRemision;
-        if (!numeroRemision) {
-            return res.status(400).json({data: {error: "Falta el número de la remisión."}});
-        }
-
-        // --- CORRECCIÓN AQUÍ ---
-        // Construimos la ruta al archivo usando el número de la remisión
-        const filePath = `remisiones/${numeroRemision}.pdf`;
-
-        try {
-            const file = admin.storage().bucket().file(filePath);
-
-            // Verificamos si el archivo existe antes de generar la URL
-            const [exists] = await file.exists();
-            if (!exists) {
-                console.error(`El archivo no existe en la ruta: ${filePath}`);
-                return res.status(404).json({data: {error: "El archivo PDF de esta remisión no fue encontrado en el sistema."}});
-            }
-
-            const [url] = await file.getSignedUrl({
-                action: "read",
-                expires: "01-01-2100",
-            });
-
-            return res.status(200).json({data: {url: url}});
-
-        } catch (error) {
-            console.error(`Error al procesar ${filePath}:`, error);
-            return res.status(500).json({data: {error: "No se pudo generar la URL del PDF."}});
-        }
-    });
 });
