@@ -144,3 +144,13 @@ body {
     }
 }
 
+/* --- ESTILOS PARA PESTAÑAS ACTIVAS EN LA VISTA DE CARTERA --- */
+/*
+  Este código aplica un color de texto azul y un borde inferior azul
+  a la pestaña que esté actualmente seleccionada dentro del modal de Cartera.
+*/
+.cartera-tab-btn.active {
+    color: #2563EB; /* Corresponde a text-blue-600 en Tailwind */
+    border-bottom-color: #2563EB; /* Corresponde a border-blue-600 */
+    border-bottom-width: 2px;
+}

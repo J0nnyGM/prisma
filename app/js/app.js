@@ -820,7 +820,8 @@ function renderRemisiones() {
         }
 
         const pdfUrl = isPlanta ? remision.pdfPlantaUrl : remision.pdfUrl;
-        const pdfButton = pdfUrl ? `<button data-pdf-url="${pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
+        const pdfPath = isPlanta ? remision.pdfPlantaPath : remision.pdfPath;
+        const pdfButton = pdfPath ? `<button data-pdf-path="${pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
 
         const anularButton = (esAnulada || esEntregada || isPlanta || (remision.payments && remision.payments.length > 0))
             ? ''
@@ -871,7 +872,26 @@ function renderRemisiones() {
     });
     document.querySelectorAll('.anular-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; if (confirm(`¿Estás seguro de que quieres ANULAR esta remisión? Se enviará un correo de notificación al cliente.`)) { handleAnularRemision(remisionId); } }));
     document.querySelectorAll('.status-update-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; const currentStatus = e.currentTarget.dataset.currentStatus; handleStatusUpdate(remisionId, currentStatus); }));
-    document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
+    document.querySelectorAll('.view-pdf-btn').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const pdfPath = e.currentTarget.dataset.pdfPath;
+            const remisionNum = e.currentTarget.dataset.remisionNum;
+
+            showModalMessage("Generando enlace seguro...", true);
+
+            try {
+                const getSignedUrl = httpsCallable(functions, 'getSignedUrlForPath');
+                const result = await getSignedUrl({ path: pdfPath });
+
+                hideModal();
+                showPdfModal(result.data.url, `Remisión N° ${remisionNum}`);
+            } catch (error) {
+                console.error("Error al obtener la URL firmada:", error);
+                hideModal();
+                showModalMessage("Error: No se pudo generar el enlace para ver el PDF.");
+            }
+        });
+    });
     document.querySelectorAll('.payment-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showPaymentModal(remision); }));
     document.querySelectorAll('.discount-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showDiscountModal(remision); }));
 }
@@ -925,6 +945,7 @@ function renderGastos() {
         gastosListEl.appendChild(el);
     });
 }
+// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/js/app.js
 function renderFacturacion() {
     const pendientesListEl = document.getElementById('facturacion-pendientes-list');
     const realizadasListEl = document.getElementById('facturacion-realizadas-list');
@@ -942,6 +963,7 @@ function renderFacturacion() {
         pendientes.forEach(remision => {
             const el = document.createElement('div');
             el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
+            // **** INICIO CORRECCIÓN AQUÍ ****
             el.innerHTML = `
                 <div class="flex-grow">
                     <div class="flex items-center gap-3 flex-wrap">
@@ -951,10 +973,11 @@ function renderFacturacion() {
                     <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
                 </div>
                 <div class="flex-shrink-0 flex items-center gap-2">
-                    <button data-pdf-url="${remision.pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
                     <button data-remision-id="${remision.id}" class="facturar-btn bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Facturar</button>
                 </div>
             `;
+            // **** FIN CORRECCIÓN AQUÍ ****
             pendientesListEl.appendChild(el);
         });
     }
@@ -966,9 +989,10 @@ function renderFacturacion() {
         realizadas.forEach(remision => {
             const el = document.createElement('div');
             el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
-
+            
+            // **** INICIO CORRECCIÓN AQUÍ ****
             let facturaButtons = '';
-            if (remision.facturaPdfUrl) {
+            if (remision.facturaPdfUrl) { // Las facturas sí pueden tener URL directa si son públicas
                 facturaButtons = `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">Ver Factura</button>`;
             } else {
                 facturaButtons = `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600">Adjuntar Factura</button>`;
@@ -988,21 +1012,54 @@ function renderFacturacion() {
                         ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
                     </div>
                     ${facturaButtons}
-                    <button data-pdf-url="${remision.pdfUrl}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
                 </div>
             `;
+            // **** FIN CORRECCIÓN AQUÍ ****
             realizadasListEl.appendChild(el);
         });
     }
 
-    document.querySelectorAll('.facturar-btn').forEach(btn => {
+    // **** INICIO CORRECCIÓN AQUÍ ****
+    // Unificamos los listeners para que todos funcionen igual
+    document.querySelectorAll('#view-facturacion .facturar-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const remisionId = e.currentTarget.dataset.remisionId;
             showFacturaModal(remisionId);
         });
     });
-    document.querySelectorAll('.view-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Remisión N° ${remisionNum}`); }));
-    document.querySelectorAll('.view-factura-pdf-btn').forEach(button => button.addEventListener('click', (e) => { const pdfUrl = e.currentTarget.dataset.pdfUrl; const remisionNum = e.currentTarget.dataset.remisionNum; showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); }));
+
+    // Listener para los botones de remisión (ahora usa la lógica asíncrona)
+    document.querySelectorAll('#view-facturacion .view-pdf-btn').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const pdfPath = e.currentTarget.dataset.pdfPath;
+            if (!pdfPath || pdfPath === 'undefined') {
+                showModalMessage("El PDF de esta remisión aún no está disponible.");
+                return;
+            }
+            const remisionNum = e.currentTarget.dataset.remisionNum;
+            showModalMessage("Generando enlace seguro...", true);
+            try {
+                const getSignedUrl = httpsCallable(functions, 'getSignedUrlForPath');
+                const result = await getSignedUrl({ path: pdfPath });
+                hideModal();
+                showPdfModal(result.data.url, `Remisión N° ${remisionNum}`);
+            } catch (error) {
+                hideModal();
+                showModalMessage("Error: No se pudo generar el enlace para ver el PDF.");
+            }
+        });
+    });
+    
+    // Listener para los botones de factura (puede seguir usando URL directa si la tienes)
+    document.querySelectorAll('#view-facturacion .view-factura-pdf-btn').forEach(button => {
+        button.addEventListener('click', (e) => { 
+            const pdfUrl = e.currentTarget.dataset.pdfUrl; 
+            const remisionNum = e.currentTarget.dataset.remisionNum; 
+            showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); 
+        });
+    });
+    // **** FIN CORRECCIÓN AQUÍ ****
 }
 
 // --- FUNCIONES DE MANEJO DE ACCIONES ---
@@ -1347,31 +1404,26 @@ function createItemElement() {
 function calcularTotales() { const itemsContainer = document.getElementById('items-container'); const ivaCheckbox = document.getElementById('incluir-iva'); const subtotalEl = document.getElementById('subtotal'); const valorIvaEl = document.getElementById('valor-iva'); const valorTotalEl = document.getElementById('valor-total'); if (!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return { subtotalGeneral: 0, valorIVA: 0, total: 0 }; let subtotalGeneral = 0; itemsContainer.querySelectorAll('.item-row').forEach(row => { const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0; const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value); subtotalGeneral += cantidad * valorUnitario; }); const incluyeIVA = ivaCheckbox.checked; const valorIVA = incluyeIVA ? subtotalGeneral * 0.19 : 0; const total = subtotalGeneral + valorIVA; subtotalEl.textContent = formatCurrency(subtotalGeneral); valorIvaEl.textContent = formatCurrency(valorIVA); valorTotalEl.textContent = formatCurrency(total); return { subtotalGeneral, valorIVA, total }; }
 function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone1" class="block text-sm font-medium text-gray-700">Teléfono 1</label><input type="tel" id="edit-client-phone1" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono1 || ''}" required></div><div><label for="edit-client-phone2" class="block text-sm font-medium text-gray-700">Teléfono 2</label><input type="tel" id="edit-client-phone2" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono2 || ''}"></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono1: document.getElementById('edit-client-phone1').value, telefono2: document.getElementById('edit-client-phone2').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
 function showEditProviderModal(provider) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Proveedor</h2><form id="edit-provider-form" class="space-y-4 text-left"><input type="hidden" id="edit-provider-id" value="${provider.id}"><div><label for="edit-provider-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-provider-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.nombre}" required></div><div><label for="edit-provider-contact" class="block text-sm font-medium text-gray-700">Contacto</label><input type="text" id="edit-provider-contact" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.contacto || ''}"></div><div><label for="edit-provider-phone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="edit-provider-phone" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.telefono || ''}"></div><div><label for="edit-provider-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-provider-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.email || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-provider-form').addEventListener('submit', async (e) => { e.preventDefault(); const providerId = document.getElementById('edit-provider-id').value; const updatedData = { nombre: document.getElementById('edit-provider-name').value, contacto: document.getElementById('edit-provider-contact').value, telefono: document.getElementById('edit-provider-phone').value, email: document.getElementById('edit-provider-email').value, }; showModalMessage("Actualizando proveedor...", true); try { await updateDoc(doc(db, "proveedores", providerId), updatedData); hideModal(); showModalMessage("¡Proveedor actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar proveedor:", error); showModalMessage("Error al actualizar."); } }); }
+// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/js/app.js
 function showPdfModal(pdfUrl, title) {
-    try {
-        // --- Normaliza host si es URL firmada v4 (Lógica avanzada que se mantiene) ---
-        try {
-            const u = new URL(pdfUrl);
-            if (u.searchParams.has('X-Goog-Algorithm') && u.hostname !== 'storage.googleapis.com') {
-                const bucketGuess = u.hostname;
-                const cleanPath = u.pathname.startsWith('/') ? u.pathname : `/${u.pathname}`;
-                u.hostname = 'storage.googleapis.com';
-                u.pathname = `/${bucketGuess}${cleanPath}`;
-                pdfUrl = u.toString();
-            }
-        } catch (_) { }
+    // **** INICIO CORRECCIÓN AQUÍ ****
+    // Verificación inicial para evitar que se abra una URL inválida.
+    if (!pdfUrl || typeof pdfUrl !== 'string' || !pdfUrl.startsWith('http')) {
+        console.error("showPdfModal fue llamada con una URL inválida:", pdfUrl);
+        showModalMessage("Error: El enlace del documento no es válido o no está disponible.");
+        return; 
+    }
+    // **** FIN CORRECCIÓN AQUÍ ****
 
-        // --- Elementos base (Lógica avanzada que se mantiene) ---
+    try {
         const modal = document.getElementById('modal');
-        const modalContentWrapper = document.getElementById('modal-content-wrapper'); // Usamos el mismo contenedor que la primera función
+        const modalContentWrapper = document.getElementById('modal-content-wrapper');
 
         if (!modal || !modalContentWrapper) {
-            // Fallback si los elementos no existen (Lógica avanzada que se mantiene)
             window.open(pdfUrl, '_blank', 'noopener,noreferrer');
             return;
         }
 
-        // --- Contenido del modal (Adaptado al estilo de la primera función) ---
         modalContentWrapper.innerHTML = `
             <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto flex flex-col" style="height: 80vh;">
                 <div class="flex justify-between items-center p-4 border-b">
@@ -1383,44 +1435,27 @@ function showPdfModal(pdfUrl, title) {
                 </div>
             </div>`;
 
-        // Hacemos visible el modal
         modal.classList.remove('hidden');
 
-        // --- Funcionalidad de cierre (Combinando lo mejor de ambas) ---
-
-        // Función unificada para cerrar y limpiar
         const closeModalAndCleanUp = () => {
             modal.classList.add('hidden');
-            // Limpiamos los listeners para evitar fugas de memoria
             modal.removeEventListener('click', backdropHandler);
             document.removeEventListener('keydown', escHandler);
         };
 
-        // 1. Cierre con el botón X (como en la primera función)
+        const backdropHandler = (ev) => { if (ev.target === modal) closeModalAndCleanUp(); };
+        const escHandler = (ev) => { if (ev.key === 'Escape') closeModalAndCleanUp(); };
+
         document.getElementById('close-pdf-modal').addEventListener('click', closeModalAndCleanUp);
-
-        // 2. Cierre al hacer clic fuera (Lógica avanzada que se mantiene)
-        const backdropHandler = (ev) => {
-            if (ev.target === modal) {
-                closeModalAndCleanUp();
-            }
-        };
         modal.addEventListener('click', backdropHandler);
-
-        // 3. Cierre con la tecla ESC (Lógica avanzada que se mantiene)
-        const escHandler = (ev) => {
-            if (ev.key === 'Escape') {
-                closeModalAndCleanUp();
-            }
-        };
         document.addEventListener('keydown', escHandler);
 
     } catch (err) {
-        // Fallback en caso de cualquier error (Lógica avanzada que se mantiene)
         window.open(pdfUrl, '_blank', 'noopener,noreferrer');
         console.error('showPdfModal error:', err);
     }
 }
+// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/js/app.js
 function showPaymentModal(remision) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const totalConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
@@ -1430,28 +1465,46 @@ function showPaymentModal(remision) {
 
     const paymentsHTML = (remision.payments || []).map((p, index) => {
         let statusBadge = '';
-        let confirmButton = '';
+        let actionButtons = '';
+
         if (p.status === 'por confirmar') {
             statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
-            if (currentUserData.role === 'admin' && p.registeredBy !== currentUser.uid) {
-                confirmButton = `<button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600">Confirmar</button>`;
+            
+            // **** INICIO DE LA CORRECCIÓN ****
+            // Se simplifica la condición para que cualquier admin vea los botones en pagos pendientes.
+            if (currentUserData.role === 'admin') {
+                actionButtons = `
+                    <div class="flex flex-col items-end gap-1">
+                        <button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600 w-20 text-center">Confirmar</button>
+                        <button data-remision-id="${remision.id}" data-payment-index="${index}" class="reject-payment-btn bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 w-20 text-center">Rechazar</button>
+                    </div>
+                `;
             }
+            // **** FIN DE LA CORRECCIÓN ****
+
+        } else if (p.status === 'rechazado') {
+            statusBadge = `<span class="text-xs font-semibold bg-red-200 text-red-800 px-2 py-1 rounded-full">Rechazado</span>`;
         } else {
             statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Confirmado</span>`;
         }
+        
+        const rejectionReasonHtml = p.status === 'rechazado' && p.rejectionReason 
+            ? `<div class="text-xs text-red-700 mt-1 italic">Motivo: ${p.rejectionReason}</div>` 
+            : '';
 
         return `<tr class="border-b">
             <td class="p-2">${p.date}</td>
             <td class="p-2">${p.method}</td>
             <td class="p-2 text-right">${formatCurrency(p.amount)}</td>
-            <td class="p-2">${statusBadge}</td>
-            <td class="p-2">${confirmButton}</td>
+            <td class="p-2">
+                ${statusBadge}
+                ${rejectionReasonHtml}
+            </td>
+            <td class="p-2">${actionButtons}</td>
         </tr>`;
     }).join('');
 
-    // --- INICIO DE LA CORRECCIÓN ---
-    // 1. Se añade 'flex flex-col' y 'max-h-[85vh]' al contenedor principal para limitar su altura.
-    // 2. Se envuelve el contenido principal en un 'div' con la clase 'overflow-y-auto' para activar el scroll.
+    // (El resto de la función se mantiene exactamente igual)
     modalContentWrapper.innerHTML = `
         <div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left flex flex-col max-h-[85vh]">
             <div class="flex-shrink-0">
@@ -1485,7 +1538,6 @@ function showPaymentModal(remision) {
                 </div>
             </div>
         </div>`;
-    // --- FIN DE LA CORRECCIÓN ---
 
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-payment-modal').addEventListener('click', hideModal);
@@ -1507,6 +1559,34 @@ function showPaymentModal(remision) {
                 } catch (error) {
                     console.error("Error al confirmar pago:", error);
                     showModalMessage("Error al confirmar el pago.");
+                }
+            }
+        });
+    });
+
+    document.querySelectorAll('.reject-payment-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const reason = prompt("Por favor, introduce un motivo para el rechazo:");
+            if (reason) {
+                const remisionId = e.currentTarget.dataset.remisionId;
+                const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
+                const remisionToUpdate = allRemisiones.find(r => r.id === remisionId);
+                
+                if (remisionToUpdate && remisionToUpdate.payments[paymentIndex]) {
+                    remisionToUpdate.payments[paymentIndex].status = 'rechazado';
+                    remisionToUpdate.payments[paymentIndex].rejectionReason = reason;
+                    remisionToUpdate.payments[paymentIndex].rejectedBy = currentUser.uid;
+                    remisionToUpdate.payments[paymentIndex].rejectedAt = new Date();
+                    
+                    showModalMessage("Rechazando pago...", true);
+                    try {
+                        await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
+                        hideModal();
+                        showModalMessage("¡Pago rechazado!", false, 1500);
+                    } catch (error) {
+                        console.error("Error al rechazar pago:", error);
+                        showModalMessage("Error al rechazar el pago.");
+                    }
                 }
             }
         });
@@ -1552,22 +1632,42 @@ function showDashboardModal() {
 
     modalContentWrapper.innerHTML = `
             <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto text-left flex flex-col" style="height: 80vh;">
-                <div class="flex justify-between items-center p-4 border-b">
+                <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
                     <h2 class="text-xl font-semibold">Resumen Financiero</h2>
                     <div class="flex items-center gap-4">
                         <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
                         <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                     </div>
                 </div>
-                <div class="border-b border-gray-200">
+                <div class="border-b border-gray-200 flex-shrink-0">
                     <nav class="-mb-px flex space-x-6 px-6">
                         <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold">Resumen Mensual</button>
                         <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold">Cartera</button>
                         <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold">Clientes</button>
                     </nav>
                 </div>
+                
                 <div id="dashboard-summary-view" class="p-6 space-y-6 overflow-y-auto flex-grow"> <div class="flex items-center gap-4"><select id="summary-month" class="p-2 border rounded-lg"></select><select id="summary-year" class="p-2 border rounded-lg"></select></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-green-100 p-4 rounded-lg"><div class="text-sm font-semibold text-green-800">VENTAS</div><div id="summary-sales" class="text-2xl font-bold"></div></div><div class="bg-red-100 p-4 rounded-lg"><div class="text-sm font-semibold text-red-800">GASTOS</div><div id="summary-expenses" class="text-2xl font-bold"></div></div><div class="bg-indigo-100 p-4 rounded-lg"><div class="text-sm font-semibold text-indigo-800">UTILIDAD/PÉRDIDA</div><div id="summary-profit" class="text-2xl font-bold"></div></div><div class="bg-yellow-100 p-4 rounded-lg"><div class="text-sm font-semibold text-yellow-800">CARTERA PENDIENTE (MES)</div><div id="summary-cartera" class="text-2xl font-bold"></div></div></div><div><h3 class="font-semibold mb-2">Saldos Estimados (Total)</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">EFECTIVO</div><div id="summary-efectivo" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">NEQUI</div><div id="summary-nequi" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">DAVIVIENDA</div><div id="summary-davivienda" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">CARTERA TOTAL</div><div id="summary-cartera-total" class="text-xl font-bold"></div></div></div></div><div><h3 class="font-semibold mb-2">Utilidad/Pérdida (Últimos 6 Meses)</h3><div class="bg-gray-50 p-4 rounded-lg"><canvas id="profitLossChart"></canvas></div></div></div>
-                <div id="dashboard-cartera-view" class="p-6 hidden flex-grow overflow-y-auto"><h3 class="font-semibold mb-2 text-xl">Cartera Pendiente de Cobro</h3><div id="cartera-list" class="space-y-4"></div><div id="cartera-total" class="text-right font-bold text-xl mt-4"></div></div>
+                
+                <div id="dashboard-cartera-view" class="p-6 hidden flex-grow flex flex-col min-h-0">
+                <div class="border-b border-gray-200 flex-shrink-0">
+                        <nav class="-mb-px flex space-x-4">
+                            <button id="cartera-tab-detalle" class="cartera-tab-btn active py-3 px-1 text-sm font-semibold">Detalle por Remisión</button>
+                            <button id="cartera-tab-cliente" class="cartera-tab-btn py-3 px-1 text-sm font-semibold">Total por Cliente</button>
+                        </nav>
+                    </div>
+                    
+                    <div class="mt-4 flex-grow overflow-y-auto">
+                        <div id="cartera-detalle-view" class="">
+                            <div id="cartera-list" class="space-y-4"></div>
+                            <div id="cartera-total" class="text-right font-bold text-xl mt-4 flex-shrink-0"></div>
+                        </div>
+                        <div id="cartera-cliente-view" class="hidden">
+                            <div id="cartera-por-cliente-list" class="space-y-3"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="dashboard-clientes-view" class="p-6 hidden flex-grow overflow-y-auto">
                     <h3 class="font-semibold mb-2 text-xl">Ranking de Clientes</h3>
                     <div class="flex flex-wrap items-center gap-4 mb-4 p-2 bg-gray-50 rounded-lg">
@@ -1652,12 +1752,31 @@ function showDashboardModal() {
         carteraView.classList.add('hidden');
     });
 
+    const carteraTabDetalle = document.getElementById('cartera-tab-detalle');
+    const carteraTabCliente = document.getElementById('cartera-tab-cliente');
+    const carteraDetalleView = document.getElementById('cartera-detalle-view');
+    const carteraClienteView = document.getElementById('cartera-cliente-view');
+
+    carteraTabDetalle.addEventListener('click', () => {
+        carteraTabDetalle.classList.add('active');
+        carteraTabCliente.classList.remove('active');
+        carteraDetalleView.classList.remove('hidden');
+        carteraClienteView.classList.add('hidden');
+    });
+    carteraTabCliente.addEventListener('click', () => {
+        carteraTabCliente.classList.add('active');
+        carteraTabDetalle.classList.remove('active');
+        carteraClienteView.classList.remove('hidden');
+        carteraDetalleView.classList.add('hidden');
+    });
+
     document.getElementById('download-report-btn').addEventListener('click', showReportDateRangeModal);
 
     updateDashboardView();
     renderCartera();
     renderTopClientes();
 }
+
 function updateDashboard(year, month) { const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0); const expensesThisMonth = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0); document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth); document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth); document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth); const carteraThisMonth = allRemisiones.filter(r => { const d = new Date(r.fechaRecibido); return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada'; }).reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera').textContent = formatCurrency(carteraThisMonth); const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera); const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 }; allRemisiones.forEach(r => (r.payments || []).forEach(p => { if (accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; })); allGastos.forEach(g => { if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; }); document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo); document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi); document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda); const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; const labels = []; const salesData = []; const expensesData = []; for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const m = d.getMonth(); const y = d.getFullYear(); labels.push(monthNames[m]); const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const pDate = new Date(p.date); return pDate.getMonth() === m && pDate.getFullYear() === y; }).reduce((sum, p) => sum + p.amount, 0); const monthlyExpenses = allGastos.filter(g => { const gDate = new Date(g.fecha); return gDate.getMonth() === m && gDate.getFullYear() === y; }).reduce((sum, g) => sum + g.valorTotal, 0); salesData.push(monthlySales); expensesData.push(monthlyExpenses); } const ctx = document.getElementById('profitLossChart').getContext('2d'); if (profitLossChart) { profitLossChart.destroy(); } profitLossChart = new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: 'Ventas', data: salesData, backgroundColor: 'rgba(75, 192, 192, 0.6)' }, { label: 'Gastos', data: expensesData, backgroundColor: 'rgba(255, 99, 132, 0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } }); }
 
 function calculateOverdueDays(dateString) {
@@ -1671,55 +1790,103 @@ function calculateOverdueDays(dateString) {
 }
 
 function renderCartera() {
-    const carteraListEl = document.getElementById('cartera-list');
-    const carteraTotalEl = document.getElementById('cartera-total');
-    const pendingRemisiones = allRemisiones.filter(r => {
-        if (r.estado === 'Anulada') return false;
-        const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
-        return r.valorTotal - totalPagado > 0.01;
-    }).sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
+    // Apunta a los contenedores correctos dentro del modal
+    const porClienteListEl = document.getElementById('cartera-por-cliente-list');
+    const detalleListEl = document.getElementById('cartera-list');
+    const totalEl = document.getElementById('cartera-total');
 
-    carteraListEl.innerHTML = ''; // Clear previous content
+    if (!porClienteListEl || !detalleListEl || !totalEl) return;
 
-    if (pendingRemisiones.length === 0) {
-        carteraListEl.innerHTML = '<p class="text-center text-gray-500 py-8">¡No hay cartera pendiente!</p>';
-        carteraTotalEl.innerHTML = '';
-        return;
-    }
+    // 1. CALCULAR SALDOS Y DÍAS DE VENCIMIENTO
+    const today = new Date();
+    const remisionesPendientes = allRemisiones
+        .map(remision => {
+            const totalPagado = (remision.payments || [])
+                .filter(p => p.status === 'confirmado')
+                .reduce((acc, p) => acc + p.amount, 0);
+            const saldoPendiente = remision.valorTotal - totalPagado;
+            
+            // Cálculo de días vencidos
+            const fechaRecibido = new Date(remision.fechaRecibido);
+            // Asegurarse de que la hora no afecte el cálculo de días
+            fechaRecibido.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+            const diffTime = today - fechaRecibido;
+            const diasVencidos = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-    let totalCartera = 0;
-    pendingRemisiones.forEach(r => {
-        const totalPagado = (r.payments || []).reduce((sum, p) => sum + p.amount, 0);
-        const saldoPendiente = r.valorTotal - totalPagado;
-        totalCartera += saldoPendiente;
-        const overdueDays = calculateOverdueDays(r.fechaRecibido);
-        let overdueColor = 'text-gray-600';
-        if (overdueDays > 30) overdueColor = 'text-yellow-600';
-        if (overdueDays > 60) overdueColor = 'text-red-600';
+            return { ...remision, saldoPendiente, diasVencidos };
+        })
+        .filter(remision => remision.saldoPendiente > 0.01 && remision.estado !== 'Anulada');
 
-        const card = document.createElement('div');
-        card.className = 'bg-white p-4 rounded-lg shadow-md border border-gray-200';
-        card.innerHTML = `
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                    <div class="mb-2 sm:mb-0">
-                        <p class="font-bold text-gray-800">${r.clienteNombre}</p>
-                        <p class="text-sm text-gray-500">Remisión N° <span class="font-mono">${r.numeroRemision}</span> &bull; Recibido: ${r.fechaRecibido}</p>
-                    </div>
-                    <div class="text-left sm:text-right w-full sm:w-auto">
-                        <p class="text-sm text-gray-500">Saldo Pendiente</p>
-                        <p class="font-bold text-xl text-red-600">${formatCurrency(saldoPendiente)}</p>
-                    </div>
+    // 2. CALCULAR CARTERA TOTAL POR CLIENTE (sin cambios)
+    const carteraPorCliente = remisionesPendientes.reduce((acc, remision) => {
+        const cliente = acc[remision.clienteNombre] || { totalDeuda: 0, remisionesCount: 0 };
+        cliente.totalDeuda += remision.saldoPendiente;
+        cliente.remisionesCount += 1;
+        acc[remision.clienteNombre] = cliente;
+        return acc;
+    }, {});
+    const clientesOrdenados = Object.entries(carteraPorCliente).sort(([, a], [, b]) => b.totalDeuda - a.totalDeuda);
+
+    // 3. RENDERIZAR CARTERA POR CLIENTE (sin cambios)
+    porClienteListEl.innerHTML = '';
+    if (clientesOrdenados.length === 0) {
+        porClienteListEl.innerHTML = '<p class="text-center text-gray-500 py-4 bg-gray-50 rounded-lg">No hay cartera pendiente por cliente.</p>';
+    } else {
+        clientesOrdenados.forEach(([nombreCliente, data]) => {
+            const el = document.createElement('div');
+            el.className = 'bg-white border p-3 rounded-lg flex justify-between items-center';
+            el.innerHTML = `
+                <div>
+                    <p class="font-bold text-gray-900">${nombreCliente}</p>
+                    <p class="text-xs text-gray-600">${data.remisionesCount} remision(es) pendiente(s)</p>
                 </div>
-                <div class="mt-2 pt-2 border-t border-gray-200 text-sm flex justify-between items-center">
-                    <p><span class="font-semibold">Valor Total:</span> ${formatCurrency(r.valorTotal)}</p>
-                    <p class="${overdueColor} font-semibold">${overdueDays} días de vencido</p>
+                <div class="text-right">
+                    <p class="font-bold text-lg text-red-600">${formatCurrency(data.totalDeuda)}</p>
                 </div>
             `;
-        carteraListEl.appendChild(card);
-    });
+            porClienteListEl.appendChild(el);
+        });
+    }
 
-    carteraTotalEl.innerHTML = `Total Cartera: <span class="text-red-600">${formatCurrency(totalCartera)}</span>`;
+    // 4. RENDERIZAR DETALLE DE CARTERA CON EL DISEÑO ANTIGUO
+    detalleListEl.innerHTML = '';
+    if (remisionesPendientes.length === 0) {
+        detalleListEl.innerHTML = '<p class="text-center text-gray-500 py-8 bg-gray-50 rounded-lg">¡Felicidades! No hay remisiones pendientes de cobro.</p>';
+    } else {
+        remisionesPendientes.sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
+        remisionesPendientes.forEach(remision => {
+            const el = document.createElement('div');
+            // **** INICIO DE LA MODIFICACIÓN ****
+            // Se restaura el diseño anterior con todos los detalles
+            el.className = 'bg-white border p-4 rounded-lg flex justify-between items-center';
+            
+            const diasVencidosTexto = remision.diasVencidos > 0 
+                ? `${remision.diasVencidos} día(s) de vencido`
+                : 'Vence hoy';
+            
+            el.innerHTML = `
+                <div class="flex-grow">
+                    <p class="font-bold text-lg">${remision.clienteNombre}</p>
+                    <p class="text-sm text-gray-600">Remisión N° ${remision.numeroRemision} &bull; Recibido: ${remision.fechaRecibido}</p>
+                    <p class="text-xs text-gray-500 mt-1">Valor Total: ${formatCurrency(remision.valorTotal)}</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-sm text-red-700 font-semibold">Saldo Pendiente</p>
+                    <p class="font-bold text-2xl text-red-600">${formatCurrency(remision.saldoPendiente)}</p>
+                    <p class="text-xs font-semibold ${remision.diasVencidos > 15 ? 'text-red-500' : 'text-yellow-600'} mt-1">${diasVencidosTexto}</p>
+                </div>
+            `;
+            // **** FIN DE LA MODIFICACIÓN ****
+            detalleListEl.appendChild(el);
+        });
+    }
+
+    // 5. RENDERIZAR TOTAL GENERAL (sin cambios)
+    const totalCartera = remisionesPendientes.reduce((sum, r) => sum + r.saldoPendiente, 0);
+    totalEl.innerHTML = `Cartera Total Pendiente: ${formatCurrency(totalCartera)}`;
 }
+
 function renderTopClientes(startDate, endDate) {
     const container = document.getElementById('top-clientes-list');
     if (!container) return;

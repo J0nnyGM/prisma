@@ -389,6 +389,7 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
     return Buffer.from(doc.output("arraybuffer"));
 }
 
+// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/functions/index.js
 exports.onRemisionCreate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onCreate(async (snap, context) => {
@@ -396,45 +397,39 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
         const remisionId = context.params.remisionId;
         const log = (message) => functions.logger.log(`[${remisionId}] ${message}`);
 
-        log("Ejecutando v4 - Despliegue Limpio");
+        log("Ejecutando con guardado de rutas y URL firmada temporal");
 
         let emailStatus = "pending";
         let whatsappStatus = "pending";
 
         try {
-            // --- **** LÓGICA AÑADIDA PARA OBSERVACIONES **** ---
-            let observacionesHtml = '';
-            // Se revisa si el campo observaciones existe y no está vacío
-            if (remisionData.observaciones && remisionData.observaciones.trim() !== '') {
-                observacionesHtml = `
-                    <div style="border: 1px solid #ddd; padding: 10px; margin-top: 20px; background-color: #f9f9f9;">
-                        <h3 style="margin-top:0;">Observaciones:</h3>
-                        <p>${remisionData.observaciones.replace(/\n/g, '<br>')}</p>
-                    </div>
-                `;
-            }
-
             const pdfBuffer = generarPDF(remisionData, false);
             log("PDF de cliente generado.");
             const pdfPlantaBuffer = generarPDF(remisionData, true);
             log("PDF de planta generado.");
 
             const bucket = admin.storage().bucket(BUCKET_NAME);
+            
             const filePath = `remisiones/${remisionData.numeroRemision}.pdf`;
             const file = bucket.file(filePath);
             await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-            log(`PDF de cliente guardado en Storage: ${filePath}`);
 
             const filePathPlanta = `remisiones/planta-${remisionData.numeroRemision}.pdf`;
             const filePlanta = bucket.file(filePathPlanta);
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-            log(`PDF de planta guardado en Storage: ${filePathPlanta}`);
+            
+            // Guardamos solo la RUTA, no la URL completa
+            await snap.ref.update({ 
+                pdfPath: filePath, 
+                pdfPlantaPath: filePathPlanta 
+            });
+            log("Rutas de los PDFs guardadas en Firestore.");
 
-            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
-            log("URLs públicas de PDFs obtenidas.");
-
-            await snap.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+            // Para el envío de notificaciones, generamos una URL temporal que dura 7 días
+            const [url] = await file.getSignedUrl({ 
+                action: "read", 
+                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+            });
 
             // --- Lógica de envío de Correo Electrónico ---
             try {
@@ -481,16 +476,12 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             // --- Lógica de envío de WhatsApp ---
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
-                const docExists = clienteDoc && (typeof clienteDoc.exists === "function" ? clienteDoc.exists() : clienteDoc.exists);
-
-                if (docExists) {
+                if (clienteDoc.exists) {
                     const clienteData = clienteDoc.data();
-                    // Creamos una lista con los teléfonos que existan
                     const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
 
                     if (telefonos.length > 0) {
                         let successfulSends = 0;
-                        // Iteramos sobre cada teléfono y enviamos un mensaje
                         for (const telefono of telefonos) {
                             try {
                                 await sendWhatsAppRemision(
@@ -498,44 +489,23 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                                     remisionData.clienteNombre,
                                     remisionData.numeroRemision.toString(),
                                     remisionData.estado,
-                                    url
+                                    url // Usamos la URL temporal para la notificación
                                 );
                                 log(`Mensaje de WhatsApp enviado exitosamente a ${telefono}.`);
                                 successfulSends++;
                             } catch (whatsappError) {
-                                functions.logger.error(
-                                    `[${remisionId}] Error al enviar WhatsApp al número ${telefono}:`,
-                                    {
-                                        errorMessage: whatsappError.message,
-                                        responseData: whatsappError.response ? whatsappError.response.data : "No response data",
-                                    }
-                                );
+                                functions.logger.error(`Error al enviar WhatsApp al número ${telefono}:`, whatsappError.response ? whatsappError.response.data : whatsappError.message);
                             }
                         }
-                        // Actualizamos el estado basado en los resultados
-                        if (successfulSends === telefonos.length) {
-                            whatsappStatus = "sent_all";
-                        } else if (successfulSends > 0) {
-                            whatsappStatus = "sent_partial";
-                        } else {
-                            whatsappStatus = "error";
-                        }
-
+                        whatsappStatus = successfulSends > 0 ? (successfulSends === telefonos.length ? 'sent_all' : 'sent_partial') : 'error';
                     } else {
-                        log("El cliente no tiene ningún número de teléfono registrado.");
                         whatsappStatus = "no_phone";
                     }
                 } else {
-                    log("No se encontró el documento del cliente para obtener el teléfono.");
                     whatsappStatus = "client_not_found";
                 }
             } catch (whatsappError) {
-                functions.logger.error(
-                    `[${remisionId}] Error general en el proceso de WhatsApp:`,
-                    {
-                        errorMessage: whatsappError.message,
-                    },
-                );
+                functions.logger.error(`Error general en el proceso de WhatsApp:`, whatsappError);
                 whatsappStatus = "error";
             }
 
@@ -553,6 +523,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
         }
     });
 
+// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/functions/index.js
 exports.onRemisionUpdate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onUpdate(async (change, context) => {
@@ -563,163 +534,107 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             functions.logger.log(`[Actualización ${remisionId}] ${message}`);
         };
 
-        // Función de notificaciones refactorizada para ser secuencial y más robusta
-        const sendNotifications = async (motivo, pdfUrlToSend) => {
+        const sendNotifications = async (motivo, pdfUrlToSend, pdfBuffer) => {
+            // Enviar correo
+            try {
+                let subject = '';
+                let htmlBody = '';
+
+                if (motivo === 'Anulación') {
+                    subject = `Anulación de Remisión N° ${afterData.numeroRemision}`;
+                    htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos una copia del documento anulado para tus registros.</p><p><strong>Prismacolor S.A.S.</strong></p>`;
+                } else if (motivo === 'Entrega') {
+                     subject = `Tu orden N° ${afterData.numeroRemision} ha sido entregada`;
+                     htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido completada y marcada como <strong>entregada</strong>.</p><p>Adjuntamos una copia final de la remisión para tus registros.</p><p>¡Gracias por tu preferencia!</p><p><strong>Prismacolor S.A.S.</strong></p>`;
+                }
+
+                const msg = {
+                    to: afterData.clienteEmail,
+                    from: FROM_EMAIL,
+                    subject: subject,
+                    html: htmlBody,
+                    attachments: [{
+                        content: pdfBuffer.toString("base64"),
+                        filename: `Remision-${motivo.toUpperCase()}-${afterData.numeroRemision}.pdf`,
+                        type: "application/pdf",
+                        disposition: "attachment",
+                    }],
+                };
+                await sgMail.send(msg);
+                log(`Correo de ${motivo} enviado.`);
+            } catch (error) {
+                 log(`Error al enviar correo de ${motivo}:`, error);
+            }
+
+            // Enviar WhatsApp
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(afterData.idCliente).get();
                 if (!clienteDoc.exists) {
-                    log(`Cliente ${afterData.idCliente} no encontrado para notificar (${motivo}).`);
+                    log(`Cliente no encontrado para notificar (${motivo}).`);
                     return;
                 }
-
                 const clienteData = clienteDoc.data();
                 const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
 
-                if (telefonos.length === 0) {
-                    log(`El cliente no tiene números para notificar (${motivo}).`);
-                    return;
+                for (const telefono of telefonos) {
+                   await sendWhatsAppRemision(telefono, afterData.clienteNombre, afterData.numeroRemision.toString(), afterData.estado, pdfUrlToSend);
+                   log(`WhatsApp de ${motivo} enviado a ${telefono}.`);
                 }
-
-                log(`Iniciando envío SECUENCIAL de notificaciones (${motivo}) a ${telefonos.length} número(s): [${telefonos.join(', ')}]`);
-
-                // Usamos un bucle for...of secuencial para garantizar que cada envío se complete
-                for (const [index, telefono] of telefonos.entries()) {
-                    log(`[Envío ${index + 1}/${telefonos.length}] Preparando para enviar a ${telefono}...`);
-                    try {
-                        // "await" aquí detiene el bucle hasta que este envío termine
-                        await sendWhatsAppRemision(
-                            telefono,
-                            afterData.clienteNombre,
-                            afterData.numeroRemision.toString(),
-                            afterData.estado,
-                            pdfUrlToSend
-                        );
-                        log(`[Envío ${index + 1}/${telefonos.length}] Éxito al enviar a ${telefono}.`);
-                    } catch (error) {
-                        functions.logger.error(
-                            `[${remisionId}] [Envío ${index + 1}/${telefonos.length}] Falló el envío de WhatsApp (${motivo}) al número ${telefono}:`,
-                            { errorMessage: error.message }
-                        );
-                    }
-                }
-                log(`Proceso de envío de notificaciones (${motivo}) completado.`);
-
             } catch (error) {
-                functions.logger.error(`Error crítico en la función sendNotifications (${motivo}):`, error);
+                functions.logger.error(`Error crítico en notificaciones WhatsApp (${motivo}):`, error);
             }
         };
 
-        // Disparador para anulación
-        // Disparador para anulación
-        if (beforeData.estado !== "Anulada" && afterData.estado === "Anulada") {
-            log("Detectada anulación. Generando PDF y enviando notificaciones.");
+        const regeneratePdfs = async (remisionData) => {
+            log("Regenerando PDFs para actualización...");
+            const pdfBuffer = generarPDF(remisionData, false);
+            const pdfPlantaBuffer = generarPDF(remisionData, true);
+            
+            const bucket = admin.storage().bucket(BUCKET_NAME);
+            
+            // Actualizamos los archivos en Storage, no es necesario cambiar las rutas en Firestore
+            const file = bucket.file(remisionData.pdfPath);
+            await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+            const filePlanta = bucket.file(remisionData.pdfPlantaPath);
+            await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+            
+            // Generamos una URL temporal para las notificaciones
+            const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+            
+            log("PDFs regenerados en Storage.");
+            return { pdfUrl: url, pdfBuffer: pdfBuffer };
+        };
+
+        // Disparador para anulación o entrega (donde se regenera el PDF y se notifica)
+        if ((beforeData.estado !== "Anulada" && afterData.estado === "Anulada") || (beforeData.estado !== "Entregado" && afterData.estado === "Entregado")) {
+            const motivo = afterData.estado === "Anulada" ? "Anulación" : "Entrega";
+            log(`Detectado cambio de estado a ${motivo}.`);
             try {
-                const pdfBuffer = generarPDF(afterData, false);
-                const bucket = admin.storage().bucket(BUCKET_NAME);
-                const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
-                await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-                const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-                await change.after.ref.update({ pdfUrl: url });
-
-                const pdfPlantaBuffer = generarPDF(afterData, true);
-                const filePlanta = bucket.file(`remisiones/planta-${afterData.numeroRemision}.pdf`);
-                await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-                const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
-                await change.after.ref.update({ pdfPlantaUrl: urlPlanta });
-
-                log("PDFs de anulación actualizados.");
-
-                const msg = {
-                    to: afterData.clienteEmail,
-                    from: FROM_EMAIL,
-                    subject: `Anulación de Remisión N° ${afterData.numeroRemision}`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos una copia del documento anulado para tus registros.</p><p><strong>Prismacolor S.A.S.</strong></p>`,
-                    attachments: [{
-                        content: pdfBuffer.toString("base64"),
-                        filename: `Remision-ANULADA-${afterData.numeroRemision}.pdf`,
-                        type: "application/pdf",
-                        disposition: "attachment",
-                    }],
-                };
-                await sgMail.send(msg);
-                await sendNotifications("Anulación", url);
-
+                const { pdfUrl, pdfBuffer } = await regeneratePdfs(afterData);
+                await sendNotifications(motivo, pdfUrl, pdfBuffer);
             } catch (error) {
-                functions.logger.error("Error al procesar anulación:", error);
+                functions.logger.error(`Error al procesar ${motivo}:`, error);
             }
         }
-
-        // Disparador para "Entregado"
-        if (beforeData.estado !== "Entregado" && afterData.estado === "Entregado") {
-            log("Detectado cambio a 'Entregado'. Generando PDF y enviando notificaciones.");
-            try {
-                const pdfBuffer = generarPDF(afterData, false);
-
-                const bucket = admin.storage().bucket(BUCKET_NAME);
-                const file = bucket.file(`remisiones/${afterData.numeroRemision}.pdf`);
-                await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-
-                const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-                await change.after.ref.update({ pdfUrl: url });
-                log(`PDF de entrega actualizado en Storage y Firestore.`);
-
-                // Enviar correo de entrega
-                const msg = {
-                    to: afterData.clienteEmail,
-                    from: FROM_EMAIL,
-                    subject: `Tu orden N° ${afterData.numeroRemision} ha sido entregada`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido completada y marcada como <strong>entregada</strong>.</p><p>Adjuntamos una copia final de la remisión para tus registros.</p><p>¡Gracias por tu preferencia!</p><p><strong>Prismacolor S.A.S.</strong></p>`,
-                    attachments: [{
-                        content: pdfBuffer.toString("base64"),
-                        filename: `Remision-ENTREGADA-${afterData.numeroRemision}.pdf`,
-                        type: "application/pdf",
-                        disposition: "attachment",
-                    }],
-                };
-                await sgMail.send(msg);
-                log(`Correo de entrega enviado a ${afterData.clienteEmail}.`);
-
-                // Enviar WhatsApp de entrega
-                await sendNotifications("Entrega", url);
-
-            } catch (error) {
-                functions.logger.error("Error al procesar entrega:", error);
-            }
-        }
-
-        // El resto de la función para PAGO FINAL se mantiene igual...
+        
+        // Disparador para pago final (también regenera PDF y notifica)
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
 
         if (totalPagadoAntes < afterData.valorTotal && totalPagadoDespues >= afterData.valorTotal) {
-            log("Detectado pago final. Generando PDF y enviando correo de confirmación.");
+            log("Detectado pago final. Regenerando PDF y enviando correo.");
             try {
                 const updatedRemisionData = { ...afterData, formaPago: "Cancelado" };
-                const pdfBuffer = generarPDF(updatedRemisionData, false);
-                log("PDF de pago final generado.");
+                const { pdfBuffer } = await regeneratePdfs(updatedRemisionData);
 
-                const bucket = admin.storage().bucket(BUCKET_NAME);
-                const filePath = `remisiones/${afterData.numeroRemision}.pdf`;
-                const file = bucket.file(filePath);
-                await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-                log(`PDF de pago final actualizado en Storage: ${filePath}`);
-
-                const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-                await change.after.ref.update({ pdfUrl: url, formaPago: "Cancelado" });
-                log("URL del PDF y forma de pago actualizados en Firestore.");
-
-                const ultimoPago = afterData.payments[afterData.payments.length - 1];
+                await change.after.ref.update({ formaPago: "Cancelado" });
 
                 const msg = {
                     to: afterData.clienteEmail,
                     from: FROM_EMAIL,
                     subject: `Confirmación de Pago Total - Remisión N° ${afterData.numeroRemision}`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p>
-                  <p>Hemos recibido el pago final para tu remisión N° <strong>${afterData.numeroRemision}</strong>.</p>
-                  <p>El valor total ha sido cancelado. Último pago registrado por ${ultimoPago.method}.</p>
-                  <p>Adjuntamos la remisión actualizada para tus registros.</p>
-                  <p>¡Gracias por tu confianza!</p>
-                  <p><strong>Prismacolor S.A.S.</strong></p>`,
+                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Hemos recibido el pago final para tu remisión N° <strong>${afterData.numeroRemision}</strong>. El valor total ha sido cancelado.</p><p>Adjuntamos la remisión actualizada.</p><p><strong>Prismacolor S.A.S.</strong></p>`,
                     attachments: [{
                         content: pdfBuffer.toString("base64"),
                         filename: `Remision-CANCELADA-${afterData.numeroRemision}.pdf`,
@@ -728,7 +643,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(msg);
-                log(`Correo de pago final enviado a ${afterData.clienteEmail}.`);
+                log(`Correo de pago final enviado.`);
             } catch (error) {
                 log("Error al procesar el pago final:", error);
             }
@@ -1025,4 +940,52 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
     }
 
     return { fixed, skipped, errors, total: remSnap.size };
+});
+
+
+// **** INICIO DE LA NUEVA FUNCIÓN ****
+/**
+ * Función invocable que recibe la ruta de un archivo en Storage
+ * y devuelve una URL firmada de corta duración (15 minutos).
+ */
+exports.getSignedUrlForPath = functions.https.onCall(async (data, context) => {
+    // Asegurarse de que el usuario esté autenticado.
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "El usuario debe estar autenticado para solicitar una URL."
+        );
+    }
+
+    const filePath = data.path;
+    if (!filePath) {
+        throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Se debe proporcionar la ruta del archivo."
+        );
+    }
+
+    try {
+        const bucket = admin.storage().bucket(BUCKET_NAME);
+        const file = bucket.file(filePath);
+
+        // Generar una URL que expira en 15 minutos.
+        // **** INICIO DEL CAMBIO ****
+        // Forzamos explícitamente el uso de la firma V4.
+        const [signedUrl] = await file.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 15 * 60 * 1000, // 15 minutos desde ahora
+            version: 'v4', // <-- ESTA LÍNEA ES LA SOLUCIÓN
+        });
+        // **** FIN DEL CAMBIO ****
+
+        return { url: signedUrl };
+
+    } catch (error) {
+        functions.logger.error(`Error al generar URL firmada para ${filePath}:`, error);
+        throw new functions.https.HttpsError(
+            "internal",
+            "No se pudo generar la URL para ver el archivo."
+        );
+    }
 });
