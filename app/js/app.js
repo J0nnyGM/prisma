@@ -136,6 +136,8 @@ function startApp() {
     // 4. Empezar a cargar los datos desde Firebase
     loadAllData();
 
+    loadSaldosBase(); // <--- Ahora se carga solo cuando el usuario está autenticado
+
     // 5. Inicializar los buscadores interactivos AHORA que todo está listo
     setupSearchInputs();
 
@@ -235,38 +237,6 @@ function updateUIVisibility(userData) {
     }
 }
 
-
-
-function loadInitialData() {
-    // Cargar plantillas HTML en las vistas
-    document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
-    // ... (El resto de innerHTML para las otras vistas se mantiene igual)
-
-    // El orden es importante: primero se actualiza la UI y luego se cargan los datos y listeners
-    updateUIVisibility(currentUserData);
-
-    if (currentUserData?.role === 'admin') {
-        const btnRepair = document.createElement('button');
-        btnRepair.textContent = 'Reparar PDFs (solo admin)';
-        btnRepair.className = 'bg-red-600 text-white px-4 py-2 rounded fixed bottom-4 right-4 z-50 shadow-lg';
-        btnRepair.onclick = () => {
-            const fn = httpsCallable(functions, 'repairSignedUrls');
-            fn({ fromDate: '2025-08-14' })
-                .then(r => alert(`Reparadas: ${r.data.fixed}, Errores: ${r.data.errors}`))
-                .catch(e => alert(`Error: ${e.message}`));
-        };
-        document.body.appendChild(btnRepair);
-    }
-
-    loadClientes();
-    loadProveedores();
-    loadItems();
-    loadColores();
-    loadRemisiones();
-    loadGastos();
-    if (currentUserData && currentUserData.role === 'admin') loadEmpleados();
-    setupEventListeners();
-}
 
 // --- LÓGICA DE LOGIN/REGISTRO/LOGOUT ---
 document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); });
@@ -593,56 +563,6 @@ function loadClientes() {
     return onSnapshot(q, (snapshot) => {
         allClientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderClientes();
-    });
-}
-// **** FUNCIÓN AÑADIDA QUE FALTABA ****
-function renderEmpleados(users) {
-    const empleadosListEl = document.getElementById('empleados-list');
-    if (!empleadosListEl) return;
-
-    empleadosListEl.innerHTML = '';
-    // Ordenar usuarios para mostrar los pendientes primero
-    users.sort((a, b) => {
-        if (a.status === 'pending' && b.status !== 'pending') return -1;
-        if (a.status !== 'pending' && b.status === 'pending') return 1;
-        return a.nombre.localeCompare(b.nombre);
-    });
-
-    users.filter(u => u.id !== currentUser.uid && u.status !== 'archived').forEach(empleado => {
-        const el = document.createElement('div');
-        let statusBadge = '';
-        let actionButtons = '';
-
-        switch (empleado.status) {
-            case 'pending':
-                statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Pendiente</span>`;
-                actionButtons = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white text-xs px-3 py-1 rounded-full hover:bg-green-600">Activar</button>`;
-                break;
-            case 'active':
-                statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Activo</span>`;
-                actionButtons = `<button data-uid="${empleado.id}" data-status="inactive" class="user-status-btn bg-yellow-500 text-white text-xs px-3 py-1 rounded-full hover:bg-yellow-600">Desactivar</button>`;
-                break;
-            case 'inactive':
-                statusBadge = `<span class="text-xs font-semibold bg-gray-200 text-gray-800 px-2 py-1 rounded-full">Inactivo</span>`;
-                actionButtons = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white text-xs px-3 py-1 rounded-full hover:bg-green-600">Activar</button>`;
-                break;
-        }
-
-        el.className = 'border p-3 rounded-lg';
-        el.innerHTML = `
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <div>
-                    <p class="font-semibold">${empleado.nombre} <span class="text-sm font-normal text-gray-500">(${empleado.role})</span></p>
-                    <p class="text-sm text-gray-600">${empleado.email}</p>
-                </div>
-                <div class="flex items-center gap-2 mt-2 sm:mt-0">
-                    ${statusBadge}
-                    ${actionButtons}
-                    <button data-uid="${empleado.id}" data-status="archived" class="user-status-btn bg-red-500 text-white text-xs px-3 py-1 rounded-full hover:bg-red-600">Archivar</button>
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white text-xs px-3 py-1 rounded-full hover:bg-blue-700">Gestionar</button>
-                </div>
-            </div>`;
-        empleadosListEl.appendChild(el);
     });
 }
 
@@ -986,38 +906,46 @@ function renderFacturacion() {
     if (realizadas.length === 0) {
         realizadasListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No hay remisiones facturadas.</p>';
     } else {
-        realizadas.forEach(remision => {
-            const el = document.createElement('div');
-            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
-            
-            // **** INICIO CORRECCIÓN AQUÍ ****
-            let facturaButtons = '';
-            if (remision.facturaPdfUrl) { // Las facturas sí pueden tener URL directa si son públicas
-                facturaButtons = `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">Ver Factura</button>`;
-            } else {
-                facturaButtons = `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600">Adjuntar Factura</button>`;
-            }
+realizadas.forEach(remision => {
+        const el = document.createElement('div');
+        el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
+        
+        // Calculamos pagos confirmados para saber si ya está pago total
+        const totalPagado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+        const saldoPendiente = remision.valorTotal - totalPagado;
 
-            el.innerHTML = `
-                <div class="flex-grow">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <span class="remision-id">N° ${remision.numeroRemision}</span>
-                        <p class="font-semibold text-lg">${remision.clienteNombre}</p>
-                    </div>
-                    <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
+        let actionButtons = '';
+        if (remision.facturaPdfUrl) { 
+            actionButtons += `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700 mr-2">Ver Factura</button>`;
+        } else {
+            actionButtons += `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-orange-600 mr-2">Adjuntar Factura</button>`;
+        }
+        
+        // BOTÓN NUEVO: Retención (Solo si hay saldo > 0 y no está anulada)
+        if (saldoPendiente > 0) {
+            actionButtons += `<button data-remision-json='${JSON.stringify(remision)}' class="retencion-btn bg-purple-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-purple-700 mr-2">Retenciones</button>`;
+        }
+
+        el.innerHTML = `
+            <div class="flex-grow">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <span class="remision-id">N° ${remision.numeroRemision}</span>
+                    <p class="font-semibold text-lg">${remision.clienteNombre}</p>
                 </div>
-                <div class="flex-shrink-0 flex items-center gap-2">
-                     <div class="text-right">
-                        <span class="status-badge status-entregado">Facturado</span>
-                        ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
-                    </div>
-                    ${facturaButtons}
-                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+                <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
+                ${saldoPendiente < remision.valorTotal ? `<p class="text-xs text-red-600 font-bold">Saldo: ${formatCurrency(saldoPendiente)}</p>` : ''}
+            </div>
+            <div class="flex-shrink-0 flex items-center flex-wrap gap-2">
+                 <div class="text-right mr-2">
+                    <span class="status-badge status-entregado">Facturado</span>
+                    ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
                 </div>
-            `;
-            // **** FIN CORRECCIÓN AQUÍ ****
-            realizadasListEl.appendChild(el);
-        });
+                ${actionButtons}
+                <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
+            </div>
+        `;
+        realizadasListEl.appendChild(el);
+    });
     }
 
     // **** INICIO CORRECCIÓN AQUÍ ****
@@ -1026,6 +954,14 @@ function renderFacturacion() {
         btn.addEventListener('click', (e) => {
             const remisionId = e.currentTarget.dataset.remisionId;
             showFacturaModal(remisionId);
+        });
+    });
+
+    // Agregar el listener para el nuevo botón al final de renderFacturacion
+    document.querySelectorAll('.retencion-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const remision = JSON.parse(e.currentTarget.dataset.remisionJson);
+            showRetencionModal(remision);
         });
     });
 
@@ -1401,7 +1337,39 @@ function createItemElement() {
 
     return itemRow;
 }
-function calcularTotales() { const itemsContainer = document.getElementById('items-container'); const ivaCheckbox = document.getElementById('incluir-iva'); const subtotalEl = document.getElementById('subtotal'); const valorIvaEl = document.getElementById('valor-iva'); const valorTotalEl = document.getElementById('valor-total'); if (!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return { subtotalGeneral: 0, valorIVA: 0, total: 0 }; let subtotalGeneral = 0; itemsContainer.querySelectorAll('.item-row').forEach(row => { const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0; const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value); subtotalGeneral += cantidad * valorUnitario; }); const incluyeIVA = ivaCheckbox.checked; const valorIVA = incluyeIVA ? subtotalGeneral * 0.19 : 0; const total = subtotalGeneral + valorIVA; subtotalEl.textContent = formatCurrency(subtotalGeneral); valorIvaEl.textContent = formatCurrency(valorIVA); valorTotalEl.textContent = formatCurrency(total); return { subtotalGeneral, valorIVA, total }; }
+
+function calcularTotales() {
+    const itemsContainer = document.getElementById('items-container');
+    const ivaCheckbox = document.getElementById('incluir-iva');
+    const subtotalEl = document.getElementById('subtotal');
+    const valorIvaEl = document.getElementById('valor-iva');
+    const valorTotalEl = document.getElementById('valor-total');
+
+    if (!itemsContainer || !ivaCheckbox || !subtotalEl || !valorIvaEl || !valorTotalEl) return { subtotalGeneral: 0, valorIVA: 0, total: 0 };
+
+    let subtotalGeneral = 0;
+    itemsContainer.querySelectorAll('.item-row').forEach(row => {
+        const cantidad = parseFloat(row.querySelector('.item-cantidad').value) || 0;
+        const valorUnitario = unformatCurrency(row.querySelector('.item-valor-unitario').value);
+        subtotalGeneral += cantidad * valorUnitario;
+    });
+
+    // Redondeamos el subtotal por si acaso
+    subtotalGeneral = Math.round(subtotalGeneral);
+
+    const incluyeIVA = ivaCheckbox.checked;
+    // AQUÍ ESTÁ EL CAMBIO CLAVE: Math.round() para eliminar decimales del IVA
+    const valorIVA = incluyeIVA ? Math.round(subtotalGeneral * 0.19) : 0;
+    
+    const total = subtotalGeneral + valorIVA;
+
+    subtotalEl.textContent = formatCurrency(subtotalGeneral);
+    valorIvaEl.textContent = formatCurrency(valorIVA);
+    valorTotalEl.textContent = formatCurrency(total);
+
+    return { subtotalGeneral, valorIVA, total };
+}
+
 function showEditClientModal(client) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Cliente</h2><form id="edit-client-form" class="space-y-4 text-left"><input type="hidden" id="edit-client-id" value="${client.id}"><div><label for="edit-client-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-client-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nombre}" required></div><div><label for="edit-client-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-client-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.email}" required></div><div><label for="edit-client-phone1" class="block text-sm font-medium text-gray-700">Teléfono 1</label><input type="tel" id="edit-client-phone1" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono1 || ''}" required></div><div><label for="edit-client-phone2" class="block text-sm font-medium text-gray-700">Teléfono 2</label><input type="tel" id="edit-client-phone2" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.telefono2 || ''}"></div><div><label for="edit-client-nit" class="block text-sm font-medium text-gray-700">NIT</label><input type="text" id="edit-client-nit" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${client.nit || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-client-form').addEventListener('submit', async (e) => { e.preventDefault(); const clientId = document.getElementById('edit-client-id').value; const updatedData = { nombre: document.getElementById('edit-client-name').value, email: document.getElementById('edit-client-email').value, telefono1: document.getElementById('edit-client-phone1').value, telefono2: document.getElementById('edit-client-phone2').value, nit: document.getElementById('edit-client-nit').value, }; showModalMessage("Actualizando cliente...", true); try { await updateDoc(doc(db, "clientes", clientId), updatedData); hideModal(); showModalMessage("¡Cliente actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar cliente:", error); showModalMessage("Error al actualizar."); } }); }
 function showEditProviderModal(provider) { const modalContentWrapper = document.getElementById('modal-content-wrapper'); modalContentWrapper.innerHTML = `<div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"><h2 class="text-xl font-semibold mb-4">Editar Proveedor</h2><form id="edit-provider-form" class="space-y-4 text-left"><input type="hidden" id="edit-provider-id" value="${provider.id}"><div><label for="edit-provider-name" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="edit-provider-name" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.nombre}" required></div><div><label for="edit-provider-contact" class="block text-sm font-medium text-gray-700">Contacto</label><input type="text" id="edit-provider-contact" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.contacto || ''}"></div><div><label for="edit-provider-phone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="edit-provider-phone" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.telefono || ''}"></div><div><label for="edit-provider-email" class="block text-sm font-medium text-gray-700">Correo</label><input type="email" id="edit-provider-email" class="w-full p-2 border border-gray-300 rounded-lg mt-1" value="${provider.email || ''}"></div><div class="flex gap-4 justify-end pt-4"><button type="button" id="cancel-edit-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold">Cancelar</button><button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Guardar Cambios</button></div></form></div>`; document.getElementById('modal').classList.remove('hidden'); document.getElementById('cancel-edit-btn').addEventListener('click', hideModal); document.getElementById('edit-provider-form').addEventListener('submit', async (e) => { e.preventDefault(); const providerId = document.getElementById('edit-provider-id').value; const updatedData = { nombre: document.getElementById('edit-provider-name').value, contacto: document.getElementById('edit-provider-contact').value, telefono: document.getElementById('edit-provider-phone').value, email: document.getElementById('edit-provider-email').value, }; showModalMessage("Actualizando proveedor...", true); try { await updateDoc(doc(db, "proveedores", providerId), updatedData); hideModal(); showModalMessage("¡Proveedor actualizado!", false, 2000); } catch (error) { console.error("Error al actualizar proveedor:", error); showModalMessage("Error al actualizar."); } }); }
 // REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/js/app.js
@@ -1635,6 +1603,11 @@ function showDashboardModal() {
                 <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
                     <h2 class="text-xl font-semibold">Resumen Financiero</h2>
                     <div class="flex items-center gap-4">
+                        ${!saldosYaConfigurados ? `
+                                <button id="btn-saldos-iniciales" onclick="showSaldosInicialesModal()" class="bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700 shadow-md flex items-center gap-2">
+                                    <i class="fas fa-coins"></i> Config. Saldos Iniciales
+                                </button>
+                            ` : ''}
                         <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
                         <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                     </div>
@@ -1777,7 +1750,110 @@ function showDashboardModal() {
     renderTopClientes();
 }
 
-function updateDashboard(year, month) { const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0); const expensesThisMonth = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0); document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth); document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth); document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth); const carteraThisMonth = allRemisiones.filter(r => { const d = new Date(r.fechaRecibido); return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada'; }).reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera').textContent = formatCurrency(carteraThisMonth); const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0); document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera); const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 }; allRemisiones.forEach(r => (r.payments || []).forEach(p => { if (accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; })); allGastos.forEach(g => { if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; }); document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo); document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi); document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda); const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]; const labels = []; const salesData = []; const expensesData = []; for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const m = d.getMonth(); const y = d.getFullYear(); labels.push(monthNames[m]); const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const pDate = new Date(p.date); return pDate.getMonth() === m && pDate.getFullYear() === y; }).reduce((sum, p) => sum + p.amount, 0); const monthlyExpenses = allGastos.filter(g => { const gDate = new Date(g.fecha); return gDate.getMonth() === m && gDate.getFullYear() === y; }).reduce((sum, g) => sum + g.valorTotal, 0); salesData.push(monthlySales); expensesData.push(monthlyExpenses); } const ctx = document.getElementById('profitLossChart').getContext('2d'); if (profitLossChart) { profitLossChart.destroy(); } profitLossChart = new Chart(ctx, { type: 'bar', data: { labels, datasets: [{ label: 'Ventas', data: salesData, backgroundColor: 'rgba(75, 192, 192, 0.6)' }, { label: 'Gastos', data: expensesData, backgroundColor: 'rgba(255, 99, 132, 0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } }); }
+function updateDashboard(year, month) {
+    // 1. Cálculos del mes seleccionado (Esto no cambia)
+    const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => {
+        const d = new Date(p.date);
+        return d.getMonth() === month && d.getFullYear() === year;
+    }).reduce((sum, p) => sum + p.amount, 0);
+
+    const expensesThisMonth = allGastos.filter(g => {
+        const d = new Date(g.fecha);
+        return d.getMonth() === month && d.getFullYear() === year;
+    }).reduce((sum, g) => sum + g.valorTotal, 0);
+
+    document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth);
+    document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth);
+    document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth);
+
+    const carteraThisMonth = allRemisiones.filter(r => {
+        const d = new Date(r.fechaRecibido);
+        return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada';
+    }).reduce((sum, r) => {
+        const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0);
+        const saldo = r.valorTotal - totalPagado;
+        return sum + (saldo > 0 ? saldo : 0);
+    }, 0);
+    document.getElementById('summary-cartera').textContent = formatCurrency(carteraThisMonth);
+
+    const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => {
+        const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0);
+        const saldo = r.valorTotal - totalPagado;
+        return sum + (saldo > 0 ? saldo : 0);
+    }, 0);
+    document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera);
+
+    // 2. CÁLCULO DE SALDOS TOTALES (AQUÍ ESTÁ LA CORRECCIÓN)
+    // Antes iniciábamos en 0. Ahora iniciamos con los Saldos Base cargados.
+    const accountBalances = { 
+        Efectivo: globalSaldosBase.Efectivo || 0, 
+        Nequi: globalSaldosBase.Nequi || 0, 
+        Davivienda: globalSaldosBase.Davivienda || 0 
+    };
+
+    // Sumar todas las entradas históricas
+    allRemisiones.forEach(r => (r.payments || []).forEach(p => {
+        if (accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount;
+    }));
+
+    // Restar todas las salidas históricas
+    allGastos.forEach(g => {
+        if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal;
+    });
+
+    document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo);
+    document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi);
+    document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda);
+
+    // 3. Gráficos (Esto no cambia)
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const labels = [];
+    const salesData = [];
+    const expensesData = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const m = d.getMonth();
+        const y = d.getFullYear();
+        labels.push(monthNames[m]);
+        const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => {
+            const pDate = new Date(p.date);
+            return pDate.getMonth() === m && pDate.getFullYear() === y;
+        }).reduce((sum, p) => sum + p.amount, 0);
+        const monthlyExpenses = allGastos.filter(g => {
+            const gDate = new Date(g.fecha);
+            return gDate.getMonth() === m && gDate.getFullYear() === y;
+        }).reduce((sum, g) => sum + g.valorTotal, 0);
+        salesData.push(monthlySales);
+        expensesData.push(monthlyExpenses);
+    }
+    const ctx = document.getElementById('profitLossChart').getContext('2d');
+    if (profitLossChart) {
+        profitLossChart.destroy();
+    }
+    profitLossChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Ventas',
+                data: salesData,
+                backgroundColor: 'rgba(75, 192, 192, 0.6)'
+            }, {
+                label: 'Gastos',
+                data: expensesData,
+                backgroundColor: 'rgba(255, 99, 132, 0.6)'
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
 
 function calculateOverdueDays(dateString) {
     const today = new Date();
@@ -1956,7 +2032,9 @@ function showModalMessage(message, isLoader = false, duration = 0) {
     }
 }
 function hideModal() { modal.classList.add('hidden'); }
-function formatCurrency(value) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value); }
+
+function formatCurrency(value) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value); }
+
 function populateDateFilters(prefix) {
     const monthSelect = document.getElementById(`${prefix}-month`);
     const yearSelect = document.getElementById(`${prefix}-year`);
@@ -2054,92 +2132,185 @@ function showReportDateRangeModal() {
         hideModal();
     });
 }
-function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
+
+async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
+    // Asegurarnos de tener los saldos base frescos
+    await loadSaldosBase(); 
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     const startDate = new Date(startYear, startMonth, 1);
-    const endDate = new Date(endYear, endMonth + 1, 0);
+    const endDate = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
 
     const rangeTitle = `${monthNames[startMonth]} ${startYear} - ${monthNames[endMonth]} ${endYear}`;
-    doc.setFontSize(20);
-    doc.text(`Reporte Financiero: ${rangeTitle}`, 105, 20, { align: "center" });
+    
+    doc.setFontSize(18);
+    doc.text(`Reporte Financiero Detallado`, 105, 20, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(rangeTitle, 105, 28, { align: "center" });
 
-    // Calculate totals for the entire period
-    const salesInRange = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d >= startDate && d <= endDate; }).reduce((sum, p) => sum + p.amount, 0);
-    const expensesInRange = allGastos.filter(g => { const d = new Date(g.fecha); return d >= startDate && d <= endDate; }).reduce((sum, g) => sum + g.valorTotal, 0);
-    const profitInRange = salesInRange - expensesInRange;
+    const allPayments = allRemisiones.flatMap(r => r.payments || []);
+    const bankAccounts = ['Efectivo', 'Nequi', 'Davivienda'];
+    const bankDetails = {};
+
+    bankAccounts.forEach(bank => {
+        // <--- CAMBIO IMPORTANTE:
+        // El saldo inicial empieza con lo que configuramos en la base de datos
+        bankDetails[bank] = {
+            initialBalance: globalSaldosBase[bank] || 0, // Inicia con el Saldo Base Configurado
+            income: 0,
+            expenses: 0,
+            finalBalance: 0
+        };
+    });
+
+    // Calcular Saldos Anteriores (Histórico antes de startDate)
+    // Sumar Ingresos previos
+    allPayments.forEach(p => {
+        const pDate = new Date(p.date);
+        pDate.setHours(0,0,0,0);
+        
+        if (pDate < startDate) {
+            // Si es un pago antiguo, se suma al saldo inicial del reporte
+            if (bankDetails[p.method]) bankDetails[p.method].initialBalance += p.amount;
+        } else if (pDate >= startDate && pDate <= endDate) {
+            // Si está en el rango, es ingreso del periodo
+            if (bankDetails[p.method]) bankDetails[p.method].income += p.amount;
+        }
+    });
+
+    // Sumar/Restar Gastos previos
+    allGastos.forEach(g => {
+        const gDate = new Date(g.fecha);
+        gDate.setHours(0,0,0,0);
+
+        if (gDate < startDate) {
+            // Si es gasto antiguo, se resta del saldo inicial
+            if (bankDetails[g.fuentePago]) bankDetails[g.fuentePago].initialBalance -= g.valorTotal;
+        } else if (gDate >= startDate && gDate <= endDate) {
+            // Si está en el rango, es gasto del periodo
+            if (bankDetails[g.fuentePago]) bankDetails[g.fuentePago].expenses += g.valorTotal;
+        }
+    });
+
+    // Calcular Saldos Finales
+    bankAccounts.forEach(bank => {
+        bankDetails[bank].finalBalance = bankDetails[bank].initialBalance + bankDetails[bank].income - bankDetails[bank].expenses;
+    });
+
+    // --- (El resto de la generación del PDF sigue igual, solo cambia el cálculo de arriba) ---
+
+    // TABLA 1: Resumen General
+    const totalIncome = Object.values(bankDetails).reduce((sum, b) => sum + b.income, 0);
+    const totalExpenses = Object.values(bankDetails).reduce((sum, b) => sum + b.expenses, 0);
+    const periodProfit = totalIncome - totalExpenses;
 
     const summaryData = [
-        ['Ventas Totales en el Período', formatCurrency(salesInRange)],
-        ['Gastos Totales en el Período', formatCurrency(expensesInRange)],
-        ['Utilidad/Pérdida Total', formatCurrency(profitInRange)],
+        ['Ventas (Ingresos) en el Período', formatCurrency(totalIncome)],
+        ['Gastos (Egresos) en el Período', formatCurrency(totalExpenses)],
+        ['Flujo Neto del Período', formatCurrency(periodProfit)],
     ];
 
     doc.autoTable({
-        startY: 30,
-        head: [['Resumen del Período', 'Valor']],
+        startY: 35,
+        head: [['Concepto General', 'Valor Total']],
         body: summaryData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185] }
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 11 }
     });
 
-    // Monthly breakdown
+    // TABLA 2: Conciliación Bancaria
+    const bankTableData = bankAccounts.map(bank => [
+        bank,
+        formatCurrency(bankDetails[bank].initialBalance),
+        formatCurrency(bankDetails[bank].income),
+        formatCurrency(bankDetails[bank].expenses),
+        formatCurrency(bankDetails[bank].finalBalance)
+    ]);
+
+    const totalInitial = Object.values(bankDetails).reduce((sum, b) => sum + b.initialBalance, 0);
+    const totalFinal = Object.values(bankDetails).reduce((sum, b) => sum + b.finalBalance, 0);
+    
+    bankTableData.push([
+        'TOTALES',
+        formatCurrency(totalInitial),
+        formatCurrency(totalIncome),
+        formatCurrency(totalExpenses),
+        formatCurrency(totalFinal)
+    ]);
+
+    doc.text(`Detalle de Movimientos por Banco`, 14, doc.lastAutoTable.finalY + 10);
+    
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 15,
+        head: [['Banco / Fuente', 'Saldo Anterior', 'Entradas (+)', 'Salidas (-)', 'Saldo Final']],
+        body: bankTableData,
+        theme: 'striped',
+        headStyles: { fillColor: [22, 160, 133] },
+        footStyles: { fillColor: [200, 200, 200], textColor: [0,0,0], fontStyle: 'bold' },
+        styles: { fontSize: 10, halign: 'right' },
+        columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } }
+    });
+
+    // TABLA 3: Mensual
     const monthlyData = [];
     let currentDate = new Date(startDate);
+    
     while (currentDate <= endDate) {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
         const monthName = monthNames[month];
 
-        const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => { const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, p) => sum + p.amount, 0);
-        const monthlyExpenses = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0);
-        const monthlyProfit = monthlySales - monthlyExpenses;
-        const endOfMonth = new Date(year, month + 1, 0);
-        const carteraAtEndOfMonth = allRemisiones.filter(r => new Date(r.fechaRecibido) <= endOfMonth && r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).filter(p => new Date(p.date) <= endOfMonth).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
+        const mSales = allPayments.filter(p => { 
+            const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; 
+        }).reduce((sum, p) => sum + p.amount, 0);
 
+        const mExpenses = allGastos.filter(g => { 
+            const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; 
+        }).reduce((sum, g) => sum + g.valorTotal, 0);
+
+        const mProfit = mSales - mExpenses;
+
+        const endOfThisMonth = new Date(year, month + 1, 0, 23, 59, 59);
+        const carteraAtEndOfMonth = allRemisiones.filter(r => 
+            new Date(r.fechaRecibido) <= endOfThisMonth && r.estado !== 'Anulada'
+        ).reduce((sum, r) => { 
+            const pagosHastaFecha = (r.payments || [])
+                .filter(p => new Date(p.date) <= endOfThisMonth)
+                .reduce((s, p) => s + p.amount, 0); 
+            const saldo = r.valorTotal - pagosHastaFecha; 
+            return sum + (saldo > 0 ? saldo : 0); 
+        }, 0);
 
         monthlyData.push([
             `${monthName} ${year}`,
-            formatCurrency(monthlySales),
-            formatCurrency(monthlyExpenses),
-            formatCurrency(monthlyProfit),
+            formatCurrency(mSales),
+            formatCurrency(mExpenses),
+            formatCurrency(mProfit),
             formatCurrency(carteraAtEndOfMonth)
         ]);
+        
         currentDate.setMonth(currentDate.getMonth() + 1);
     }
 
+    doc.text(`Evolución Mensual`, 14, doc.lastAutoTable.finalY + 10);
+
     doc.autoTable({
-        startY: doc.lastAutoTable.finalY + 10,
-        head: [['Mes', 'Ventas', 'Gastos', 'Utilidad/Pérdida', 'Cartera al Cierre']],
+        startY: doc.lastAutoTable.finalY + 15,
+        head: [['Mes', 'Ventas', 'Gastos', 'Utilidad', 'Cartera al Cierre']],
         body: monthlyData,
-        theme: 'striped',
-        headStyles: { fillColor: [22, 160, 133] }
-    });
-
-    const accountBalances = { Efectivo: 0, Nequi: 0, Davivienda: 0 };
-    allRemisiones.forEach(r => (r.payments || []).forEach(p => { if (accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount; }));
-    allGastos.forEach(g => { if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; });
-    const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0); const saldo = r.valorTotal - totalPagado; return sum + (saldo > 0 ? saldo : 0); }, 0);
-
-    const accountData = [
-        ['Efectivo', formatCurrency(accountBalances.Efectivo)],
-        ['Nequi', formatCurrency(accountBalances.Nequi)],
-        ['Davivienda', formatCurrency(accountBalances.Davivienda)],
-        ['Cartera Total Pendiente', formatCurrency(totalCartera)],
-    ];
-
-    doc.autoTable({
-        startY: doc.lastAutoTable.finalY + 10,
-        head: [['Saldos y Totales Actuales', 'Valor']],
-        body: accountData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185] }
+        headStyles: { fillColor: [44, 62, 80] },
+        styles: { fontSize: 10, halign: 'right' },
+        columnStyles: { 0: { halign: 'left' } }
     });
 
-    doc.save(`Reporte-Financiero-${startYear}-${startMonth + 1}_a_${endYear}-${endMonth + 1}.pdf`);
+    doc.save(`Reporte-Financiero-Completo-${startYear}_${startMonth+1}-a-${endYear}_${endMonth+1}.pdf`);
 }
+
 function showAdminEditUserModal(user) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const userPermissions = user.permissions || {};
@@ -2515,8 +2686,7 @@ function renderPagosTab(empleado, container) {
     });
 
     container.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="md:col-span-1 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-full"> <div class="md:col-span-1 space-y-4">
                      <div class="bg-gray-50 p-4 rounded-lg">
                         <h3 class="text-lg font-semibold mb-2">Liquidador Horas Extra</h3>
                         <div class="space-y-2">
@@ -2542,11 +2712,12 @@ function renderPagosTab(empleado, container) {
                         </form>
                     </div>
                 </div>
-                <div class="md:col-span-2">
-                    <h3 class="text-lg font-semibold mb-2">Historial de Pagos</h3>
-                    <div class="border rounded-lg max-h-96 overflow-y-auto">
+                <div class="md:col-span-2 flex flex-col h-full">
+                    <h3 class="text-lg font-semibold mb-2 flex-shrink-0">Historial de Pagos</h3>
+                    <div class="border rounded-lg h-[60vh] overflow-y-auto bg-white shadow-inner">
                         <table class="w-full text-sm">
-                            <thead class="bg-gray-100"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Motivo</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Fuente</th></tr></thead>
+                            <thead class="bg-gray-100 sticky top-0 shadow-sm"> <tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Motivo</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Fuente</th></tr>
+                            </thead>
                             <tbody id="rrhh-pagos-historial">${pagosHTML}</tbody>
                         </table>
                     </div>
@@ -3047,7 +3218,6 @@ async function downloadAllDocsAsZip(empleado) {
 
 function showDiscountModal(remision) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
-    // const maxDiscount = remision.subtotal * 0.05; // LÍNEA ELIMINADA
 
     modalContentWrapper.innerHTML = `
             <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
@@ -3081,9 +3251,6 @@ function showDiscountModal(remision) {
             showModalMessage("Por favor, ingresa un valor de descuento válido.");
             return;
         }
-
-        // --- CONDICIÓN ELIMINADA ---
-        // if (discountAmount > maxDiscount) { ... } ya no existe.
 
         const discountPercentage = (discountAmount / remision.subtotal) * 100;
 
@@ -3460,3 +3627,145 @@ function showAllLoansModal(requests) {
         btn.addEventListener('click', (e) => handleLoanAction(e.currentTarget.dataset.loanId, e.currentTarget.dataset.action));
     });
 }
+
+// --- Lógica para Retenciones ---
+
+const retencionModal = document.getElementById('retencion-modal');
+const retencionForm = document.getElementById('retencion-form');
+const retencionValorInput = document.getElementById('retencion-valor');
+
+// Formato de moneda para el input
+retencionValorInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+retencionValorInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+
+document.getElementById('close-retencion-modal').addEventListener('click', () => {
+    retencionModal.classList.add('hidden');
+});
+
+function showRetencionModal(remision) {
+    document.getElementById('retencion-remision-num').textContent = remision.numeroRemision;
+    document.getElementById('retencion-total-actual').textContent = formatCurrency(remision.valorTotal);
+    document.getElementById('retencion-remision-id').value = remision.id;
+    
+    retencionValorInput.value = '';
+    retencionModal.classList.remove('hidden');
+}
+
+retencionForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const remisionId = document.getElementById('retencion-remision-id').value;
+    // Ya no buscamos 'retencion-tipo' porque lo borramos del HTML
+    const valor = unformatCurrency(retencionValorInput.value);
+
+    if (valor <= 0) {
+        showModalMessage("El valor debe ser mayor a cero.");
+        return;
+    }
+
+    retencionModal.classList.add('hidden');
+    showModalMessage("Aplicando retención...", true);
+
+    try {
+        const applyRetentionFn = httpsCallable(functions, 'applyRetention');
+        // Solo enviamos el ID y el monto. El backend pondrá el nombre genérico.
+        const result = await applyRetentionFn({ 
+            remisionId: remisionId, 
+            amount: valor 
+        });
+
+        if (result.data.success) {
+            hideModal();
+            showModalMessage("Retención aplicada exitosamente.", false, 2000);
+        } else {
+            throw new Error(result.data.message);
+        }
+
+    } catch (error) {
+        console.error("Error al aplicar retención:", error);
+        hideModal();
+        showModalMessage("Error: " + error.message);
+    }
+});
+
+// --- Lógica de Saldos Iniciales ---
+let globalSaldosBase = { Efectivo: 0, Nequi: 0, Davivienda: 0 };
+let saldosYaConfigurados = false; // <--- NUEVA VARIABLE DE CONTROL
+
+// Cargar saldos al iniciar la app
+async function loadSaldosBase() {
+    try {
+        const docRef = doc(db, 'configuracion', 'saldos_globales');
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            globalSaldosBase = docSnap.data();
+            saldosYaConfigurados = true; // <--- SI EXISTE EL DOC, MARCAMOS COMO TRUE
+        }
+    } catch (error) {
+        console.error("Error cargando saldos base:", error);
+    }
+}
+
+
+function showSaldosInicialesModal() {
+    // Poner valores actuales en los inputs
+    document.getElementById('saldo-base-efectivo').value = formatCurrency(globalSaldosBase.Efectivo || 0);
+    document.getElementById('saldo-base-nequi').value = formatCurrency(globalSaldosBase.Nequi || 0);
+    document.getElementById('saldo-base-davivienda').value = formatCurrency(globalSaldosBase.Davivienda || 0);
+    
+    document.getElementById('saldos-iniciales-modal').classList.remove('hidden');
+}
+
+document.getElementById('close-saldos-modal').addEventListener('click', () => {
+    document.getElementById('saldos-iniciales-modal').classList.add('hidden');
+});
+
+document.getElementById('saldos-iniciales-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const nuevosSaldos = {
+        Efectivo: unformatCurrency(document.getElementById('saldo-base-efectivo').value),
+        Nequi: unformatCurrency(document.getElementById('saldo-base-nequi').value),
+        Davivienda: unformatCurrency(document.getElementById('saldo-base-davivienda').value)
+    };
+
+    showModalMessage("Guardando saldos...", true);
+    
+    try {
+        const docRef = doc(db, 'configuracion', 'saldos_globales');
+        await setDoc(docRef, nuevosSaldos);
+        
+        globalSaldosBase = nuevosSaldos;
+        saldosYaConfigurados = true; // <--- Actualizamos la variable global
+
+        // Ocultar modal y mensaje de éxito
+        document.getElementById('saldos-iniciales-modal').classList.add('hidden');
+        showModalMessage("Saldos actualizados. El botón de configuración ha desaparecido.", false, 3000);
+
+        // --- MAGIA: Eliminar el botón visualmente al instante ---
+        const btnBoton = document.getElementById('btn-saldos-iniciales');
+        if (btnBoton) {
+            btnBoton.remove(); // Adiós botón
+        }
+        
+        // Actualizamos los números del dashboard para reflejar el cambio inmediatamente
+        const monthSelect = document.getElementById('summary-month');
+        const yearSelect = document.getElementById('summary-year');
+        if (monthSelect && yearSelect) {
+             updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
+        }
+
+    } catch (error) {
+        console.error(error);
+        showModalMessage("Error guardando saldos.");
+    }
+});
+
+// --- EXPOSICIÓN GLOBAL DE FUNCIONES ---
+// Esto permite que el onclick="" del HTML encuentre las funciones JS
+window.showSaldosInicialesModal = showSaldosInicialesModal;
+
+// También necesitamos estas dos para que funcionen los inputs del modal (onfocus/onblur)
+window.unformatCurrencyInput = unformatCurrencyInput; 
+window.formatCurrencyInput = formatCurrencyInput;

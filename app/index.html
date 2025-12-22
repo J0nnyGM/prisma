@@ -215,6 +215,55 @@
             </div>
         </div>
     </div>
+
+    <div id="retencion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Aplicar Retención</h2>
+            <button id="close-retencion-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 mb-2">Remisión N°: <span id="retencion-remision-num" class="font-bold"></span></p>
+        <p class="text-sm text-gray-600 mb-4">Total Actual: <span id="retencion-total-actual" class="font-bold"></span></p>
+        
+        <form id="retencion-form" class="space-y-4">
+            <input type="hidden" id="retencion-remision-id">
+            
+            <div>
+                <label for="retencion-valor" class="block text-sm font-medium">Valor a Descontar</label>
+                <input type="text" id="retencion-valor" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required placeholder="0">
+            </div>
+            <button type="submit" class="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700">Aplicar Retención</button>
+        </form>
+    </div>
+</div>
+
+<div id="saldos-iniciales-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Saldos Base (Iniciales)</h2>
+            <button id="close-saldos-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">Ingresa el dinero que existía antes de usar el sistema. Esto ajustará los totales bancarios.</p>
+        
+        <form id="saldos-iniciales-form" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium">Efectivo Base</label>
+                <input type="text" id="saldo-base-efectivo" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Nequi Base</label>
+                <input type="text" id="saldo-base-nequi" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Davivienda Base</label>
+                <input type="text" id="saldo-base-davivienda" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+            </div>
+            
+            <button type="submit" class="w-full bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700">Guardar Saldos</button>
+        </form>
+    </div>
+</div>
+
 </body>
 
 </html>

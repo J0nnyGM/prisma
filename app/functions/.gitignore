@@ -1,3 +1,5 @@
 node_modules/
 *.local
 subirjs/
+config_backup.json
+.env

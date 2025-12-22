@@ -1,155 +1,58 @@
-/**
- * Este es el código para tus Firebase Functions.
- * Debes desplegarlo usando Firebase CLI.
- */
+require('dotenv').config();
+
 const functions = require("firebase-functions");
 const cors = require("cors")({ origin: true });
 const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
 const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
-const axios = require("axios"); // Importar axios
+const axios = require("axios");
 
 admin.initializeApp();
 
-// **** INICIO DE LA NUEVA FUNCIÓN ****
-/**
- * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
- * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
- */
-exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-    const usersCollection = admin.firestore().collection("users");
-
-    // Revisa cuántos documentos hay en la colección de usuarios.
-    const snapshot = await usersCollection.limit(2).get();
-
-    // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
-    if (snapshot.size === 1) {
-        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
-        // Actualiza el documento del usuario para cambiar su rol y estado.
-        return usersCollection.doc(user.uid).update({
-            role: "admin",
-            status: "active",
-            "permissions.facturacion": true,
-            "permissions.clientes": true,
-            "permissions.items": true,
-            "permissions.colores": true,
-            "permissions.gastos": true,
-            "permissions.proveedores": true,
-            "permissions.empleados": true,
-        });
-    }
-
-    functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
-    return null; // No hace nada para los siguientes usuarios.
-});
+// --- CONFIGURACIÓN CON VARIABLES DE ENTORNO (.ENV) ---
 
 // Configurar SendGrid
-const SENDGRID_API_KEY = functions.config().sendgrid.key;
-const FROM_EMAIL = functions.config().sendgrid.from_email;
-sgMail.setApiKey(SENDGRID_API_KEY);
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL;
 
-// --- NUEVO: Configuración de WhatsApp ---
-const WHATSAPP_TOKEN = functions.config().whatsapp.token;
-const WHATSAPP_PHONE_NUMBER_ID = functions.config().whatsapp.phone_number_id;
+if (SENDGRID_API_KEY) {
+    // Limpiamos la clave por si se colaron espacios o comillas del .env
+    const cleanKey = SENDGRID_API_KEY.replace(/['"\s]/g, '');
+    try {
+        sgMail.setApiKey(cleanKey);
+    } catch (error) {
+        console.error("Error configurando API Key de SendGrid:", error.message);
+    }
+} else {
+    console.warn("ADVERTENCIA: No se encontró SENDGRID_API_KEY en el archivo .env");
+}
+
+// Configuración de WhatsApp
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 
-// **** INICIO DE LA NUEVA FUNCIÓN ****
-/**
- * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
- * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin'.
- */
-exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-    const usersCollection = admin.firestore().collection("users");
 
-    // Revisa cuántos documentos hay en la colección de usuarios.
-    const snapshot = await usersCollection.limit(2).get();
-
-    // Si solo hay 1 documento (el que se acaba de crear), es el primer usuario.
-    if (snapshot.size === 1) {
-        functions.logger.log(`Asignando rol de 'admin' al primer usuario: ${user.uid}`);
-        // Actualiza el documento del usuario para cambiar su rol a 'admin'.
-        return usersCollection.doc(user.uid).update({
-            role: "admin",
-            "permissions.facturacion": true,
-            "permissions.clientes": true,
-            "permissions.items": true,
-            "permissions.colores": true,
-            "permissions.gastos": true,
-            "permissions.proveedores": true,
-            "permissions.empleados": true,
-        });
-    }
-
-    functions.logger.log(`Asignando rol de 'planta' al nuevo usuario: ${user.uid}`);
-    return null; // No hace nada para los siguientes usuarios.
-});
-
-// **** INICIO DE LA NUEVA FUNCIÓN ****
-/**
- * Se activa cuando un nuevo usuario se crea en Firebase Authentication.
- * Revisa si es el primer usuario y, si es así, le asigna el rol de 'admin' y lo activa.
- */
-exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
-    const usersCollection = admin.firestore().collection("users");
-
-    // Revisa cuántos documentos hay en la colección de usuarios.
-    const snapshot = await usersCollection.limit(2).get();
-
-    // Si solo hay 1 documento (el que se acaba de crear en el app.js), es el primer usuario.
-    if (snapshot.size === 1) {
-        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
-        // Actualiza el documento del usuario para cambiar su rol y estado.
-        return usersCollection.doc(user.uid).update({
-            role: "admin",
-            status: "active",
-            "permissions.facturacion": true,
-            "permissions.clientes": true,
-            "permissions.items": true,
-            "permissions.colores": true,
-            "permissions.gastos": true,
-            "permissions.proveedores": true,
-            "permissions.empleados": true,
-        });
-    }
-
-    functions.logger.log(`El nuevo usuario ${user.uid} se ha registrado con rol 'planta' y estado 'pending'.`);
-    return null; // No hace nada para los siguientes usuarios.
-});
+// ==========================================
+//              FUNCIONES ÚTILES
+// ==========================================
 
 /**
  * Formatea un número como moneda colombiana (COP).
- * @param {number} value El valor numérico a formatear.
- * @return {string} El valor formateado como moneda.
  */
 function formatCurrency(value) {
     return new Intl.NumberFormat("es-CO", {
         style: "currency",
         currency: "COP",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
     }).format(value || 0);
 }
 
-// Función HTTP que devuelve la configuración de Firebase del lado del cliente.
-exports.getFirebaseConfig = functions.https.onRequest((request, response) => {
-    // Usamos cors para permitir que tu página web llame a esta función.
-    cors(request, response, () => {
-        // Verifica que la configuración exista antes de enviarla.
-        if (!functions.config().prisma) {
-            return response.status(500).json({
-                error: "La configuración de Firebase no está definida en el servidor.",
-            });
-        }
-        // Envía la configuración como una respuesta JSON.
-        return response.status(200).json(functions.config().prisma);
-    });
-});
-
 /**
- * --- NUEVO: Formatea un número de teléfono de Colombia al formato E.164. ---
- * @param {string} phone El número de teléfono.
- * @return {string|null} El número formateado o null si es inválido.
+ * Formatea un número de teléfono de Colombia al formato E.164.
  */
 function formatColombianPhone(phone) {
     if (!phone || typeof phone !== "string") {
@@ -188,10 +91,8 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
         to: formattedPhone,
         type: "template",
         template: {
-            name: "envio_remision", // Asegúrate que este sea el nombre de tu plantilla aprobada
-            language: {
-                code: "es",
-            },
+            name: "envio_remision", 
+            language: { code: "es" },
             components: [
                 {
                     type: "header",
@@ -217,9 +118,6 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
         },
     };
 
-    console.log("Token que se está usando para WhatsApp:", WHATSAPP_TOKEN);
-
-
     const headers = {
         "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
         "Content-Type": "application/json",
@@ -228,18 +126,16 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
     return axios.post(url, payload, { headers });
 }
 
-
 /**
  * Función para generar un PDF de la remisión.
  * @param {object} remision El objeto con los datos de la remisión.
  * @param {boolean} isForPlanta Indica si el PDF es para el rol de planta.
  * @return {Buffer} El PDF como un buffer de datos.
  */
-function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
-    // A PARTIR DE TU CÓDIGO, LAS VARIABLES INTERNAS SON 'remision' y 'isForPlanta'
+function generarPDF(remisionData, esPlanta) {
     const remision = remisionData; 
     const isForPlanta = esPlanta;
-
+    
     // eslint-disable-next-line new-cap
     const doc = new jsPDF();
 
@@ -281,7 +177,6 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
         doc.text(remision.clienteEmail, 40, 61);
     }
 
-
     doc.setFont("helvetica", "bold");
     doc.text("Fecha Recibido:", 130, 55);
     doc.setFont("helvetica", "normal");
@@ -316,21 +211,17 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
     const finalY = doc.lastAutoTable.finalY;
     let yPos = finalY + 10;
 
-    // --- INICIO DEL BLOQUE AÑADIDO PARA OBSERVACIONES ---
+    // Observaciones
     if (remision.observaciones && remision.observaciones.trim() !== "") {
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
         doc.text("Observaciones:", 20, yPos);
         
         doc.setFont("helvetica", "normal");
-        // 'splitTextToSize' divide el texto largo en múltiples líneas automáticamente
-        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170); // 170 es el ancho del texto
+        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170);
         doc.text(textoObservaciones, 20, yPos + 5);
-        
-        // Ajustamos la posición 'y' para el contenido que sigue
         yPos += (textoObservaciones.length * 5) + 5; 
     }
-    // --- FIN DEL BLOQUE AÑADIDO ---
 
     if (!isForPlanta) {
         doc.setFontSize(12);
@@ -367,7 +258,7 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
         doc.text(`Estado: ${remision.estado}`, 20, yPos);
     }
 
-    // Signature Line
+    // Firma
     yPos = Math.max(yPos, finalY + 20);
     yPos = 250;
     doc.line(40, yPos, 120, yPos);
@@ -375,8 +266,7 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
     doc.setFont("helvetica", "normal");
     doc.text("Firma y Sello de Recibido", 75, yPos + 5, { align: "center" });
 
-
-    // Footer Note
+    // Footer
     doc.setLineCap(2);
     doc.line(20, 270, 190, 270);
     const footerText1 = "NO SE ENTREGA TRABAJO SINO HA SIDO CANCELADO.";
@@ -389,7 +279,42 @@ function generarPDF(remisionData, esPlanta, observacionesHtml = '') {
     return Buffer.from(doc.output("arraybuffer"));
 }
 
-// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/functions/index.js
+
+// ==========================================
+//              TRIGGERS DE FIRESTORE
+// ==========================================
+
+/**
+ * Se activa al crear un nuevo usuario.
+ * Asigna rol 'admin' al primero, 'planta' a los demás.
+ */
+exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+    const usersCollection = admin.firestore().collection("users");
+    const snapshot = await usersCollection.limit(2).get();
+
+    // Si es el primer usuario, lo hacemos admin y lo activamos
+    if (snapshot.size === 1) {
+        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
+        return usersCollection.doc(user.uid).update({
+            role: "admin",
+            status: "active",
+            "permissions.facturacion": true,
+            "permissions.clientes": true,
+            "permissions.items": true,
+            "permissions.colores": true,
+            "permissions.gastos": true,
+            "permissions.proveedores": true,
+            "permissions.empleados": true,
+        });
+    }
+
+    functions.logger.log(`Nuevo usuario ${user.uid} registrado como 'planta' (pending).`);
+    return null;
+});
+
+/**
+ * Trigger al CREAR Remisión: Genera PDFs, guarda rutas y envía notificaciones.
+ */
 exports.onRemisionCreate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onCreate(async (snap, context) => {
@@ -397,16 +322,12 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
         const remisionId = context.params.remisionId;
         const log = (message) => functions.logger.log(`[${remisionId}] ${message}`);
 
-        log("Ejecutando con guardado de rutas y URL firmada temporal");
-
         let emailStatus = "pending";
         let whatsappStatus = "pending";
 
         try {
             const pdfBuffer = generarPDF(remisionData, false);
-            log("PDF de cliente generado.");
             const pdfPlantaBuffer = generarPDF(remisionData, true);
-            log("PDF de planta generado.");
 
             const bucket = admin.storage().bucket(BUCKET_NAME);
             
@@ -418,20 +339,19 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             const filePlanta = bucket.file(filePathPlanta);
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
             
-            // Guardamos solo la RUTA, no la URL completa
             await snap.ref.update({ 
                 pdfPath: filePath, 
                 pdfPlantaPath: filePathPlanta 
             });
-            log("Rutas de los PDFs guardadas en Firestore.");
 
-            // Para el envío de notificaciones, generamos una URL temporal que dura 7 días
+            // URL firmada v4 para enviar en las notificaciones
             const [url] = await file.getSignedUrl({ 
                 action: "read", 
-                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, 
+                version: 'v4'
             });
 
-            // --- Lógica de envío de Correo Electrónico ---
+            // Enviar Correo Cliente
             try {
                 const msg = {
                     to: remisionData.clienteEmail,
@@ -446,14 +366,13 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(msg);
-                log(`Correo enviado exitosamente a ${remisionData.clienteEmail}.`);
                 emailStatus = "sent";
             } catch (emailError) {
-                log("Error al enviar correo:", emailError);
+                log("Error correo cliente: " + emailError.message);
                 emailStatus = "error";
             }
 
-            // --- Lógica de envío a Impresora ---
+            // Enviar a Impresora
             try {
                 const printerMsg = {
                     to: "oficinavidriosexito@print.brother.com",
@@ -468,12 +387,12 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(printerMsg);
-                log(`Copia de remisión enviada a la impresora.`);
+                log(`Copia impresora enviada.`);
             } catch (printerError) {
-                log("Error al enviar a la impresora:", printerError);
+                log("Error impresora: " + printerError.message);
             }
 
-            // --- Lógica de envío de WhatsApp ---
+            // Enviar WhatsApp
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
                 if (clienteDoc.exists) {
@@ -481,7 +400,6 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                     const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
 
                     if (telefonos.length > 0) {
-                        let successfulSends = 0;
                         for (const telefono of telefonos) {
                             try {
                                 await sendWhatsAppRemision(
@@ -489,23 +407,19 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                                     remisionData.clienteNombre,
                                     remisionData.numeroRemision.toString(),
                                     remisionData.estado,
-                                    url // Usamos la URL temporal para la notificación
+                                    url
                                 );
-                                log(`Mensaje de WhatsApp enviado exitosamente a ${telefono}.`);
-                                successfulSends++;
                             } catch (whatsappError) {
-                                functions.logger.error(`Error al enviar WhatsApp al número ${telefono}:`, whatsappError.response ? whatsappError.response.data : whatsappError.message);
+                                functions.logger.error(`Error WhatsApp ${telefono}:`, whatsappError.response ? whatsappError.response.data : whatsappError.message);
                             }
                         }
-                        whatsappStatus = successfulSends > 0 ? (successfulSends === telefonos.length ? 'sent_all' : 'sent_partial') : 'error';
+                        whatsappStatus = "sent";
                     } else {
                         whatsappStatus = "no_phone";
                     }
-                } else {
-                    whatsappStatus = "client_not_found";
                 }
             } catch (whatsappError) {
-                functions.logger.error(`Error general en el proceso de WhatsApp:`, whatsappError);
+                functions.logger.error(`Error proceso WhatsApp:`, whatsappError);
                 whatsappStatus = "error";
             }
 
@@ -515,37 +429,32 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             });
 
         } catch (error) {
-            functions.logger.error(`[${remisionId}] Error General:`, error);
-            return snap.ref.update({
-                emailStatus: "error",
-                whatsappStatus: "error",
-            });
+            functions.logger.error(`[${remisionId}] Error General Create:`, error);
+            return snap.ref.update({ emailStatus: "error", whatsappStatus: "error" });
         }
     });
 
-// REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/functions/index.js
+/**
+ * Trigger al ACTUALIZAR Remisión: Detecta cambios de estado (Anulada/Entregado) o pagos totales.
+ */
 exports.onRemisionUpdate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onUpdate(async (change, context) => {
         const beforeData = change.before.data();
         const afterData = change.after.data();
         const remisionId = context.params.remisionId;
-        const log = (message) => {
-            functions.logger.log(`[Actualización ${remisionId}] ${message}`);
-        };
+        const log = (message) => functions.logger.log(`[Upd ${remisionId}] ${message}`);
 
         const sendNotifications = async (motivo, pdfUrlToSend, pdfBuffer) => {
-            // Enviar correo
+            // Correo
             try {
-                let subject = '';
-                let htmlBody = '';
-
+                let subject = '', htmlBody = '';
                 if (motivo === 'Anulación') {
                     subject = `Anulación de Remisión N° ${afterData.numeroRemision}`;
-                    htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos una copia del documento anulado para tus registros.</p><p><strong>Prismacolor S.A.S.</strong></p>`;
+                    htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos copia.</p>`;
                 } else if (motivo === 'Entrega') {
                      subject = `Tu orden N° ${afterData.numeroRemision} ha sido entregada`;
-                     htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido completada y marcada como <strong>entregada</strong>.</p><p>Adjuntamos una copia final de la remisión para tus registros.</p><p>¡Gracias por tu preferencia!</p><p><strong>Prismacolor S.A.S.</strong></p>`;
+                     htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido marcada como <strong>entregada</strong>.</p><p>Adjuntamos remisión final.</p>`;
                 }
 
                 const msg = {
@@ -555,86 +464,68 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     html: htmlBody,
                     attachments: [{
                         content: pdfBuffer.toString("base64"),
-                        filename: `Remision-${motivo.toUpperCase()}-${afterData.numeroRemision}.pdf`,
+                        filename: `Remision-${motivo}-${afterData.numeroRemision}.pdf`,
                         type: "application/pdf",
                         disposition: "attachment",
                     }],
                 };
                 await sgMail.send(msg);
-                log(`Correo de ${motivo} enviado.`);
-            } catch (error) {
-                 log(`Error al enviar correo de ${motivo}:`, error);
-            }
+            } catch (error) { log(`Error correo ${motivo}: ${error.message}`); }
 
-            // Enviar WhatsApp
+            // WhatsApp
             try {
                 const clienteDoc = await admin.firestore().collection("clientes").doc(afterData.idCliente).get();
-                if (!clienteDoc.exists) {
-                    log(`Cliente no encontrado para notificar (${motivo}).`);
-                    return;
+                if (clienteDoc.exists) {
+                    const cData = clienteDoc.data();
+                    const telefonos = [cData.telefono1, cData.telefono2].filter(Boolean);
+                    for (const tel of telefonos) {
+                        await sendWhatsAppRemision(tel, afterData.clienteNombre, afterData.numeroRemision.toString(), afterData.estado, pdfUrlToSend);
+                    }
                 }
-                const clienteData = clienteDoc.data();
-                const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
-
-                for (const telefono of telefonos) {
-                   await sendWhatsAppRemision(telefono, afterData.clienteNombre, afterData.numeroRemision.toString(), afterData.estado, pdfUrlToSend);
-                   log(`WhatsApp de ${motivo} enviado a ${telefono}.`);
-                }
-            } catch (error) {
-                functions.logger.error(`Error crítico en notificaciones WhatsApp (${motivo}):`, error);
-            }
+            } catch (error) { log(`Error WhatsApp ${motivo}: ${error.message}`); }
         };
 
-        const regeneratePdfs = async (remisionData) => {
-            log("Regenerando PDFs para actualización...");
-            const pdfBuffer = generarPDF(remisionData, false);
-            const pdfPlantaBuffer = generarPDF(remisionData, true);
-            
+        const regeneratePdfs = async (rData) => {
+            const pdfBuffer = generarPDF(rData, false);
+            const pdfPlantaBuffer = generarPDF(rData, true);
             const bucket = admin.storage().bucket(BUCKET_NAME);
             
-            // Actualizamos los archivos en Storage, no es necesario cambiar las rutas en Firestore
-            const file = bucket.file(remisionData.pdfPath);
+            const file = bucket.file(rData.pdfPath);
             await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
 
-            const filePlanta = bucket.file(remisionData.pdfPlantaPath);
+            const filePlanta = bucket.file(rData.pdfPlantaPath);
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
             
-            // Generamos una URL temporal para las notificaciones
-            const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-            
-            log("PDFs regenerados en Storage.");
+            const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000, version: 'v4' });
             return { pdfUrl: url, pdfBuffer: pdfBuffer };
         };
 
-        // Disparador para anulación o entrega (donde se regenera el PDF y se notifica)
+        // 1. Cambio de Estado (Anulada / Entregado)
         if ((beforeData.estado !== "Anulada" && afterData.estado === "Anulada") || (beforeData.estado !== "Entregado" && afterData.estado === "Entregado")) {
             const motivo = afterData.estado === "Anulada" ? "Anulación" : "Entrega";
-            log(`Detectado cambio de estado a ${motivo}.`);
             try {
                 const { pdfUrl, pdfBuffer } = await regeneratePdfs(afterData);
                 await sendNotifications(motivo, pdfUrl, pdfBuffer);
-            } catch (error) {
-                functions.logger.error(`Error al procesar ${motivo}:`, error);
-            }
+            } catch (e) { log(`Error procesando ${motivo}: ${e}`); }
         }
         
-        // Disparador para pago final (también regenera PDF y notifica)
+        // 2. Pago Final
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
 
         if (totalPagadoAntes < afterData.valorTotal && totalPagadoDespues >= afterData.valorTotal) {
-            log("Detectado pago final. Regenerando PDF y enviando correo.");
+            log("Pago final detectado.");
             try {
-                const updatedRemisionData = { ...afterData, formaPago: "Cancelado" };
-                const { pdfBuffer } = await regeneratePdfs(updatedRemisionData);
+                const updatedData = { ...afterData, formaPago: "Cancelado" };
+                const { pdfBuffer } = await regeneratePdfs(updatedData);
 
                 await change.after.ref.update({ formaPago: "Cancelado" });
 
                 const msg = {
                     to: afterData.clienteEmail,
                     from: FROM_EMAIL,
-                    subject: `Confirmación de Pago Total - Remisión N° ${afterData.numeroRemision}`,
-                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Hemos recibido el pago final para tu remisión N° <strong>${afterData.numeroRemision}</strong>. El valor total ha sido cancelado.</p><p>Adjuntamos la remisión actualizada.</p><p><strong>Prismacolor S.A.S.</strong></p>`,
+                    subject: `Pago Total Confirmado - Remisión N° ${afterData.numeroRemision}`,
+                    html: `<p>Hola ${afterData.clienteNombre},</p><p>Hemos recibido el pago final. Remisión cancelada.</p>`,
                     attachments: [{
                         content: pdfBuffer.toString("base64"),
                         filename: `Remision-CANCELADA-${afterData.numeroRemision}.pdf`,
@@ -643,58 +534,97 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(msg);
-                log(`Correo de pago final enviado.`);
-            } catch (error) {
-                log("Error al procesar el pago final:", error);
-            }
+            } catch (e) { log(`Error pago final: ${e}`); }
         }
 
         return null;
     });
 
-// Función HTTP invocable que devuelve la configuración de Firebase del lado del cliente.
+/**
+ * Trigger para Reenviar Correo manualmente (desde un botón en el front).
+ */
+exports.onResendEmailRequest = functions.region("us-central1").firestore
+    .document("resendQueue/{queueId}")
+    .onCreate(async (snap, context) => {
+        const request = snap.data();
+        try {
+            const remisionDoc = await admin.firestore().collection("remisiones").doc(request.remisionId).get();
+            if (!remisionDoc.exists) return snap.ref.delete();
+            
+            const rData = remisionDoc.data();
+            const bucket = admin.storage().bucket(BUCKET_NAME);
+            const [pdfBuffer] = await bucket.file(rData.pdfPath).download();
+
+            const msg = {
+                to: rData.clienteEmail,
+                from: FROM_EMAIL,
+                subject: `[Reenvío] Remisión N° ${rData.numeroRemision}`,
+                html: `<p>Hola ${rData.clienteNombre},</p><p>Aquí tienes la copia solicitada.</p>`,
+                attachments: [{
+                    content: pdfBuffer.toString("base64"),
+                    filename: `Remision-${rData.numeroRemision}.pdf`,
+                    type: "application/pdf",
+                    disposition: "attachment",
+                }],
+            };
+            await sgMail.send(msg);
+            return snap.ref.delete();
+        } catch (error) {
+            return snap.ref.update({ status: "error", error: error.message });
+        }
+    });
+
+
+// ==========================================
+//              FUNCIONES CALLABLE (HTTP)
+// ==========================================
+
+/**
+ * Devuelve la configuración de Firebase al cliente usando .ENV
+ */
 exports.getFirebaseConfig = functions.https.onCall((data, context) => {
-    // Asegurarse de que el usuario esté autenticado para solicitar la configuración es una buena práctica.
     if (!context.auth) {
-        throw new functions.https.HttpsError(
-            "unauthenticated",
-            "El usuario debe estar autenticado para solicitar la configuración."
-        );
+        throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     }
 
-    // Devuelve la configuración guardada en el entorno.
-    return functions.config().prisma;
+    const config = {
+        apiKey: process.env.PRISMA_API_KEY,
+        authDomain: process.env.PRISMA_AUTH_DOMAIN,
+        projectId: process.env.PRISMA_PROJECT_ID,
+        storageBucket: process.env.PRISMA_STORAGE_BUCKET,
+        messagingSenderId: process.env.PRISMA_MESSAGING_SENDER_ID,
+        appId: process.env.PRISMA_APP_ID,
+        measurementId: process.env.PRISMA_MEASUREMENT_ID
+    };
+
+    if (!config.apiKey) {
+        throw new functions.https.HttpsError("internal", "Configuración de servidor incompleta.");
+    }
+    return config;
 });
 
+/**
+ * Aplica un descuento a una remisión.
+ */
 exports.applyDiscount = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "El usuario no está autenticado.");
-    }
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
 
     const { remisionId, discountPercentage } = data;
-    if (!remisionId || discountPercentage === undefined) {
-        throw new functions.https.HttpsError("invalid-argument", "Faltan datos (remisionId, discountPercentage).");
-    }
-
-    if (discountPercentage < 0 || discountPercentage > 5.0001) { // Allow for small floating point inaccuracies
-        throw new functions.https.HttpsError("out-of-range", "El descuento debe estar entre 0 y 5%.");
+    if (discountPercentage < 0 || discountPercentage > 5.0001) {
+        throw new functions.https.HttpsError("out-of-range", "Descuento máximo 5%.");
     }
 
     const remisionRef = admin.firestore().collection("remisiones").doc(remisionId);
-
+    
     try {
-        const remisionDoc = await remisionRef.get();
-        const docExists = remisionDoc && (typeof remisionDoc.exists === "function" ? remisionDoc.exists() : remisionDoc.exists);
-        if (!docExists) {
-            throw new functions.https.HttpsError("not-found", "La remisión no existe.");
-        }
-
-        const remisionData = remisionDoc.data();
-        const subtotal = remisionData.subtotal;
-        const discountAmount = subtotal * (discountPercentage / 100);
-        const subtotalWithDiscount = subtotal - discountAmount;
-        const newIva = remisionData.incluyeIVA ? subtotalWithDiscount * 0.19 : 0;
-        const newTotal = subtotalWithDiscount + newIva;
+        const remSnap = await remisionRef.get();
+        if (!remSnap.exists) throw new functions.https.HttpsError("not-found", "No existe la remisión.");
+        
+        const rData = remSnap.data();
+        const discountAmount = Math.round(rData.subtotal * (discountPercentage / 100));
+        const subWithDisc = rData.subtotal - discountAmount;
+        const newIva = rData.incluyeIVA ? Math.round(subWithDisc * 0.19) : 0;
+        const newTotal = subWithDisc + newIva;
 
         const updatedData = {
             valorTotal: newTotal,
@@ -709,283 +639,162 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
 
         await remisionRef.update(updatedData);
 
-        const finalRemisionData = { ...remisionData, ...updatedData };
-        const pdfBuffer = generarPDF(finalRemisionData, false);
-        const pdfPlantaBuffer = generarPDF(finalRemisionData, true);
+        // Regenerar PDF y notificar
+        const finalData = { ...rData, ...updatedData };
+        const pdfBuffer = generarPDF(finalData, false);
+        const pdfPlantaBuffer = generarPDF(finalData, true);
 
         const bucket = admin.storage().bucket(BUCKET_NAME);
-        const filePath = `remisiones/${finalRemisionData.numeroRemision}.pdf`;
-        const file = bucket.file(filePath);
+        const file = bucket.file(`remisiones/${finalData.numeroRemision}.pdf`);
         await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-
-        const filePathPlanta = `remisiones/planta-${finalRemisionData.numeroRemision}.pdf`;
-        const filePlanta = bucket.file(filePathPlanta);
+        
+        const filePlanta = bucket.file(`remisiones/planta-${finalData.numeroRemision}.pdf`);
         await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
 
-        const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-        const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+        const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
+        const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
 
         await remisionRef.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
 
         const msg = {
-            to: finalRemisionData.clienteEmail,
+            to: finalData.clienteEmail,
             from: FROM_EMAIL,
-            subject: `Descuento aplicado a tu Remisión N° ${finalRemisionData.numeroRemision}`,
-            html: `<p>Hola ${finalRemisionData.clienteNombre},</p>
-                   <p>Se ha aplicado un descuento del <strong>${discountPercentage.toFixed(2)}%</strong> a tu remisión N° ${finalRemisionData.numeroRemision}.</p>
-                   <p>El nuevo total es: <strong>${formatCurrency(newTotal)}</strong>.</p>
-                   <p>Adjuntamos la remisión actualizada.</p>
-                   <p><strong>Prismacolor S.A.S.</strong></p>`,
+            subject: `Descuento aplicado - Remisión N° ${finalData.numeroRemision}`,
+            html: `<p>Hola ${finalData.clienteNombre},</p><p>Nuevo total: <strong>${formatCurrency(newTotal)}</strong> (Desc: ${discountPercentage}%).</p>`,
             attachments: [{
                 content: pdfBuffer.toString("base64"),
-                filename: `Remision-Actualizada-${finalRemisionData.numeroRemision}.pdf`,
+                filename: `Remision-Actualizada-${finalData.numeroRemision}.pdf`,
                 type: "application/pdf",
                 disposition: "attachment",
             }],
         };
-
         await sgMail.send(msg);
 
-        return { success: true, message: "Descuento aplicado y correo enviado." };
-
-    } catch (error) {
-        functions.logger.error(`Error al aplicar descuento para ${remisionId}:`, error);
-        throw new functions.https.HttpsError("internal", "No se pudo aplicar el descuento.");
+        return { success: true };
+    } catch (e) {
+        throw new functions.https.HttpsError("internal", e.message);
     }
 });
-
-
-exports.onResendEmailRequest = functions.region("us-central1").firestore
-    .document("resendQueue/{queueId}")
-    .onCreate(async (snap, context) => {
-        const request = snap.data();
-        const remisionId = request.remisionId;
-        const log = (message) => {
-            functions.logger.log(`[Reenvío ${remisionId}] ${message}`);
-        };
-        log("Iniciando reenvío de correo.");
-
-        try {
-            const remisionDoc = await admin.firestore()
-                .collection("remisiones").doc(remisionId).get();
-            const docExists = remisionDoc && (typeof remisionDoc.exists === "function" ? remisionDoc.exists() : remisionDoc.exists);
-            if (!docExists) {
-                log("La remisión no existe.");
-                return snap.ref.delete();
-            }
-            const remisionData = remisionDoc.data();
-
-            const bucket = admin.storage().bucket(BUCKET_NAME);
-            const filePath = `remisiones/${remisionData.numeroRemision}.pdf`;
-            const [pdfBuffer] = await bucket.file(filePath).download();
-            log("PDF descargado desde Storage.");
-
-            const msg = {
-                to: remisionData.clienteEmail,
-                from: FROM_EMAIL,
-                subject: `[Reenvío] Remisión N° ${remisionData.numeroRemision}`,
-                html: `<p>Hola ${remisionData.clienteNombre},</p>
-          <p>Como solicitaste, aquí tienes una copia de tu remisión.</p>`,
-                attachments: [{
-                    content: pdfBuffer.toString("base64"),
-                    filename: `Remision-${remisionData.numeroRemision}.pdf`,
-                    type: "application/pdf",
-                    disposition: "attachment",
-                }],
-            };
-            await sgMail.send(msg);
-            log(`Correo reenviado a ${remisionData.clienteEmail}.`);
-
-            return snap.ref.delete();
-        } catch (error) {
-            log("Error en el reenvío:", error);
-            return snap.ref.update({ status: "error", error: error.message });
-        }
-    });
 
 /**
- * NUEVA FUNCIÓN: Actualiza el documento de un empleado con la URL de un archivo.
- * Se invoca desde el cliente después de subir un archivo a Firebase Storage.
+ * Actualiza documentos de empleados (Admin only).
  */
 exports.updateEmployeeDocument = functions.https.onCall(async (data, context) => {
-    // 1. Autenticación y Verificación de Permisos
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "El usuario no está autenticado.");
-    }
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const adminUser = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    if (adminUser.data().role !== "admin") throw new functions.https.HttpsError("permission-denied", "Solo admin.");
 
-    const uid = context.auth.uid;
-    const userDoc = await admin.firestore().collection("users").doc(uid).get();
-    const userData = userDoc.data();
-
-    if (userData.role !== "admin") {
-        throw new functions.https.HttpsError("permission-denied", "El usuario no tiene permisos de administrador.");
-    }
-
-    // 2. Validación de Datos de Entrada
     const { employeeId, docType, fileUrl } = data;
-    if (!employeeId || !docType || !fileUrl) {
-        throw new functions.https.HttpsError("invalid-argument", "Faltan datos (employeeId, docType, fileUrl).");
-    }
-
-    // 3. Lógica de Actualización
-    try {
-        const employeeDocRef = admin.firestore().collection("users").doc(employeeId);
-
-        // Usamos notación de punto para actualizar un campo dentro de un mapa.
-        // Esto crea el mapa 'documentos' si no existe.
-        const updatePayload = {
-            [`documentos.${docType}`]: fileUrl
-        };
-
-        await employeeDocRef.update(updatePayload);
-
-        return { success: true, message: `Documento '${docType}' actualizado para el empleado ${employeeId}.` };
-    } catch (error) {
-        functions.logger.error(`Error al actualizar documento para ${employeeId}:`, error);
-        throw new functions.https.HttpsError("internal", "No se pudo actualizar el documento del empleado.");
-    }
+    await admin.firestore().collection("users").doc(employeeId).update({
+        [`documentos.${docType}`]: fileUrl
+    });
+    return { success: true };
 });
 
+/**
+ * Obtiene URL firmada (V4) para ver archivos protegidos.
+ */
+exports.getSignedUrlForPath = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    
+    const bucket = admin.storage().bucket(BUCKET_NAME);
+    const [signedUrl] = await bucket.file(data.path).getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 15 * 60 * 1000, // 15 min
+        version: 'v4', 
+    });
+    return { url: signedUrl };
+});
+
+/**
+ * Repara URLs firmadas que hayan caducado o estén rotas (Admin tool).
+ */
 exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
     const uid = context.auth?.uid;
-    if (!uid) throw new functions.https.HttpsError("unauthenticated", "No autenticado.");
-
+    if (!uid) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     const userSnap = await admin.firestore().collection("users").doc(uid).get();
-    if (!userSnap.exists || userSnap.data().role !== "admin") {
-        throw new functions.https.HttpsError("permission-denied", "Solo admin.");
-    }
+    if (userSnap.data().role !== "admin") throw new functions.https.HttpsError("permission-denied", "Solo admin.");
 
-    const { fromDate = "2025-08-14" } = data; // AJUSTA esta fecha al día anterior al fallo
+    const { fromDate = "2025-08-14", onlyBroken = true } = data;
     const from = new Date(fromDate);
 
     const bucket = admin.storage().bucket(BUCKET_NAME);
-    const remSnap = await admin.firestore()
-        .collection("remisiones")
-        .where("fechaRecibido", ">=", from) // O usa tu campo de fecha que corresponda
-        .get();
-
-    let fixed = 0, errors = 0;
-    for (const doc of remSnap.docs) {
-        const r = doc.data();
-        try {
-            const file = bucket.file(`remisiones/${r.numeroRemision}.pdf`);
-            const filePlanta = bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`);
-
-            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
-
-            await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
-            fixed++;
-        } catch (e) {
-            errors++;
-            console.error(`repairSignedUrls fallo remision ${r?.numeroRemision}:`, e.message);
-        }
-    }
-    return { fixed, errors, total: remSnap.size };
-});
-
-exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
-    const uid = context.auth?.uid;
-    if (!uid) throw new functions.https.HttpsError("unauthenticated", "No autenticado.");
-
-    const userSnap = await admin.firestore().collection("users").doc(uid).get();
-    if (!userSnap.exists || userSnap.data().role !== "admin") {
-        throw new functions.https.HttpsError("permission-denied", "Solo admin.");
-    }
-
-    // Parámetros
-    const { fromDate = "2025-08-14", onlyBroken = true } = data; // ajusta la fecha
-    const from = new Date(fromDate);
-
-    const bucket = admin.storage().bucket(BUCKET_NAME);
-
-    // IMPORTANTE: filtrar por 'timestamp' (Date), no por 'fechaRecibido' (string)
-    const remSnap = await admin.firestore()
-        .collection("remisiones")
-        .where("timestamp", ">=", from)
-        .get();
+    const remSnap = await admin.firestore().collection("remisiones")
+        .where("timestamp", ">=", from).get();
 
     let fixed = 0, skipped = 0, errors = 0;
     for (const doc of remSnap.docs) {
         const r = doc.data();
-
         try {
-            // Si onlyBroken=true, saltar las que ya estén con host correcto
             if (onlyBroken && typeof r.pdfUrl === "string") {
                 try {
                     const u = new URL(r.pdfUrl);
-                    // Firma V4 correcta normalmente usa storage.googleapis.com/<bucket>/...
                     if (u.hostname === "storage.googleapis.com") {
-                        skipped++;
-                        continue;
+                        skipped++; continue;
                     }
-                } catch (_) {
-                    // si no parsea, la intentamos re-firmar igual
-                }
+                } catch (_) {}
             }
 
-            // Refirmar
-            const file = bucket.file(`remisiones/${r.numeroRemision}.pdf`);
-            const filePlanta = bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`);
-
-            const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491" });
-            const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491" });
+            const [url] = await bucket.file(`remisiones/${r.numeroRemision}.pdf`)
+                .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
+            const [urlPlanta] = await bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`)
+                .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
 
             await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
             fixed++;
         } catch (e) {
             errors++;
-            console.error(`repairSignedUrls fallo remision ${r?.numeroRemision}:`, e.message);
+            console.error(`Error reparando ${r.numeroRemision}:`, e.message);
         }
     }
-
     return { fixed, skipped, errors, total: remSnap.size };
 });
 
-
-// **** INICIO DE LA NUEVA FUNCIÓN ****
 /**
- * Función invocable que recibe la ruta de un archivo en Storage
- * y devuelve una URL firmada de corta duración (15 minutos).
+ * NUEVO: Aplica retenciones financieras (Restar del saldo).
+ * CORRECCIÓN: Ahora es genérica, no pide tipo específico.
  */
-exports.getSignedUrlForPath = functions.https.onCall(async (data, context) => {
-    // Asegurarse de que el usuario esté autenticado.
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            "unauthenticated",
-            "El usuario debe estar autenticado para solicitar una URL."
-        );
+exports.applyRetention = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+
+    // Ya no extraemos 'retentionType'
+    const { remisionId, amount } = data;
+    
+    if (!remisionId || !amount || amount <= 0) {
+        throw new functions.https.HttpsError("invalid-argument", "Datos inválidos.");
     }
 
-    const filePath = data.path;
-    if (!filePath) {
-        throw new functions.https.HttpsError(
-            "invalid-argument",
-            "Se debe proporcionar la ruta del archivo."
-        );
-    }
+    const db = admin.firestore();
+    const remRef = db.collection("remisiones").doc(remisionId);
 
     try {
-        const bucket = admin.storage().bucket(BUCKET_NAME);
-        const file = bucket.file(filePath);
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(remRef);
+            if (!doc.exists) throw "No existe la remisión";
+            const rData = doc.data();
 
-        // Generar una URL que expira en 15 minutos.
-        // **** INICIO DEL CAMBIO ****
-        // Forzamos explícitamente el uso de la firma V4.
-        const [signedUrl] = await file.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 15 * 60 * 1000, // 15 minutos desde ahora
-            version: 'v4', // <-- ESTA LÍNEA ES LA SOLUCIÓN
+            const totalPagado = (rData.payments || [])
+                .filter(p => p.status === 'confirmado')
+                .reduce((sum, p) => sum + p.amount, 0);
+
+            const saldo = rData.valorTotal - totalPagado;
+            if (amount > saldo) throw new functions.https.HttpsError("failed-precondition", "La retención excede el saldo.");
+
+            const retentionPayment = {
+                amount: amount,
+                date: new Date().toISOString().split('T')[0],
+                method: "Retención", // <--- AHORA ES UN NOMBRE FIJO Y GENÉRICO
+                registeredAt: new Date(),
+                registeredBy: context.auth.uid,
+                status: 'confirmado',
+                isRetention: true
+            };
+
+            const newPayments = [...(rData.payments || []), retentionPayment];
+            t.update(remRef, { payments: newPayments });
         });
-        // **** FIN DEL CAMBIO ****
-
-        return { url: signedUrl };
-
+        return { success: true };
     } catch (error) {
-        functions.logger.error(`Error al generar URL firmada para ${filePath}:`, error);
-        throw new functions.https.HttpsError(
-            "internal",
-            "No se pudo generar la URL para ver el archivo."
-        );
+        throw new functions.https.HttpsError("internal", error.message || "Error interno.");
     }
 });
