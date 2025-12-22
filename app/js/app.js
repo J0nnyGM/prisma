@@ -484,35 +484,109 @@ function switchView(viewName, tabs, views) {
 // --- FUNCIONES DE CARGA Y RENDERIZADO DE DATOS ---
 function loadEmpleados() {
     const empleadosListEl = document.getElementById('empleados-list');
+    
+    // Verificación de seguridad
     if (!currentUserData || currentUserData.role !== 'admin' || !empleadosListEl) {
-        return () => { }; // Retorna una función vacía si no hay nada que hacer
+        return () => { }; 
     }
+
     const q = query(collection(db, "users"));
-    // Añadir 'return' aquí
+    
     return onSnapshot(q, (snapshot) => {
+        // Mapear y guardar en variable global
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        allUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); // Guardamos los usuarios en la variable global
+        allUsers = users; 
+
         empleadosListEl.innerHTML = '';
-        users.filter(u => u.id !== currentUser.uid).forEach(empleado => {
+
+        // Ordenar: Pendientes primero, luego alfabéticamente
+        users.sort((a, b) => {
+            if (a.status === 'pending' && b.status !== 'pending') return -1;
+            if (a.status !== 'pending' && b.status === 'pending') return 1;
+            return (a.nombre || '').localeCompare(b.nombre || '');
+        });
+
+        users.filter(u => u.id !== currentUser.uid && u.status !== 'archived').forEach(empleado => {
             const el = document.createElement('div');
-            el.className = 'border p-4 rounded-lg flex justify-between items-center';
+            el.className = 'border p-4 rounded-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white shadow-sm';
+            
+            // --- LÓGICA RECUPERADA PARA BADGES Y BOTONES ---
+            let statusBadge = '';
+            let statusButton = '';
+
+            switch (empleado.status) {
+                case 'pending':
+                    statusBadge = `<span class="px-2 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">Pendiente</span>`;
+                    statusButton = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-600 transition">Aprobar</button>`;
+                    break;
+                case 'active':
+                    statusBadge = `<span class="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 border border-green-200">Activo</span>`;
+                    statusButton = `<button data-uid="${empleado.id}" data-status="inactive" class="user-status-btn bg-amber-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-amber-600 transition">Desactivar</button>`;
+                    break;
+                case 'inactive':
+                    statusBadge = `<span class="px-2 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800 border border-gray-200">Inactivo</span>`;
+                    statusButton = `<button data-uid="${empleado.id}" data-status="active" class="user-status-btn bg-green-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-600 transition">Reactivar</button>`;
+                    break;
+                default:
+                    statusBadge = `<span class="text-xs text-gray-500">${empleado.status}</span>`;
+            }
+
             el.innerHTML = `
-                <div>
-                    <p class="font-semibold">${empleado.nombre} <span class="text-sm font-normal text-gray-500">(${empleado.role})</span></p>
+                <div class="flex-grow">
+                    <div class="flex items-center gap-2 mb-1">
+                        <p class="font-semibold text-lg text-gray-800">${empleado.nombre}</p>
+                        ${statusBadge}
+                    </div>
                     <p class="text-sm text-gray-600">${empleado.email}</p>
+                    <p class="text-xs text-gray-500 capitalize">Rol: ${empleado.role}</p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn w-full bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-600 transition">Recursos Humanos</button>
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn w-full bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition">Gestionar</button>
-                    <button data-uid="${empleado.id}" class="delete-user-btn w-full bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition">Eliminar</button>
+                
+                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                    ${statusButton}
+
+                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-teal-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-teal-700 transition">RRHH</button>
+                    
+                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">Editar</button>
+                    
+                    <button data-uid="${empleado.id}" class="delete-user-btn bg-red-100 text-red-600 border border-red-200 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-200 transition">Eliminar</button>
                 </div>`;
+                
             empleadosListEl.appendChild(el);
         });
-        document.querySelectorAll('.manage-rrhh-docs-btn').forEach(btn => btn.addEventListener('click', (e) => showRRHHModal(JSON.parse(e.currentTarget.dataset.userJson))));
-        document.querySelectorAll('.manage-user-btn').forEach(btn => btn.addEventListener('click', (e) => showAdminEditUserModal(JSON.parse(e.currentTarget.dataset.userJson))));
-        document.querySelectorAll('.delete-user-btn').forEach(btn => { btn.addEventListener('click', async (e) => { const uid = e.target.dataset.uid; if (confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) { await deleteDoc(doc(db, "users", uid)); showModalMessage("Usuario eliminado de Firestore.", false, 2000); } }); });
+
+        // Reasignamos los listeners porque el DOM cambió
+        attachEmployeeListeners();
     });
 }
+// Función auxiliar para reasignar listeners (ponla justo debajo de loadEmpleados)
+function attachEmployeeListeners() {
+    // RRHH
+    document.querySelectorAll('.manage-rrhh-docs-btn').forEach(btn => 
+        btn.addEventListener('click', (e) => showRRHHModal(JSON.parse(e.currentTarget.dataset.userJson)))
+    );
+    // Editar
+    document.querySelectorAll('.manage-user-btn').forEach(btn => 
+        btn.addEventListener('click', (e) => showAdminEditUserModal(JSON.parse(e.currentTarget.dataset.userJson)))
+    );
+    // Eliminar
+    document.querySelectorAll('.delete-user-btn').forEach(btn => { 
+        btn.addEventListener('click', async (e) => { 
+            const uid = e.currentTarget.dataset.uid; 
+            if (confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) { 
+                try {
+                    await deleteDoc(doc(db, "users", uid)); 
+                    showModalMessage("Usuario eliminado.", false, 2000); 
+                } catch(err) {
+                    console.error(err);
+                    showModalMessage("Error al eliminar.");
+                }
+            } 
+        }); 
+    });
+    // NO NECESITAMOS LISTENER PARA .user-status-btn AQUÍ
+    // Porque ese ya lo tienes delegado globalmente en setupEventListeners con el evento 'click' en 'view-empleados'
+}
+
 function loadColores() {
     const q = query(collection(db, "colores"), orderBy("nombre", "asc"));
     return onSnapshot(q, (snapshot) => {
