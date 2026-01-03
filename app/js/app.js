@@ -1831,47 +1831,39 @@ function showPaymentModal(remision) {
             const remisionId = e.currentTarget.dataset.remisionId;
             const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
 
-            showModalMessage("Confirmando pago...", true);
+            showModalMessage("Confirmando...", true);
 
             try {
-                // CORRECCIÓN: Obtenemos el documento fresco de la DB, no del array local
                 const remRef = doc(db, "remisiones", remisionId);
                 const remSnap = await getDoc(remRef);
-
-                if (!remSnap.exists()) throw new Error("La remisión ya no existe.");
-
-                const remData = remSnap.data();
+                const remData = { id: remSnap.id, ...remSnap.data() };
                 const payments = [...remData.payments];
-                const p = payments[paymentIndex];
 
-                // Doble verificación de seguridad: Admin diferente
-                if (p.registeredBy === currentUser.uid) {
-                    hideModal();
-                    showModalMessage("Error: No puedes confirmar un pago registrado por ti mismo.");
+                if (payments[paymentIndex].registeredBy === currentUser.uid) {
+                    showModalMessage("No puedes aprobar tu propio registro.");
                     return;
                 }
 
-                // Actualizamos el estado del pago
-                p.status = 'confirmado';
-                p.confirmedBy = currentUser.uid;
-                p.confirmedAt = new Date();
+                // Actualizar datos
+                payments[paymentIndex].status = 'confirmado';
+                payments[paymentIndex].confirmedBy = currentUser.uid;
+                payments[paymentIndex].confirmedAt = new Date();
 
-                // Guardamos en la base de datos
                 await updateDoc(remRef, { payments: payments });
+                await actualizarSaldoPorPago(payments[paymentIndex].method, payments[paymentIndex].amount);
 
-                // Actualizamos saldos contables
-                await actualizarSaldoPorPago(p.method, p.amount);
+                // --- EL CAMBIO CLAVE AQUÍ ---
+                showTemporaryMessage("Pago confirmado", "success");
 
-                hideModal();
-                showTemporaryMessage("¡Pago confirmado exitosamente!", "success");
+                // 1. Volvemos a llamar al modal con los datos actualizados
+                showPaymentModal(remData);
 
-                // Refrescamos el contexto del cliente para ver el nuevo saldo
-                updateClientContext(activeChatPhone, []);
+                // 2. Actualizamos el sidebar del CRM en segundo plano
+                if (activeChatPhone) updateClientContext(activeChatPhone, []);
 
             } catch (error) {
-                console.error("Error al confirmar pago:", error);
-                hideModal();
-                showModalMessage("Error técnico: " + error.message);
+                console.error(error);
+                showModalMessage("Error al confirmar.");
             }
         });
     });
@@ -1879,18 +1871,18 @@ function showPaymentModal(remision) {
     // Listener para RECHAZAR
     document.querySelectorAll('.reject-payment-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const reason = prompt("Indica el motivo del rechazo del pago:");
+            const reason = prompt("Motivo del rechazo:");
             if (!reason) return;
 
             const remisionId = e.currentTarget.dataset.remisionId;
             const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
 
-            showModalMessage("Procesando rechazo...", true);
+            showModalMessage("Procesando...", true);
 
             try {
                 const remRef = doc(db, "remisiones", remisionId);
                 const remSnap = await getDoc(remRef);
-                const remData = remSnap.data();
+                const remData = { id: remSnap.id, ...remSnap.data() };
                 const payments = [...remData.payments];
 
                 payments[paymentIndex].status = 'rechazado';
@@ -1900,14 +1892,14 @@ function showPaymentModal(remision) {
 
                 await updateDoc(remRef, { payments: payments });
 
-                hideModal();
-                showTemporaryMessage("Pago rechazado.", "info");
-                updateClientContext(activeChatPhone, []);
+                // --- REFRESCAR UI ---
+                showTemporaryMessage("Pago rechazado", "info");
+                showPaymentModal(remData); // Volver a dibujar el modal
+                if (activeChatPhone) updateClientContext(activeChatPhone, []);
 
             } catch (error) {
-                console.error("Error al rechazar pago:", error);
-                hideModal();
-                showModalMessage("Error al procesar el rechazo.");
+                console.error(error);
+                showModalMessage("Error al rechazar.");
             }
         });
     });

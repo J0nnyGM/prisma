@@ -185,3 +185,11 @@ body {
     margin-top: 4px;
     text-align: right;
 }
+
+@keyframes highlight-success {
+    0% { background-color: #dcfce7; }
+    100% { background-color: white; }
+}
+.status-updated {
+    animation: highlight-success 2s ease-out;
+}
