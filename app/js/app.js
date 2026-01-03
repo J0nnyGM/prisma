@@ -1,5 +1,3 @@
-// js/app.js (Versión Completa y Final)
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -106,6 +104,7 @@ registerForm.addEventListener('submit', handleRegisterSubmit);
 
 // --- LÓGICA DE INICIALIZACIÓN DE LA APP ---
 let isAppInitialized = false;
+
 function startApp() {
     if (isAppInitialized) return;
 
@@ -484,18 +483,18 @@ function switchView(viewName, tabs, views) {
 // --- FUNCIONES DE CARGA Y RENDERIZADO DE DATOS ---
 function loadEmpleados() {
     const empleadosListEl = document.getElementById('empleados-list');
-    
+
     // Verificación de seguridad
     if (!currentUserData || currentUserData.role !== 'admin' || !empleadosListEl) {
-        return () => { }; 
+        return () => { };
     }
 
     const q = query(collection(db, "users"));
-    
+
     return onSnapshot(q, (snapshot) => {
         // Mapear y guardar en variable global
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        allUsers = users; 
+        allUsers = users;
 
         empleadosListEl.innerHTML = '';
 
@@ -509,7 +508,7 @@ function loadEmpleados() {
         users.filter(u => u.id !== currentUser.uid && u.status !== 'archived').forEach(empleado => {
             const el = document.createElement('div');
             el.className = 'border p-4 rounded-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white shadow-sm';
-            
+
             // --- LÓGICA RECUPERADA PARA BADGES Y BOTONES ---
             let statusBadge = '';
             let statusButton = '';
@@ -550,7 +549,7 @@ function loadEmpleados() {
                     
                     <button data-uid="${empleado.id}" class="delete-user-btn bg-red-100 text-red-600 border border-red-200 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-200 transition">Eliminar</button>
                 </div>`;
-                
+
             empleadosListEl.appendChild(el);
         });
 
@@ -561,27 +560,27 @@ function loadEmpleados() {
 // Función auxiliar para reasignar listeners (ponla justo debajo de loadEmpleados)
 function attachEmployeeListeners() {
     // RRHH
-    document.querySelectorAll('.manage-rrhh-docs-btn').forEach(btn => 
+    document.querySelectorAll('.manage-rrhh-docs-btn').forEach(btn =>
         btn.addEventListener('click', (e) => showRRHHModal(JSON.parse(e.currentTarget.dataset.userJson)))
     );
     // Editar
-    document.querySelectorAll('.manage-user-btn').forEach(btn => 
+    document.querySelectorAll('.manage-user-btn').forEach(btn =>
         btn.addEventListener('click', (e) => showAdminEditUserModal(JSON.parse(e.currentTarget.dataset.userJson)))
     );
     // Eliminar
-    document.querySelectorAll('.delete-user-btn').forEach(btn => { 
-        btn.addEventListener('click', async (e) => { 
-            const uid = e.currentTarget.dataset.uid; 
-            if (confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) { 
+    document.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const uid = e.currentTarget.dataset.uid;
+            if (confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) {
                 try {
-                    await deleteDoc(doc(db, "users", uid)); 
-                    showModalMessage("Usuario eliminado.", false, 2000); 
-                } catch(err) {
+                    await deleteDoc(doc(db, "users", uid));
+                    showModalMessage("Usuario eliminado.", false, 2000);
+                } catch (err) {
                     console.error(err);
                     showModalMessage("Error al eliminar.");
                 }
-            } 
-        }); 
+            }
+        });
     });
     // NO NECESITAMOS LISTENER PARA .user-status-btn AQUÍ
     // Porque ese ya lo tienes delegado globalmente en setupEventListeners con el evento 'click' en 'view-empleados'
@@ -980,27 +979,27 @@ function renderFacturacion() {
     if (realizadas.length === 0) {
         realizadasListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No hay remisiones facturadas.</p>';
     } else {
-realizadas.forEach(remision => {
-        const el = document.createElement('div');
-        el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
-        
-        // Calculamos pagos confirmados para saber si ya está pago total
-        const totalPagado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
-        const saldoPendiente = remision.valorTotal - totalPagado;
+        realizadas.forEach(remision => {
+            const el = document.createElement('div');
+            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
 
-        let actionButtons = '';
-        if (remision.facturaPdfUrl) { 
-            actionButtons += `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700 mr-2">Ver Factura</button>`;
-        } else {
-            actionButtons += `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-orange-600 mr-2">Adjuntar Factura</button>`;
-        }
-        
-        // BOTÓN NUEVO: Retención (Solo si hay saldo > 0 y no está anulada)
-        if (saldoPendiente > 0) {
-            actionButtons += `<button data-remision-json='${JSON.stringify(remision)}' class="retencion-btn bg-purple-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-purple-700 mr-2">Retenciones</button>`;
-        }
+            // Calculamos pagos confirmados para saber si ya está pago total
+            const totalPagado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+            const saldoPendiente = remision.valorTotal - totalPagado;
 
-        el.innerHTML = `
+            let actionButtons = '';
+            if (remision.facturaPdfUrl) {
+                actionButtons += `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700 mr-2">Ver Factura</button>`;
+            } else {
+                actionButtons += `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-orange-600 mr-2">Adjuntar Factura</button>`;
+            }
+
+            // BOTÓN NUEVO: Retención (Solo si hay saldo > 0 y no está anulada)
+            if (saldoPendiente > 0) {
+                actionButtons += `<button data-remision-json='${JSON.stringify(remision)}' class="retencion-btn bg-purple-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-purple-700 mr-2">Retenciones</button>`;
+            }
+
+            el.innerHTML = `
             <div class="flex-grow">
                 <div class="flex items-center gap-3 flex-wrap">
                     <span class="remision-id">N° ${remision.numeroRemision}</span>
@@ -1018,8 +1017,8 @@ realizadas.forEach(remision => {
                 <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
             </div>
         `;
-        realizadasListEl.appendChild(el);
-    });
+            realizadasListEl.appendChild(el);
+        });
     }
 
     // **** INICIO CORRECCIÓN AQUÍ ****
@@ -1060,13 +1059,13 @@ realizadas.forEach(remision => {
             }
         });
     });
-    
+
     // Listener para los botones de factura (puede seguir usando URL directa si la tienes)
     document.querySelectorAll('#view-facturacion .view-factura-pdf-btn').forEach(button => {
-        button.addEventListener('click', (e) => { 
-            const pdfUrl = e.currentTarget.dataset.pdfUrl; 
-            const remisionNum = e.currentTarget.dataset.remisionNum; 
-            showPdfModal(pdfUrl, `Factura N° ${remisionNum}`); 
+        button.addEventListener('click', (e) => {
+            const pdfUrl = e.currentTarget.dataset.pdfUrl;
+            const remisionNum = e.currentTarget.dataset.remisionNum;
+            showPdfModal(pdfUrl, `Factura N° ${remisionNum}`);
         });
     });
     // **** FIN CORRECCIÓN AQUÍ ****
@@ -1434,7 +1433,7 @@ function calcularTotales() {
     const incluyeIVA = ivaCheckbox.checked;
     // AQUÍ ESTÁ EL CAMBIO CLAVE: Math.round() para eliminar decimales del IVA
     const valorIVA = incluyeIVA ? Math.round(subtotalGeneral * 0.19) : 0;
-    
+
     const total = subtotalGeneral + valorIVA;
 
     subtotalEl.textContent = formatCurrency(subtotalGeneral);
@@ -1453,7 +1452,7 @@ function showPdfModal(pdfUrl, title) {
     if (!pdfUrl || typeof pdfUrl !== 'string' || !pdfUrl.startsWith('http')) {
         console.error("showPdfModal fue llamada con una URL inválida:", pdfUrl);
         showModalMessage("Error: El enlace del documento no es válido o no está disponible.");
-        return; 
+        return;
     }
     // **** FIN CORRECCIÓN AQUÍ ****
 
@@ -1511,16 +1510,21 @@ function showPaymentModal(remision) {
 
         if (p.status === 'por confirmar') {
             statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
-            
+
             // **** INICIO DE LA CORRECCIÓN ****
-            // Se simplifica la condición para que cualquier admin vea los botones en pagos pendientes.
+            // Solo admins pueden confirmar/rechazar.
+            // ADEMÁS: No se puede confirmar un pago creado por uno mismo (Seguridad de 4 ojos).
             if (currentUserData.role === 'admin') {
-                actionButtons = `
-                    <div class="flex flex-col items-end gap-1">
-                        <button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600 w-20 text-center">Confirmar</button>
-                        <button data-remision-id="${remision.id}" data-payment-index="${index}" class="reject-payment-btn bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 w-20 text-center">Rechazar</button>
-                    </div>
-                `;
+                if (p.registeredBy !== currentUser.uid) { // <--- ESTA ES LA VALIDACIÓN NUEVA
+                    actionButtons = `
+                        <div class="flex flex-col items-end gap-1">
+                            <button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600 w-20 text-center">Confirmar</button>
+                            <button data-remision-id="${remision.id}" data-payment-index="${index}" class="reject-payment-btn bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 w-20 text-center">Rechazar</button>
+                        </div>
+                    `;
+                } else {
+                    actionButtons = `<span class="text-xs text-gray-400 italic">Espera confirmación de otro admin</span>`;
+                }
             }
             // **** FIN DE LA CORRECCIÓN ****
 
@@ -1529,9 +1533,9 @@ function showPaymentModal(remision) {
         } else {
             statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Confirmado</span>`;
         }
-        
-        const rejectionReasonHtml = p.status === 'rechazado' && p.rejectionReason 
-            ? `<div class="text-xs text-red-700 mt-1 italic">Motivo: ${p.rejectionReason}</div>` 
+
+        const rejectionReasonHtml = p.status === 'rechazado' && p.rejectionReason
+            ? `<div class="text-xs text-red-700 mt-1 italic">Motivo: ${p.rejectionReason}</div>`
             : '';
 
         return `<tr class="border-b">
@@ -1613,13 +1617,13 @@ function showPaymentModal(remision) {
                 const remisionId = e.currentTarget.dataset.remisionId;
                 const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
                 const remisionToUpdate = allRemisiones.find(r => r.id === remisionId);
-                
+
                 if (remisionToUpdate && remisionToUpdate.payments[paymentIndex]) {
                     remisionToUpdate.payments[paymentIndex].status = 'rechazado';
                     remisionToUpdate.payments[paymentIndex].rejectionReason = reason;
                     remisionToUpdate.payments[paymentIndex].rejectedBy = currentUser.uid;
                     remisionToUpdate.payments[paymentIndex].rejectedAt = new Date();
-                    
+
                     showModalMessage("Rechazando pago...", true);
                     try {
                         await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
@@ -1682,6 +1686,7 @@ function showDashboardModal() {
                                     <i class="fas fa-coins"></i> Config. Saldos Iniciales
                                 </button>
                             ` : ''}
+                        <button id="download-payments-excel-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Excel Pagos</button>
                         <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
                         <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                     </div>
@@ -1766,7 +1771,6 @@ function showDashboardModal() {
     });
     document.getElementById('rank-show-all-btn').addEventListener('click', () => renderTopClientes());
 
-
     const summaryTab = document.getElementById('dashboard-tab-summary');
     const carteraTab = document.getElementById('dashboard-tab-cartera');
     const clientesTab = document.getElementById('dashboard-tab-clientes');
@@ -1817,6 +1821,7 @@ function showDashboardModal() {
         carteraDetalleView.classList.add('hidden');
     });
 
+    document.getElementById('download-payments-excel-btn').addEventListener('click', showExportPaymentsModal);
     document.getElementById('download-report-btn').addEventListener('click', showReportDateRangeModal);
 
     updateDashboardView();
@@ -1859,10 +1864,10 @@ function updateDashboard(year, month) {
 
     // 2. CÁLCULO DE SALDOS TOTALES (AQUÍ ESTÁ LA CORRECCIÓN)
     // Antes iniciábamos en 0. Ahora iniciamos con los Saldos Base cargados.
-    const accountBalances = { 
-        Efectivo: globalSaldosBase.Efectivo || 0, 
-        Nequi: globalSaldosBase.Nequi || 0, 
-        Davivienda: globalSaldosBase.Davivienda || 0 
+    const accountBalances = {
+        Efectivo: globalSaldosBase.Efectivo || 0,
+        Nequi: globalSaldosBase.Nequi || 0,
+        Davivienda: globalSaldosBase.Davivienda || 0
     };
 
     // Sumar todas las entradas históricas
@@ -1955,7 +1960,7 @@ function renderCartera() {
                 .filter(p => p.status === 'confirmado')
                 .reduce((acc, p) => acc + p.amount, 0);
             const saldoPendiente = remision.valorTotal - totalPagado;
-            
+
             // Cálculo de días vencidos
             const fechaRecibido = new Date(remision.fechaRecibido);
             // Asegurarse de que la hora no afecte el cálculo de días
@@ -2010,11 +2015,11 @@ function renderCartera() {
             // **** INICIO DE LA MODIFICACIÓN ****
             // Se restaura el diseño anterior con todos los detalles
             el.className = 'bg-white border p-4 rounded-lg flex justify-between items-center';
-            
-            const diasVencidosTexto = remision.diasVencidos > 0 
+
+            const diasVencidosTexto = remision.diasVencidos > 0
                 ? `${remision.diasVencidos} día(s) de vencido`
                 : 'Vence hoy';
-            
+
             el.innerHTML = `
                 <div class="flex-grow">
                     <p class="font-bold text-lg">${remision.clienteNombre}</p>
@@ -2207,9 +2212,112 @@ function showReportDateRangeModal() {
     });
 }
 
+function downloadPaymentsExcel(startDateStr, endDateStr) {
+    // 1. Validar librería
+    if (typeof XLSX === 'undefined') {
+        showModalMessage("Error: La librería de Excel no se ha cargado.");
+        return;
+    }
+
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T23:59:59');
+
+    let dataParaExcel = [];
+
+    const getNombreUsuario = (uid) => {
+        if (!uid) return ""; // Si no hay ID, devolvemos vacío
+        const usuario = allUsers.find(u => u.id === uid);
+        return usuario ? usuario.nombre : "Usuario Desconocido";
+    };
+
+    const formatFecha = (timestamp) => {
+        if (!timestamp) return "";
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        return date.toLocaleString('es-CO');
+    };
+
+    allRemisiones.forEach(remision => {
+        if (remision.payments && remision.payments.length > 0) {
+            remision.payments.forEach(p => {
+                
+                // --- FILTRO DE FECHAS ---
+                const paymentDate = new Date(p.date + 'T12:00:00');
+
+                if (paymentDate >= start && paymentDate <= end) {
+                    
+                    // Lógica para determinar quién revisó el pago
+                    let revisadoPor = "Pendiente";
+                    if (p.status === 'confirmado') {
+                        revisadoPor = getNombreUsuario(p.confirmedBy);
+                    } else if (p.status === 'rechazado') {
+                        revisadoPor = getNombreUsuario(p.rejectedBy) + " (Rechazó)";
+                    }
+
+                    // Formatear estado para que se vea bonito (Capitalizar)
+                    let estadoLegible = p.status;
+                    if (p.status === 'por confirmar') estadoLegible = 'Por Confirmar';
+                    else estadoLegible = p.status.charAt(0).toUpperCase() + p.status.slice(1);
+
+                    const fila = {
+                        "Fecha Pago": p.date, 
+                        "N° Remisión": remision.numeroRemision,
+                        "Cliente": remision.clienteNombre,
+                        "Método": p.method,
+                        "Estado": estadoLegible, // Ahora muestra: Confirmado, Rechazado o Por Confirmar
+                        "Valor": p.amount,
+                        "Registrado Por": getNombreUsuario(p.registeredBy),
+                        "Confirmado Por": revisadoPor, // Muestra quién confirmó, quién rechazó o "Pendiente"
+                        "Fecha Registro": formatFecha(p.registeredAt)
+                    };
+
+                    dataParaExcel.push(fila);
+                }
+            });
+        }
+    });
+
+    // 3. Ordenar
+    dataParaExcel.sort((a, b) => new Date(b["Fecha Pago"]) - new Date(a["Fecha Pago"]));
+
+    if (dataParaExcel.length === 0) {
+        showModalMessage(`No se encontraron pagos (ni pendientes ni confirmados) entre ${startDateStr} y ${endDateStr}.`);
+        return;
+    }
+
+    // 4. Generar Excel
+    try {
+        const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
+
+        const wscols = [
+            {wch: 12}, // Fecha
+            {wch: 10}, // Remision
+            {wch: 30}, // Cliente
+            {wch: 12}, // Metodo
+            {wch: 15}, // Estado (Más ancho ahora)
+            {wch: 15}, // Valor
+            {wch: 20}, // Registrado
+            {wch: 25}, // Confirmado (Más ancho por si dice "Rechazó")
+            {wch: 20}  // Fecha Reg
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Historial Pagos");
+
+        const fileName = `Pagos_Completo_${startDateStr}_a_${endDateStr}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        showModalMessage("Excel generado exitosamente.", false, 2000);
+
+    } catch (error) {
+        console.error("Error generando Excel:", error);
+        showModalMessage("Error al generar el archivo de Excel.");
+    }
+}
+
 async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     // Asegurarnos de tener los saldos base frescos
-    await loadSaldosBase(); 
+    await loadSaldosBase();
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -2219,7 +2327,7 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     const endDate = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
 
     const rangeTitle = `${monthNames[startMonth]} ${startYear} - ${monthNames[endMonth]} ${endYear}`;
-    
+
     doc.setFontSize(18);
     doc.text(`Reporte Financiero Detallado`, 105, 20, { align: "center" });
     doc.setFontSize(12);
@@ -2244,8 +2352,8 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     // Sumar Ingresos previos
     allPayments.forEach(p => {
         const pDate = new Date(p.date);
-        pDate.setHours(0,0,0,0);
-        
+        pDate.setHours(0, 0, 0, 0);
+
         if (pDate < startDate) {
             // Si es un pago antiguo, se suma al saldo inicial del reporte
             if (bankDetails[p.method]) bankDetails[p.method].initialBalance += p.amount;
@@ -2258,7 +2366,7 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     // Sumar/Restar Gastos previos
     allGastos.forEach(g => {
         const gDate = new Date(g.fecha);
-        gDate.setHours(0,0,0,0);
+        gDate.setHours(0, 0, 0, 0);
 
         if (gDate < startDate) {
             // Si es gasto antiguo, se resta del saldo inicial
@@ -2307,7 +2415,7 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
 
     const totalInitial = Object.values(bankDetails).reduce((sum, b) => sum + b.initialBalance, 0);
     const totalFinal = Object.values(bankDetails).reduce((sum, b) => sum + b.finalBalance, 0);
-    
+
     bankTableData.push([
         'TOTALES',
         formatCurrency(totalInitial),
@@ -2317,14 +2425,14 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     ]);
 
     doc.text(`Detalle de Movimientos por Banco`, 14, doc.lastAutoTable.finalY + 10);
-    
+
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 15,
         head: [['Banco / Fuente', 'Saldo Anterior', 'Entradas (+)', 'Salidas (-)', 'Saldo Final']],
         body: bankTableData,
         theme: 'striped',
         headStyles: { fillColor: [22, 160, 133] },
-        footStyles: { fillColor: [200, 200, 200], textColor: [0,0,0], fontStyle: 'bold' },
+        footStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0], fontStyle: 'bold' },
         styles: { fontSize: 10, halign: 'right' },
         columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } }
     });
@@ -2332,31 +2440,31 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
     // TABLA 3: Mensual
     const monthlyData = [];
     let currentDate = new Date(startDate);
-    
+
     while (currentDate <= endDate) {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
         const monthName = monthNames[month];
 
-        const mSales = allPayments.filter(p => { 
-            const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year; 
+        const mSales = allPayments.filter(p => {
+            const d = new Date(p.date); return d.getMonth() === month && d.getFullYear() === year;
         }).reduce((sum, p) => sum + p.amount, 0);
 
-        const mExpenses = allGastos.filter(g => { 
-            const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; 
+        const mExpenses = allGastos.filter(g => {
+            const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year;
         }).reduce((sum, g) => sum + g.valorTotal, 0);
 
         const mProfit = mSales - mExpenses;
 
         const endOfThisMonth = new Date(year, month + 1, 0, 23, 59, 59);
-        const carteraAtEndOfMonth = allRemisiones.filter(r => 
+        const carteraAtEndOfMonth = allRemisiones.filter(r =>
             new Date(r.fechaRecibido) <= endOfThisMonth && r.estado !== 'Anulada'
-        ).reduce((sum, r) => { 
+        ).reduce((sum, r) => {
             const pagosHastaFecha = (r.payments || [])
                 .filter(p => new Date(p.date) <= endOfThisMonth)
-                .reduce((s, p) => s + p.amount, 0); 
-            const saldo = r.valorTotal - pagosHastaFecha; 
-            return sum + (saldo > 0 ? saldo : 0); 
+                .reduce((s, p) => s + p.amount, 0);
+            const saldo = r.valorTotal - pagosHastaFecha;
+            return sum + (saldo > 0 ? saldo : 0);
         }, 0);
 
         monthlyData.push([
@@ -2366,7 +2474,7 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
             formatCurrency(mProfit),
             formatCurrency(carteraAtEndOfMonth)
         ]);
-        
+
         currentDate.setMonth(currentDate.getMonth() + 1);
     }
 
@@ -2382,7 +2490,7 @@ async function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
         columnStyles: { 0: { halign: 'left' } }
     });
 
-    doc.save(`Reporte-Financiero-Completo-${startYear}_${startMonth+1}-a-${endYear}_${endMonth+1}.pdf`);
+    doc.save(`Reporte-Financiero-Completo-${startYear}_${startMonth + 1}-a-${endYear}_${endMonth + 1}.pdf`);
 }
 
 function showAdminEditUserModal(user) {
@@ -3720,14 +3828,14 @@ function showRetencionModal(remision) {
     document.getElementById('retencion-remision-num').textContent = remision.numeroRemision;
     document.getElementById('retencion-total-actual').textContent = formatCurrency(remision.valorTotal);
     document.getElementById('retencion-remision-id').value = remision.id;
-    
+
     retencionValorInput.value = '';
     retencionModal.classList.remove('hidden');
 }
 
 retencionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const remisionId = document.getElementById('retencion-remision-id').value;
     // Ya no buscamos 'retencion-tipo' porque lo borramos del HTML
     const valor = unformatCurrency(retencionValorInput.value);
@@ -3743,9 +3851,9 @@ retencionForm.addEventListener('submit', async (e) => {
     try {
         const applyRetentionFn = httpsCallable(functions, 'applyRetention');
         // Solo enviamos el ID y el monto. El backend pondrá el nombre genérico.
-        const result = await applyRetentionFn({ 
-            remisionId: remisionId, 
-            amount: valor 
+        const result = await applyRetentionFn({
+            remisionId: remisionId,
+            amount: valor
         });
 
         if (result.data.success) {
@@ -3771,7 +3879,7 @@ async function loadSaldosBase() {
     try {
         const docRef = doc(db, 'configuracion', 'saldos_globales');
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
             globalSaldosBase = docSnap.data();
             saldosYaConfigurados = true; // <--- SI EXISTE EL DOC, MARCAMOS COMO TRUE
@@ -3787,7 +3895,7 @@ function showSaldosInicialesModal() {
     document.getElementById('saldo-base-efectivo').value = formatCurrency(globalSaldosBase.Efectivo || 0);
     document.getElementById('saldo-base-nequi').value = formatCurrency(globalSaldosBase.Nequi || 0);
     document.getElementById('saldo-base-davivienda').value = formatCurrency(globalSaldosBase.Davivienda || 0);
-    
+
     document.getElementById('saldos-iniciales-modal').classList.remove('hidden');
 }
 
@@ -3797,7 +3905,7 @@ document.getElementById('close-saldos-modal').addEventListener('click', () => {
 
 document.getElementById('saldos-iniciales-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const nuevosSaldos = {
         Efectivo: unformatCurrency(document.getElementById('saldo-base-efectivo').value),
         Nequi: unformatCurrency(document.getElementById('saldo-base-nequi').value),
@@ -3805,11 +3913,11 @@ document.getElementById('saldos-iniciales-form').addEventListener('submit', asyn
     };
 
     showModalMessage("Guardando saldos...", true);
-    
+
     try {
         const docRef = doc(db, 'configuracion', 'saldos_globales');
         await setDoc(docRef, nuevosSaldos);
-        
+
         globalSaldosBase = nuevosSaldos;
         saldosYaConfigurados = true; // <--- Actualizamos la variable global
 
@@ -3822,12 +3930,12 @@ document.getElementById('saldos-iniciales-form').addEventListener('submit', asyn
         if (btnBoton) {
             btnBoton.remove(); // Adiós botón
         }
-        
+
         // Actualizamos los números del dashboard para reflejar el cambio inmediatamente
         const monthSelect = document.getElementById('summary-month');
         const yearSelect = document.getElementById('summary-year');
         if (monthSelect && yearSelect) {
-             updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
+            updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
         }
 
     } catch (error) {
@@ -3841,5 +3949,58 @@ document.getElementById('saldos-iniciales-form').addEventListener('submit', asyn
 window.showSaldosInicialesModal = showSaldosInicialesModal;
 
 // También necesitamos estas dos para que funcionen los inputs del modal (onfocus/onblur)
-window.unformatCurrencyInput = unformatCurrencyInput; 
+window.unformatCurrencyInput = unformatCurrencyInput;
 window.formatCurrencyInput = formatCurrencyInput;
+
+function showExportPaymentsModal() {
+    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    
+    // Fechas por defecto (Primer día del mes actual y día de hoy)
+    const date = new Date();
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const today = date.toISOString().split('T')[0];
+
+    modalContentWrapper.innerHTML = `
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Exportar Pagos</h2>
+                <button id="close-export-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">Selecciona el rango de fechas para generar el reporte en Excel.</p>
+            <form id="export-payments-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+                    <input type="date" id="export-start-date" class="w-full p-2 border rounded-lg mt-1" value="${firstDay}" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Fin</label>
+                    <input type="date" id="export-end-date" class="w-full p-2 border rounded-lg mt-1" value="${today}" required>
+                </div>
+                <div class="pt-2">
+                    <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 flex justify-center items-center gap-2">
+                        <span>Descargar Excel</span>
+                        <i class="fas fa-file-excel"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    document.getElementById('modal').classList.remove('hidden');
+    document.getElementById('close-export-modal').addEventListener('click', hideModal);
+
+    document.getElementById('export-payments-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const startDate = document.getElementById('export-start-date').value;
+        const endDate = document.getElementById('export-end-date').value;
+        
+        if (startDate > endDate) {
+            showModalMessage("La fecha de inicio no puede ser mayor a la fecha fin.");
+            return;
+        }
+
+        // Llamamos a la función de descarga con las fechas seleccionadas
+        downloadPaymentsExcel(startDate, endDate);
+        hideModal();
+    });
+}
