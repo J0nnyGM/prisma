@@ -1792,22 +1792,20 @@ async function showPaymentModal(remisionOriginal) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const remRef = doc(db, "remisiones", remisionOriginal.id);
 
-    // 1. Limpiar cualquier escucha previo antes de abrir uno nuevo
     if (paymentModalUnsubscribe) paymentModalUnsubscribe();
 
-    // 2. Iniciar escucha en tiempo real del documento de la remisión
     paymentModalUnsubscribe = onSnapshot(remRef, (docSnap) => {
         if (!docSnap.exists()) return;
         
         const remision = { id: docSnap.id, ...docSnap.data() };
 
-        // --- CÁLCULOS (Tu lógica original) ---
+        // --- CÁLCULOS ---
         const totalConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
         const totalPorConfirmar = (remision.payments || []).filter(p => p.status === 'por confirmar').reduce((sum, p) => sum + p.amount, 0);
         const saldoPendiente = remision.valorTotal - totalConfirmado;
         const saldoRealPendiente = remision.valorTotal - totalConfirmado - totalPorConfirmar;
 
-        // --- GENERACIÓN DE HTML DE PAGOS ---
+        // --- GENERACIÓN DE HTML ---
         const paymentsHTML = (remision.payments || []).map((p, index) => {
             let statusBadge = '';
             let actionButtons = '';
@@ -1831,20 +1829,15 @@ async function showPaymentModal(remisionOriginal) {
                 statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Confirmado</span>`;
             }
 
-            const rejectionReasonHtml = p.status === 'rechazado' && p.rejectionReason
-                ? `<div class="text-xs text-red-700 mt-1 italic">Motivo: ${p.rejectionReason}</div>`
-                : '';
-
             return `<tr class="border-b">
                 <td class="p-2">${p.date}</td>
                 <td class="p-2">${p.method}</td>
                 <td class="p-2 text-right">${formatCurrency(p.amount)}</td>
-                <td class="p-2">${statusBadge}${rejectionReasonHtml}</td>
+                <td class="p-2">${statusBadge}</td>
                 <td class="p-2">${actionButtons}</td>
             </tr>`;
         }).join('');
 
-        // --- RENDERIZADO DEL MODAL ---
         modalContentWrapper.innerHTML = `
         <div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left flex flex-col max-h-[85vh]">
             <div class="flex-shrink-0">
@@ -1853,71 +1846,75 @@ async function showPaymentModal(remisionOriginal) {
                     <button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 text-center">
-                    <div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800">VALOR TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div>
-                    <div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800">PAGADO (CONF.)</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div>
-                    <div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800">POR CONFIRMAR</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div>
-                    <div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800">SALDO PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div>
+                    <div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800 font-bold">TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div>
+                    <div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800 font-bold">PAGADO</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div>
+                    <div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800 font-bold">PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div>
+                    <div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800 font-bold">SALDO</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div>
                 </div>
             </div>
             <div class="flex-grow overflow-y-auto pr-2">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h3 class="font-semibold mb-2">Historial de Pagos</h3>
+                        <h3 class="font-semibold mb-2">Historial</h3>
                         <div class="border rounded-lg max-h-60 overflow-y-auto">
                             <table class="w-full text-sm">
-                                <thead class="bg-gray-50 sticky top-0"><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Método</th><th class="p-2 text-right">Monto</th><th class="p-2 text-left">Estado</th><th></th></tr></thead>
-                                <tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay pagos registrados.</td></tr>'}</tbody>
+                                <thead class="bg-gray-50 sticky top-0"><tr><th class="p-2 text-left text-[10px]">Fecha</th><th class="p-2 text-left text-[10px]">Metodo</th><th class="p-2 text-right text-[10px]">Monto</th><th class="p-2 text-left text-[10px]">Estado</th><th></th></tr></thead>
+                                <tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center">No hay pagos</td></tr>'}</tbody>
                             </table>
                         </div>
                     </div>
-                    <div id="payment-form-container">
-                        <h3 class="font-semibold mb-2">Registrar Nuevo Pago</h3>
+                    <div>
+                        <h3 class="font-semibold mb-2 text-indigo-700">Nuevo Abono</h3>
                         ${saldoRealPendiente > 0.01 ? `
-                            <form id="add-payment-form" class="space-y-3 bg-gray-50 p-4 rounded-lg">
-                                <div><label class="text-sm font-medium">Monto</label><input type="text" id="new-payment-amount" class="w-full p-2 border rounded-md mt-1" required></div>
-                                <div><label class="text-sm font-medium">Fecha</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md mt-1" value="${new Date().toISOString().split('T')[0]}" required></div>
-                                <div><label class="text-sm font-medium">Método</label><select id="new-payment-method" class="w-full p-2 border rounded-md mt-1 bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
-                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700">Registrar</button>
-                            </form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-semibold text-sm">¡Totalmente Pagada!</div>'}
+                            <form id="add-payment-form" class="space-y-3 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                                <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Monto</label><input type="text" id="new-payment-amount" class="w-full p-2 border rounded-md" required></div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Fecha</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md" value="${new Date().toISOString().split('T')[0]}" required></div>
+                                    <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Método</label><select id="new-payment-method" class="w-full p-2 border rounded-md bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
+                                </div>
+                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition">Registrar Abono</button>
+                            </form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-bold">PAGADA</div>'}
                     </div>
                 </div>
             </div>
         </div>`;
 
-        // --- REASIGNACIÓN DE LISTENERS (Al redibujar el HTML se pierden) ---
+        // MOSTRAR MODAL
         document.getElementById('modal').classList.remove('hidden');
+
+        // CERRAR MODAL
         document.getElementById('close-payment-modal').onclick = () => {
             if (paymentModalUnsubscribe) paymentModalUnsubscribe();
             hideModal();
         };
 
-        // Confirmar Pago
+        // ACCIÓN: CONFIRMAR (Sin loader que borre la pantalla)
         document.querySelectorAll('.confirm-payment-btn').forEach(btn => {
             btn.onclick = async (e) => {
                 const idx = parseInt(e.currentTarget.dataset.paymentIndex);
-                showModalMessage("Confirmando...", true);
+                e.currentTarget.disabled = true; // Evitar doble clic
                 try {
                     const freshSnap = await getDoc(remRef);
                     const freshData = freshSnap.data();
                     const p = freshData.payments[idx];
+                    
                     p.status = 'confirmado';
                     p.confirmedBy = currentUser.uid;
                     p.confirmedAt = new Date();
+                    
                     await updateDoc(remRef, { payments: freshData.payments });
                     await actualizarSaldoPorPago(p.method, p.amount);
-                    hideModal(); // El onSnapshot redibujará el modal de pagos solo
                     showTemporaryMessage("Pago confirmado", "success");
-                } catch (err) { console.error(err); showModalMessage("Error"); }
+                } catch (err) { console.error(err); }
             };
         });
 
-        // Rechazar Pago
+        // ACCIÓN: RECHAZAR
         document.querySelectorAll('.reject-payment-btn').forEach(btn => {
             btn.onclick = async (e) => {
                 const reason = prompt("Motivo:");
                 if (!reason) return;
                 const idx = parseInt(e.currentTarget.dataset.paymentIndex);
-                showModalMessage("Procesando...", true);
                 try {
                     const freshSnap = await getDoc(remRef);
                     const freshData = freshSnap.data();
@@ -1925,13 +1922,12 @@ async function showPaymentModal(remisionOriginal) {
                     freshData.payments[idx].rejectionReason = reason;
                     freshData.payments[idx].rejectedBy = currentUser.uid;
                     await updateDoc(remRef, { payments: freshData.payments });
-                    hideModal();
                     showTemporaryMessage("Rechazado", "info");
                 } catch (err) { console.error(err); }
             };
         });
 
-        // Formulario de nuevo pago
+        // ACCIÓN: NUEVO PAGO
         const addPayForm = document.getElementById('add-payment-form');
         if (addPayForm) {
             const amountInput = document.getElementById('new-payment-amount');
@@ -1941,9 +1937,8 @@ async function showPaymentModal(remisionOriginal) {
             addPayForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const amount = unformatCurrency(amountInput.value);
-                if (amount <= 0 || amount > saldoRealPendiente + 0.01) return showModalMessage("Monto inválido");
+                if (amount <= 0 || amount > saldoRealPendiente + 10) return alert("Monto inválido");
 
-                showModalMessage("Registrando...", true);
                 try {
                     await updateDoc(remRef, {
                         payments: arrayUnion({
@@ -1955,8 +1950,7 @@ async function showPaymentModal(remisionOriginal) {
                             status: 'por confirmar'
                         })
                     });
-                    hideModal();
-                    showTemporaryMessage("Pago registrado", "success");
+                    showTemporaryMessage("Abono registrado", "success");
                 } catch (err) { console.error(err); }
             };
         }
