@@ -1752,23 +1752,19 @@ function showPaymentModal(remision) {
         if (p.status === 'por confirmar') {
             statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
 
-            // **** INICIO DE LA CORRECCIÓN ****
-            // Solo admins pueden confirmar/rechazar.
-            // ADEMÁS: No se puede confirmar un pago creado por uno mismo (Seguridad de 4 ojos).
+            // REGLA: Debe ser admin Y no debe ser quien lo registró
             if (currentUserData.role === 'admin') {
-                if (p.registeredBy !== currentUser.uid) { // <--- ESTA ES LA VALIDACIÓN NUEVA
+                if (p.registeredBy !== currentUser.uid) {
                     actionButtons = `
-                        <div class="flex flex-col items-end gap-1">
-                            <button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600 w-20 text-center">Confirmar</button>
-                            <button data-remision-id="${remision.id}" data-payment-index="${index}" class="reject-payment-btn bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 w-20 text-center">Rechazar</button>
-                        </div>
-                    `;
+                <div class="flex flex-col gap-1">
+                    <button data-remision-id="${remision.id}" data-payment-index="${index}" class="confirm-payment-btn bg-green-600 text-white text-[10px] px-2 py-1 rounded hover:bg-green-700">Confirmar</button>
+                    <button data-remision-id="${remision.id}" data-payment-index="${index}" class="reject-payment-btn bg-red-600 text-white text-[10px] px-2 py-1 rounded hover:bg-red-700">Rechazar</button>
+                </div>`;
                 } else {
-                    actionButtons = `<span class="text-xs text-gray-400 italic">Espera confirmación de otro admin</span>`;
+                    // Si el mismo admin lo registró, ve este mensaje
+                    actionButtons = `<span class="text-[10px] text-orange-600 italic font-medium">Requiere otro Admin</span>`;
                 }
             }
-            // **** FIN DE LA CORRECCIÓN ****
-
         } else if (p.status === 'rechazado') {
             statusBadge = `<span class="text-xs font-semibold bg-red-200 text-red-800 px-2 py-1 rounded-full">Rechazado</span>`;
         } else {
@@ -1829,55 +1825,89 @@ function showPaymentModal(remision) {
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-payment-modal').addEventListener('click', hideModal);
 
+    // Listener para CONFIRMAR
     document.querySelectorAll('.confirm-payment-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const remisionId = e.currentTarget.dataset.remisionId;
             const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
-            const remisionToUpdate = allRemisiones.find(r => r.id === remisionId);
-            if (remisionToUpdate && remisionToUpdate.payments[paymentIndex]) {
-                remisionToUpdate.payments[paymentIndex].status = 'confirmado';
-                remisionToUpdate.payments[paymentIndex].confirmedBy = currentUser.uid;
-                remisionToUpdate.payments[paymentIndex].confirmedAt = new Date();
-                showModalMessage("Confirmando pago...", true);
-                try {
-                    await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
-                    const pagoConfirmado = remisionToUpdate.payments[paymentIndex];
-                    await actualizarSaldoPorPago(pagoConfirmado.method, pagoConfirmado.amount);
+
+            showModalMessage("Confirmando pago...", true);
+
+            try {
+                // CORRECCIÓN: Obtenemos el documento fresco de la DB, no del array local
+                const remRef = doc(db, "remisiones", remisionId);
+                const remSnap = await getDoc(remRef);
+
+                if (!remSnap.exists()) throw new Error("La remisión ya no existe.");
+
+                const remData = remSnap.data();
+                const payments = [...remData.payments];
+                const p = payments[paymentIndex];
+
+                // Doble verificación de seguridad: Admin diferente
+                if (p.registeredBy === currentUser.uid) {
                     hideModal();
-                    showModalMessage("¡Pago confirmado!", false, 1500);
-                } catch (error) {
-                    console.error("Error al confirmar pago:", error);
-                    showModalMessage("Error al confirmar el pago.");
+                    showModalMessage("Error: No puedes confirmar un pago registrado por ti mismo.");
+                    return;
                 }
+
+                // Actualizamos el estado del pago
+                p.status = 'confirmado';
+                p.confirmedBy = currentUser.uid;
+                p.confirmedAt = new Date();
+
+                // Guardamos en la base de datos
+                await updateDoc(remRef, { payments: payments });
+
+                // Actualizamos saldos contables
+                await actualizarSaldoPorPago(p.method, p.amount);
+
+                hideModal();
+                showTemporaryMessage("¡Pago confirmado exitosamente!", "success");
+
+                // Refrescamos el contexto del cliente para ver el nuevo saldo
+                updateClientContext(activeChatPhone, []);
+
+            } catch (error) {
+                console.error("Error al confirmar pago:", error);
+                hideModal();
+                showModalMessage("Error técnico: " + error.message);
             }
         });
     });
 
+    // Listener para RECHAZAR
     document.querySelectorAll('.reject-payment-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const reason = prompt("Por favor, introduce un motivo para el rechazo:");
-            if (reason) {
-                const remisionId = e.currentTarget.dataset.remisionId;
-                const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
-                const remisionToUpdate = allRemisiones.find(r => r.id === remisionId);
+            const reason = prompt("Indica el motivo del rechazo del pago:");
+            if (!reason) return;
 
-                if (remisionToUpdate && remisionToUpdate.payments[paymentIndex]) {
-                    remisionToUpdate.payments[paymentIndex].status = 'rechazado';
-                    remisionToUpdate.payments[paymentIndex].rejectionReason = reason;
-                    remisionToUpdate.payments[paymentIndex].rejectedBy = currentUser.uid;
-                    remisionToUpdate.payments[paymentIndex].rejectedAt = new Date();
+            const remisionId = e.currentTarget.dataset.remisionId;
+            const paymentIndex = parseInt(e.currentTarget.dataset.paymentIndex);
 
-                    showModalMessage("Rechazando pago...", true);
-                    try {
-                        await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
+            showModalMessage("Procesando rechazo...", true);
 
-                        hideModal();
-                        showModalMessage("¡Pago rechazado!", false, 1500);
-                    } catch (error) {
-                        console.error("Error al rechazar pago:", error);
-                        showModalMessage("Error al rechazar el pago.");
-                    }
-                }
+            try {
+                const remRef = doc(db, "remisiones", remisionId);
+                const remSnap = await getDoc(remRef);
+                const remData = remSnap.data();
+                const payments = [...remData.payments];
+
+                payments[paymentIndex].status = 'rechazado';
+                payments[paymentIndex].rejectionReason = reason;
+                payments[paymentIndex].rejectedBy = currentUser.uid;
+                payments[paymentIndex].rejectedAt = new Date();
+
+                await updateDoc(remRef, { payments: payments });
+
+                hideModal();
+                showTemporaryMessage("Pago rechazado.", "info");
+                updateClientContext(activeChatPhone, []);
+
+            } catch (error) {
+                console.error("Error al rechazar pago:", error);
+                hideModal();
+                showModalMessage("Error al procesar el rechazo.");
             }
         });
     });
@@ -5060,10 +5090,10 @@ async function updateClientContext(phone, messages) {
 
     // 2. BUSQUEDA REAL DE DEUDAS (Aquí está la magia)
     sideList.innerHTML = '<p class="text-center text-[10px] text-gray-400 py-4 italic">Cargando deudas...</p>';
-    
+
     try {
         const pendientes = await getDeudasActualizadas(cliente.id);
-        
+
         let deudaTotal = 0;
         let remisionesHTML = '';
 
@@ -5104,6 +5134,16 @@ async function updateClientContext(phone, messages) {
         console.error("Error al cargar deudas en CRM:", error);
         sideList.innerHTML = '<p class="text-center text-red-400 text-[10px]">Error al cargar deudas</p>';
     }
+
+    const statementBtn = document.getElementById('wa-side-send-statement');
+    if (statementBtn) {
+        statementBtn.onclick = () => {
+            if (confirm(`¿Enviar estado de cuenta a ${cliente.nombre}?`)) {
+                sendAccountStatement(phone);
+            }
+        };
+    }
+
 }
 
 function showRemisionSelectorModal(pendientes, clienteNombre) {
@@ -5170,8 +5210,8 @@ async function getDeudasActualizadas(clienteId) {
     const remisionesRef = collection(db, "remisiones");
     // Buscamos todas las remisiones de este cliente que no estén anuladas
     const q = query(
-        remisionesRef, 
-        where("idCliente", "==", clienteId), 
+        remisionesRef,
+        where("idCliente", "==", clienteId),
         where("estado", "!=", "Anulada")
     );
 
@@ -5192,3 +5232,65 @@ async function getDeudasActualizadas(clienteId) {
     });
 }
 
+async function sendAccountStatement(phone) {
+    const cliente = allClientes.find(c => c.telefono1 === phone || c.telefono2 === phone);
+    if (!cliente) return showTemporaryMessage("Cliente no encontrado", "error");
+
+    showModalMessage("Generando estado de cuenta...", true);
+
+    try {
+        // 1. Obtenemos TODAS las remisiones del cliente (no solo las de la memoria local)
+        const remisionesRef = collection(db, "remisiones");
+        const q = query(remisionesRef, where("idCliente", "==", cliente.id), where("estado", "!=", "Anulada"));
+        const snap = await getDocs(q);
+
+        let totalDeuda = 0;
+        let detalleMensaje = "";
+        let tienePendientes = false;
+
+        const docs = snap.docs.map(d => d.data()).sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
+
+        docs.forEach(r => {
+            const pagado = (r.payments || []).filter(p => p.status === 'confirmado').reduce((acc, p) => acc + p.amount, 0);
+            const saldo = r.valorTotal - pagado;
+
+            if (saldo > 100) {
+                tienePendientes = true;
+                totalDeuda += saldo;
+                detalleMensaje += `*• Remisión #${r.numeroRemision}* (${r.fechaRecibido})\n   Saldo: _${formatCurrency(saldo)}_\n`;
+            }
+        });
+
+        // 2. Construcción del Mensaje Profesional
+        const fechaHoy = new Date().toLocaleDateString();
+        let mensajeFinal = `*ESTADO DE CUENTA - PRISMACALOR SAS*\n`;
+        mensajeFinal += `*Cliente:* ${cliente.nombre}\n`;
+        mensajeFinal += `*Fecha de corte:* ${fechaHoy}\n`;
+        mensajeFinal += `------------------------------------------\n\n`;
+
+        if (tienePendientes) {
+            mensajeFinal += `Hola, adjuntamos el detalle de tus cuentas pendientes:\n\n`;
+            mensajeFinal += detalleMensaje;
+            mensajeFinal += `\n*TOTAL PENDIENTE: ${formatCurrency(totalDeuda)}*\n\n`;
+            mensajeFinal += `------------------------------------------\n`;
+            mensajeFinal += `*Medios de Pago:*\n`;
+            mensajeFinal += `• Nequi: 310 000 0000\n`; // Cambia por tus datos reales
+            mensajeFinal += `• Davivienda: Ahorros #000-0000-00\n\n`;
+            mensajeFinal += `Por favor envíanos el comprobante por este medio. ¡Gracias!`;
+        } else {
+            mensajeFinal += `🎉 *¡Felicidades!* No tienes cuentas pendientes a la fecha.\n\nGracias por ser un cliente cumplido.`;
+        }
+
+        // 3. Envío Real por WhatsApp usando tu Cloud Function
+        const sendMsgFn = httpsCallable(functions, 'sendWhatsAppMessage');
+        await sendMsgFn({ telefono: phone, mensaje: mensajeFinal });
+
+        hideModal();
+        showTemporaryMessage("Estado de cuenta enviado con éxito", "success");
+
+    } catch (error) {
+        console.error("Error al enviar estado de cuenta:", error);
+        hideModal();
+        showModalMessage("Error al enviar el estado de cuenta.");
+    }
+}
