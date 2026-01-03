@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" type="image/jpeg" href="/app/recursos/LOGO PRISMA.jpg">
-    <script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-T2RKG90GC5');</script>
+    <script>window.dataLayer = window.dataLayer || []; function gtag() { dataLayer.push(arguments); } gtag('js', new Date()); gtag('config', 'G-T2RKG90GC5');</script>
 </head>
 
 <body class="text-gray-800">
@@ -131,6 +131,8 @@
                 <nav id="main-nav" class="-mb-px flex space-x-6 overflow-x-auto">
                     <button id="tab-remisiones"
                         class="tab-btn active py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Remisiones</button>
+                    <button id="tab-mensajes"
+                        class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Mensajes</button>
                     <button id="tab-facturacion"
                         class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Facturación</button>
                     <button id="tab-clientes"
@@ -157,6 +159,100 @@
                 <div id="view-gastos" class="hidden"></div>
                 <div id="view-proveedores" class="hidden"></div>
                 <div id="view-empleados" class="hidden"></div>
+
+                <div id="view-mensajes" class="hidden">
+                    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col md:flex-row"
+                        style="height: calc(100vh - 280px);">
+
+                        <div class="w-full md:w-80 border-r border-gray-200 flex flex-col bg-gray-50">
+                            <div class="p-4 border-b bg-white">
+                                <h2 class="text-xl font-bold text-gray-800">Mensajes WhatsApp</h2>
+                            </div>
+                            <div id="wa-contacts-list" class="flex-grow overflow-y-auto divide-y divide-gray-200">
+                            </div>
+                        </div>
+
+                        <div id="wa-chat-area" class="flex-grow flex flex-col bg-[#e5ddd5]">
+                            <div id="wa-no-chat-selected"
+                                class="flex-grow flex flex-col items-center justify-center text-gray-400">
+                                <i class="fa-brands fa-whatsapp text-6xl mb-4 opacity-20"></i>
+                                <p>Selecciona un cliente para ver la conversación</p>
+                            </div>
+
+                            <div id="wa-chat-active" class="hidden flex-grow flex flex-row overflow-hidden">
+                                <div class="flex-grow flex flex-col border-r border-gray-200 bg-[#e5ddd5]">
+                                    <div class="p-3 bg-white border-b shadow-sm flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold cursor-pointer"
+                                                id="wa-header-avatar">
+                                                <i class="fa-solid fa-user"></i>
+                                            </div>
+                                            <div>
+                                                <span id="active-chat-name"
+                                                    class="font-bold text-gray-800 cursor-pointer hover:underline"></span>
+                                                <div id="wa-window-timer" class="text-[10px] font-bold"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="whatsapp-messages-list"
+                                        class="flex-grow overflow-y-auto p-4 space-y-3 flex flex-col"></div>
+
+                                    <div class="p-4 bg-white border-t flex items-center gap-2">
+                                        <input type="text" id="wa-reply-input" placeholder="Escribe tu respuesta..."
+                                            class="flex-grow p-2 border rounded-full focus:ring-2 focus:ring-green-500 outline-none">
+                                        <button id="wa-send-btn"
+                                            class="bg-green-600 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-green-700 transition">
+                                            <i class="fa-solid fa-paper-plane"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="wa-client-sidebar"
+                                    class="w-72 bg-white flex flex-col hidden lg:flex shadow-inner">
+                                    <div class="p-4 border-b bg-gray-50">
+                                        <h3 class="font-bold text-gray-700 flex items-center gap-2">
+                                            <i class="fa-solid fa-circle-info text-blue-500"></i> Perfil del Cliente
+                                        </h3>
+                                    </div>
+                                    <div class="p-4 space-y-6 overflow-y-auto flex-grow">
+                                        <div class="grid grid-cols-1 gap-2">
+                                            <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                <p class="text-[10px] text-blue-600 font-bold uppercase">Compras Totales
+                                                </p>
+                                                <p id="wa-side-total-compras" class="text-lg font-black text-blue-900">$
+                                                    0</p>
+                                            </div>
+                                            <div id="wa-side-deuda-container"
+                                                class="bg-red-50 p-3 rounded-lg border border-red-100">
+                                                <p class="text-[10px] text-red-600 font-bold uppercase">Saldo Pendiente
+                                                </p>
+                                                <p id="wa-side-total-deuda" class="text-lg font-black text-red-900">$ 0
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p
+                                                class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-widest text-center">
+                                                Remisiones Pendientes</p>
+                                            <div id="wa-side-remisiones-list" class="space-y-2">
+                                            </div>
+                                        </div>
+
+                                        <div class="pt-4 border-t">
+                                            <button id="wa-side-report-payment"
+                                                class="w-full bg-green-600 text-white font-bold py-2 rounded-lg text-sm hover:bg-green-700 transition flex items-center justify-center gap-2">
+                                                <i class="fa-solid fa-hand-holding-dollar"></i> Reportar Pago
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
@@ -168,7 +264,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/app.js"></script>
 
     <div id="policy-modal"
         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
@@ -217,53 +312,70 @@
         </div>
     </div>
 
-    <div id="retencion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">Aplicar Retención</h2>
-            <button id="close-retencion-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-        </div>
-        <p class="text-sm text-gray-600 mb-2">Remisión N°: <span id="retencion-remision-num" class="font-bold"></span></p>
-        <p class="text-sm text-gray-600 mb-4">Total Actual: <span id="retencion-total-actual" class="font-bold"></span></p>
-        
-        <form id="retencion-form" class="space-y-4">
-            <input type="hidden" id="retencion-remision-id">
-            
-            <div>
-                <label for="retencion-valor" class="block text-sm font-medium">Valor a Descontar</label>
-                <input type="text" id="retencion-valor" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required placeholder="0">
+    <div id="retencion-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Aplicar Retención</h2>
+                <button id="close-retencion-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
             </div>
-            <button type="submit" class="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700">Aplicar Retención</button>
-        </form>
-    </div>
-</div>
+            <p class="text-sm text-gray-600 mb-2">Remisión N°: <span id="retencion-remision-num"
+                    class="font-bold"></span></p>
+            <p class="text-sm text-gray-600 mb-4">Total Actual: <span id="retencion-total-actual"
+                    class="font-bold"></span></p>
 
-<div id="saldos-iniciales-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-    <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">Saldos Base (Iniciales)</h2>
-            <button id="close-saldos-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            <form id="retencion-form" class="space-y-4">
+                <input type="hidden" id="retencion-remision-id">
+
+                <div>
+                    <label for="retencion-valor" class="block text-sm font-medium">Valor a Descontar</label>
+                    <input type="text" id="retencion-valor" class="w-full p-2 border rounded-lg mt-1"
+                        inputmode="numeric" required placeholder="0">
+                </div>
+                <button type="submit"
+                    class="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700">Aplicar
+                    Retención</button>
+            </form>
         </div>
-        <p class="text-sm text-gray-600 mb-4">Ingresa el dinero que existía antes de usar el sistema. Esto ajustará los totales bancarios.</p>
-        
-        <form id="saldos-iniciales-form" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium">Efectivo Base</label>
-                <input type="text" id="saldo-base-efectivo" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
-            </div>
-            <div>
-                <label class="block text-sm font-medium">Nequi Base</label>
-                <input type="text" id="saldo-base-nequi" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
-            </div>
-            <div>
-                <label class="block text-sm font-medium">Davivienda Base</label>
-                <input type="text" id="saldo-base-davivienda" class="w-full p-2 border rounded-lg" onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
-            </div>
-            
-            <button type="submit" class="w-full bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700">Guardar Saldos</button>
-        </form>
     </div>
-</div>
+
+    <div id="saldos-iniciales-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Saldos Base (Iniciales)</h2>
+                <button id="close-saldos-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">Ingresa el dinero que existía antes de usar el sistema. Esto ajustará
+                los totales bancarios.</p>
+
+            <form id="saldos-iniciales-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium">Efectivo Base</label>
+                    <input type="text" id="saldo-base-efectivo" class="w-full p-2 border rounded-lg"
+                        onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Nequi Base</label>
+                    <input type="text" id="saldo-base-nequi" class="w-full p-2 border rounded-lg"
+                        onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Davivienda Base</label>
+                    <input type="text" id="saldo-base-davivienda" class="w-full p-2 border rounded-lg"
+                        onfocus="unformatCurrencyInput(this)" onblur="formatCurrencyInput(this)" placeholder="$0">
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700">Guardar
+                    Saldos</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://kit.fontawesome.com/0d623ded97.js" crossorigin="anonymous"></script>
+    <script type="module" src="js/app.js"></script>
+
 
 </body>
 

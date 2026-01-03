@@ -29,8 +29,8 @@ if (SENDGRID_API_KEY) {
 }
 
 // Configuración de WhatsApp
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN?.replace(/['"\s]/g, '');
+const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID?.replace(/['"\s]/g, '');
 
 const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 
@@ -91,7 +91,7 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
         to: formattedPhone,
         type: "template",
         template: {
-            name: "envio_remision", 
+            name: "envio_remision",
             language: { code: "es" },
             components: [
                 {
@@ -133,9 +133,9 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
  * @return {Buffer} El PDF como un buffer de datos.
  */
 function generarPDF(remisionData, esPlanta) {
-    const remision = remisionData; 
+    const remision = remisionData;
     const isForPlanta = esPlanta;
-    
+
     // eslint-disable-next-line new-cap
     const doc = new jsPDF();
 
@@ -216,11 +216,11 @@ function generarPDF(remisionData, esPlanta) {
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
         doc.text("Observaciones:", 20, yPos);
-        
+
         doc.setFont("helvetica", "normal");
         const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170);
         doc.text(textoObservaciones, 20, yPos + 5);
-        yPos += (textoObservaciones.length * 5) + 5; 
+        yPos += (textoObservaciones.length * 5) + 5;
     }
 
     if (!isForPlanta) {
@@ -330,7 +330,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             const pdfPlantaBuffer = generarPDF(remisionData, true);
 
             const bucket = admin.storage().bucket(BUCKET_NAME);
-            
+
             const filePath = `remisiones/${remisionData.numeroRemision}.pdf`;
             const file = bucket.file(filePath);
             await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
@@ -338,16 +338,16 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             const filePathPlanta = `remisiones/planta-${remisionData.numeroRemision}.pdf`;
             const filePlanta = bucket.file(filePathPlanta);
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-            
-            await snap.ref.update({ 
-                pdfPath: filePath, 
-                pdfPlantaPath: filePathPlanta 
+
+            await snap.ref.update({
+                pdfPath: filePath,
+                pdfPlantaPath: filePathPlanta
             });
 
             // URL firmada v4 para enviar en las notificaciones
-            const [url] = await file.getSignedUrl({ 
-                action: "read", 
-                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, 
+            const [url] = await file.getSignedUrl({
+                action: "read",
+                expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
                 version: 'v4'
             });
 
@@ -397,7 +397,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                 const clienteDoc = await admin.firestore().collection("clientes").doc(remisionData.idCliente).get();
                 if (clienteDoc.exists) {
                     const clienteData = clienteDoc.data();
-                    const telefonos = [clienteData.telefono1, clienteData.telefono2].filter(Boolean);
+                    const telefonos = [...new Set([clienteData.telefono1, clienteData.telefono2].filter(Boolean))];
 
                     if (telefonos.length > 0) {
                         for (const telefono of telefonos) {
@@ -453,8 +453,8 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     subject = `Anulación de Remisión N° ${afterData.numeroRemision}`;
                     htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Te informamos que la remisión N° <strong>${afterData.numeroRemision}</strong> ha sido anulada.</p><p>Adjuntamos copia.</p>`;
                 } else if (motivo === 'Entrega') {
-                     subject = `Tu orden N° ${afterData.numeroRemision} ha sido entregada`;
-                     htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido marcada como <strong>entregada</strong>.</p><p>Adjuntamos remisión final.</p>`;
+                    subject = `Tu orden N° ${afterData.numeroRemision} ha sido entregada`;
+                    htmlBody = `<p>Hola ${afterData.clienteNombre},</p><p>Tu orden N° <strong>${afterData.numeroRemision}</strong> ha sido marcada como <strong>entregada</strong>.</p><p>Adjuntamos remisión final.</p>`;
                 }
 
                 const msg = {
@@ -489,13 +489,13 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             const pdfBuffer = generarPDF(rData, false);
             const pdfPlantaBuffer = generarPDF(rData, true);
             const bucket = admin.storage().bucket(BUCKET_NAME);
-            
+
             const file = bucket.file(rData.pdfPath);
             await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
 
             const filePlanta = bucket.file(rData.pdfPlantaPath);
             await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-            
+
             const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000, version: 'v4' });
             return { pdfUrl: url, pdfBuffer: pdfBuffer };
         };
@@ -508,7 +508,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                 await sendNotifications(motivo, pdfUrl, pdfBuffer);
             } catch (e) { log(`Error procesando ${motivo}: ${e}`); }
         }
-        
+
         // 2. Pago Final
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
@@ -550,7 +550,7 @@ exports.onResendEmailRequest = functions.region("us-central1").firestore
         try {
             const remisionDoc = await admin.firestore().collection("remisiones").doc(request.remisionId).get();
             if (!remisionDoc.exists) return snap.ref.delete();
-            
+
             const rData = remisionDoc.data();
             const bucket = admin.storage().bucket(BUCKET_NAME);
             const [pdfBuffer] = await bucket.file(rData.pdfPath).download();
@@ -615,11 +615,11 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
     }
 
     const remisionRef = admin.firestore().collection("remisiones").doc(remisionId);
-    
+
     try {
         const remSnap = await remisionRef.get();
         if (!remSnap.exists) throw new functions.https.HttpsError("not-found", "No existe la remisión.");
-        
+
         const rData = remSnap.data();
         const discountAmount = Math.round(rData.subtotal * (discountPercentage / 100));
         const subWithDisc = rData.subtotal - discountAmount;
@@ -647,7 +647,7 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
         const bucket = admin.storage().bucket(BUCKET_NAME);
         const file = bucket.file(`remisiones/${finalData.numeroRemision}.pdf`);
         await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-        
+
         const filePlanta = bucket.file(`remisiones/planta-${finalData.numeroRemision}.pdf`);
         await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
 
@@ -696,12 +696,12 @@ exports.updateEmployeeDocument = functions.https.onCall(async (data, context) =>
  */
 exports.getSignedUrlForPath = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-    
+
     const bucket = admin.storage().bucket(BUCKET_NAME);
     const [signedUrl] = await bucket.file(data.path).getSignedUrl({
         action: 'read',
         expires: Date.now() + 15 * 60 * 1000, // 15 min
-        version: 'v4', 
+        version: 'v4',
     });
     return { url: signedUrl };
 });
@@ -732,7 +732,7 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
                     if (u.hostname === "storage.googleapis.com") {
                         skipped++; continue;
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             const [url] = await bucket.file(`remisiones/${r.numeroRemision}.pdf`)
@@ -759,7 +759,7 @@ exports.applyRetention = functions.https.onCall(async (data, context) => {
 
     // Ya no extraemos 'retentionType'
     const { remisionId, amount } = data;
-    
+
     if (!remisionId || !amount || amount <= 0) {
         throw new functions.https.HttpsError("invalid-argument", "Datos inválidos.");
     }
@@ -798,3 +798,13 @@ exports.applyRetention = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("internal", error.message || "Error interno.");
     }
 });
+
+const { whatsappWebhook } = require("./webhook");
+
+exports.whatsappWebhook = whatsappWebhook;
+
+const waWebhook = require("./webhook");
+
+exports.whatsappWebhook = waWebhook.whatsappWebhook;
+exports.sendWhatsAppMessage = waWebhook.sendWhatsAppMessage;
+
