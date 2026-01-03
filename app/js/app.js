@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, addDoc, runTransaction, arrayUnion, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, orderBy, onSnapshot, deleteDoc, updateDoc, increment, addDoc, runTransaction, arrayUnion, where, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
@@ -30,6 +30,25 @@ try {
 
 // --- VISTAS Y ESTADO GLOBAL ---
 
+let globalesSaldos = {
+    Efectivo: 0,
+    Nequi: 0,
+    Davivienda: 0
+};
+
+let lastClienteDoc = null;
+let cargandoMasClientes = false;
+let searchClientesTimeout;
+let clientesRenderizados = []; // Lista de clientes para la vista actual
+
+let facturacionSearchTimeout; // Variable para el debounce
+let lastRemisionDoc = null; // Almacena el último documento cargado para la paginación
+let cargandoMasRemisiones = false; // Evita múltiples clics accidentales
+
+let remisionesFacturadasHistorial = []; // Para la pestaña "Realizadas"
+let lastFacturadaDoc = null; // Para paginar las realizadas
+let cargandoMasFacturadas = false;
+
 const authView = document.getElementById('auth-view');
 const appView = document.getElementById('app-view');
 const deniedView = document.getElementById('denied-view');
@@ -38,6 +57,12 @@ const registerForm = document.getElementById('register-form');
 let currentUser = null;
 let currentUserData = null;
 let allItems = [], allColores = [], allClientes = [], allProveedores = [], allGastos = [], allRemisiones = [], allUsers = [], allPendingLoans = [], profitLossChart = null;
+
+let remisionesPendientesFactura = []; // Solo para el módulo de Facturación
+let remisionesCartera = [];           // Solo para el Dashboard/Cartera
+let facturacionUnsubscribe = null;
+let carteraUnsubscribe = null;
+
 let dynamicElementCounter = 0;
 let isRegistering = false; // <-- Variable de "cerradura" para el registro
 const ESTADOS_REMISION = ['Recibido', 'En Proceso', 'Procesado', 'Entregado'];
@@ -45,6 +70,8 @@ const ALL_MODULES = ['remisiones', 'facturacion', 'clientes', 'items', 'colores'
 const RRHH_DOCUMENT_TYPES = [
     { id: 'contrato', name: 'Contrato' }, { id: 'hojaDeVida', name: 'Hoja de Vida' }, { id: 'examenMedico', name: 'Examen Médico' }, { id: 'cedula', name: 'Cédula (PDF)' }, { id: 'certificadoARL', name: 'Certificado ARL' }, { id: 'certificadoEPS', name: 'Certificado EPS' }, { id: 'certificadoAFP', name: 'Certificado AFP' }, { id: 'cartaRetiro', name: 'Carta de renuncia o despido' }, { id: 'liquidacionDoc', name: 'Liquidación' },
 ];
+
+
 // --- MANEJO DE AUTENTICACIÓN Y VISTAS ---
 let activeListeners = [];
 function unsubscribeAllListeners() {
@@ -105,39 +132,27 @@ registerForm.addEventListener('submit', handleRegisterSubmit);
 // --- LÓGICA DE INICIALIZACIÓN DE LA APP ---
 let isAppInitialized = false;
 
+// 1. Función startApp: Mantiene el flujo lógico sin cambios de IDs
 function startApp() {
     if (isAppInitialized) return;
 
-    // 1. Crear toda la estructura HTML de las vistas
+    // Crear la estructura HTML
     loadViewTemplates();
 
-    // 2. Actualizar la visibilidad basada en el rol del usuario
+    // Actualizar visibilidad según el rol
     updateUIVisibility(currentUserData);
 
-
-    //FUNCION EN CASO DE TENER REMISIONES EN MAL ESTADO
-    /*if (currentUserData?.role === 'admin') {
-        const btnRepair = document.createElement('button');
-        btnRepair.textContent = 'Reparar PDFs (solo admin)';
-        btnRepair.className = 'bg-red-600 text-white px-4 py-2 rounded fixed bottom-4 right-4 z-50 shadow-lg';
-        btnRepair.onclick = () => {
-            const fn = httpsCallable(functions, 'repairSignedUrls');
-            fn({ fromDate: '2025-08-1', onlyBroken: false })
-                .then(r => alert(`Reparadas: ${r.data.fixed}, Omitidas: ${r.data.skipped}, Errores: ${r.data.errors}`))
-                .catch(e => alert(`Error: ${e.message}`));
-        };
-        document.body.appendChild(btnRepair);
-    }*/
-
-    // 3. Añadir todos los event listeners a los elementos que ya existen
+    // Configurar los listeners de eventos (clicks, submits)
     setupEventListeners();
 
-    // 4. Empezar a cargar los datos desde Firebase
+    // ÚNICA CARGA DE DATOS: Aquí es donde se activan los onSnapshot
     loadAllData();
 
-    loadSaldosBase(); // <--- Ahora se carga solo cuando el usuario está autenticado
+    loadSaldosBase();
 
-    // 5. Inicializar los buscadores interactivos AHORA que todo está listo
+    listenGlobalSaldos(); // <--- AGREGA ESTA LÍNEA AQUÍ
+
+    // Inicializar buscadores
     setupSearchInputs();
 
     isAppInitialized = true;
@@ -149,13 +164,18 @@ function loadAllData() {
     activeListeners.push(loadItems());
     activeListeners.push(loadColores());
     activeListeners.push(loadRemisiones());
-    activeListeners.push(loadGastos());
+    activeListeners.push(loadRemisionesFacturacion()); // Pendientes (onSnapshot)
+
+    // --- ESTA ES LA LÍNEA QUE DEBE ESTAR AQUÍ ---
+    loadFacturadasHistorial(); // Historial de realizadas (getDocs)
+
     if (currentUserData && currentUserData.role === 'admin') {
         activeListeners.push(loadEmpleados());
         activeListeners.push(loadAllLoanRequests());
     }
 }
 
+// 2. Función loadViewTemplates corregida (Se eliminó la carga de datos al final)
 function loadViewTemplates() {
     registerForm.innerHTML = `
         <h2 class="text-2xl font-bold text-center mb-6">Crear Cuenta</h2>
@@ -179,9 +199,10 @@ function loadViewTemplates() {
         </div>
         <p class="text-center mt-4 text-sm">¿Ya tienes una cuenta? <a href="#" id="show-login-link-register" class="font-semibold text-indigo-600 hover:underline">Inicia sesión</a></p>
     `;
+
     document.getElementById('view-remisiones').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div id="remision-form-container" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nueva Remisión</h2><form id="remision-form" class="space-y-4"><div class="relative"><input type="text" id="cliente-search-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg" required><input type="hidden" id="cliente-id-hidden" name="clienteId"><div id="cliente-search-results" class="search-results hidden"></div></div><div><label for="fecha-recibido" class="block text-sm font-medium text-gray-700">Fecha Recibido</label><input type="date" id="fecha-recibido" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-gray-100" readonly></div><div class="border-t border-b border-gray-200 py-4"><h3 class="text-lg font-semibold mb-2">Ítems de la Remisión</h3><div id="items-container" class="space-y-4"></div><button type="button" id="add-item-btn" class="mt-4 w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">+ Añadir Ítem</button></div><select id="forma-pago" class="w-full p-3 border border-gray-300 rounded-lg bg-white" required><option value="" disabled selected>Forma de Pago</option><option value="Pendiente">Pendiente</option><option value="Efectivo">Efectivo</option><option value="Nequi">Nequi</option><option value="Davivienda">Davivienda</option></select><div class="bg-gray-50 p-4 rounded-lg space-y-2"><div class="flex justify-between items-center"><span class="font-medium">Subtotal:</span><span id="subtotal" class="font-bold text-lg">$ 0</span></div><div class="flex justify-between items-center"><label for="incluir-iva" class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="incluir-iva" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>Incluir IVA (19%)</span></label><span id="valor-iva" class="font-medium text-gray-600">$ 0</span></div><hr><div class="flex justify-between items-center text-xl"><span class="font-bold">TOTAL:</span><span id="valor-total" class="font-bold text-indigo-600">$ 0</span></div></div>
-<div><label for="remision-observaciones" class="block text-sm font-medium text-gray-700">Observaciones</label><textarea id="remision-observaciones" placeholder="Añadir notas especiales para el cliente o para planta..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" rows="3"></textarea></div>
-<button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
+    <div><label for="remision-observaciones" class="block text-sm font-medium text-gray-700">Observaciones</label><textarea id="remision-observaciones" placeholder="Añadir notas especiales para el cliente o para planta..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" rows="3"></textarea></div>
+    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Guardar Remisión</button></form></div><div id="remisiones-list-container" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 flex-wrap gap-4"><h2 class="text-xl font-semibold">Historial de Remisiones</h2><div class="flex items-center gap-2 flex-wrap w-full"><select id="filter-remisiones-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-remisiones-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-remisiones" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow"></div></div><div id="remisiones-list" class="space-y-3"></div></div></div>`;
 
     document.getElementById('view-facturacion').innerHTML = `<div class="bg-white p-6 rounded-xl shadow-md max-w-6xl mx-auto"><h2 class="text-2xl font-semibold mb-4">Gestión de Facturación</h2><div class="border-b border-gray-200 mb-6"><nav id="facturacion-nav" class="-mb-px flex space-x-6"><button id="tab-pendientes" class="dashboard-tab-btn active py-3 px-1 font-semibold">Pendientes</button><button id="tab-realizadas" class="dashboard-tab-btn py-3 px-1 font-semibold">Realizadas</button></nav></div><div id="view-pendientes"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Pendientes de Facturar</h3><div id="facturacion-pendientes-list" class="space-y-3"></div></div><div id="view-realizadas" class="hidden"><h3 class="text-xl font-semibold text-gray-800 mb-4">Remisiones Facturadas</h3><div id="facturacion-realizadas-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-clientes').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Cliente</h2><form id="add-cliente-form" class="space-y-4"><input type="text" id="nuevo-cliente-nombre" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="email" id="nuevo-cliente-email" placeholder="Correo" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono1" placeholder="Teléfono 1" class="w-full p-3 border border-gray-300 rounded-lg" required><input type="tel" id="nuevo-cliente-telefono2" placeholder="Teléfono 2 (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="text" id="nuevo-cliente-nit" placeholder="NIT (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Clientes</h2><input type="search" id="search-clientes" placeholder="Buscar..." class="p-2 border rounded-lg"></div><div id="clientes-list" class="space-y-3"></div></div></div>`;
@@ -190,19 +211,10 @@ function loadViewTemplates() {
     document.getElementById('view-colores').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Color</h2><form id="add-color-form" class="space-y-4"><input type="text" id="nuevo-color-nombre" placeholder="Nombre del Color (ej. RAL 7016)" class="w-full p-3 border border-gray-300 rounded-lg" required><button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Catálogo de Colores</h2><input type="search" id="search-colores" placeholder="Buscar..." class="p-2 border rounded-lg"></div><div id="colores-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-gastos').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nuevo Gasto</h2><form id="add-gasto-form" class="space-y-4"><div><label for="gasto-fecha">Fecha</label><input type="date" id="gasto-fecha" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div><div class="relative"><label for="proveedor-search-input">Proveedor</label><input type="text" id="proveedor-search-input" autocomplete="off" placeholder="Buscar..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" required><input type="hidden" id="proveedor-id-hidden" name="proveedorId"><div id="proveedor-search-results" class="search-results hidden"></div></div><input type="text" id="gasto-factura" placeholder="N° de Factura (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="text" id="gasto-valor-total" inputmode="numeric" placeholder="Valor Total" class="w-full p-3 border border-gray-300 rounded-lg" required><label class="flex items-center space-x-2"><input type="checkbox" id="gasto-iva" class="h-4 w-4 rounded border-gray-300"><span>IVA del 19% incluido</span></label><div><label for="gasto-fuente">Fuente del Pago</label><select id="gasto-fuente" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div><button type="submit" class="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-orange-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4"><h2 class="text-xl font-semibold flex-shrink-0">Historial de Gastos</h2><div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end"><select id="filter-gastos-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-gastos-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-gastos" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow sm:flex-grow-0 sm:w-40"></div></div><div id="gastos-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-empleados').innerHTML = `<div class="bg-white p-6 rounded-xl shadow-md max-w-4xl mx-auto"><h2 class="text-xl font-semibold mb-4">Gestión de Empleados</h2><div id="empleados-list" class="space-y-3"></div></div>`;
-    // Nos aseguramos de limpiar listeners anteriores por si acaso
-    unsubscribeAllListeners();
-    // Al cargar los datos, guardamos la función de desuscripción que retorna cada listener
-    activeListeners.push(loadClientes());
-    activeListeners.push(loadProveedores());
-    activeListeners.push(loadItems());
-    activeListeners.push(loadColores());
-    activeListeners.push(loadRemisiones());
-    activeListeners.push(loadGastos());
-    if (currentUserData && currentUserData.role === 'admin') {
-        activeListeners.push(loadEmpleados());
-    }
+
+    // NOTA: Se eliminó el bloque de 'activeListeners.push' que causaba la doble lectura de Firestore.
 }
+
 
 // **** FUNCIÓN CORREGIDA ****
 // Reemplaza la función completa en js/app.js
@@ -353,124 +365,116 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     signOut(auth);
 });
 
-// --- LÓGICA DE NAVEGACIÓN Y EVENTOS ---
 function setupEventListeners() {
+    // --- NAVEGACIÓN ---
     const tabs = { remisiones: document.getElementById('tab-remisiones'), facturacion: document.getElementById('tab-facturacion'), clientes: document.getElementById('tab-clientes'), items: document.getElementById('tab-items'), colores: document.getElementById('tab-colores'), gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'), empleados: document.getElementById('tab-empleados') };
     const views = { remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'), clientes: document.getElementById('view-clientes'), items: document.getElementById('view-items'), colores: document.getElementById('view-colores'), gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'), empleados: document.getElementById('view-empleados') };
     Object.keys(tabs).forEach(key => { if (tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
-    const policyModal = document.getElementById('policy-modal');
 
-
+    // --- FACTURACIÓN TABS ---
     const facturacionPendientesTab = document.getElementById('tab-pendientes');
     const facturacionRealizadasTab = document.getElementById('tab-realizadas');
-    const facturacionPendientesView = document.getElementById('view-pendientes');
-    const facturacionRealizadasView = document.getElementById('view-realizadas');
-
     if (facturacionPendientesTab) {
         facturacionPendientesTab.addEventListener('click', () => {
             facturacionPendientesTab.classList.add('active');
             facturacionRealizadasTab.classList.remove('active');
-            facturacionPendientesView.classList.remove('hidden');
-            facturacionRealizadasView.classList.add('hidden');
+            document.getElementById('view-pendientes').classList.remove('hidden');
+            document.getElementById('view-realizadas').classList.add('hidden');
         });
     }
     if (facturacionRealizadasTab) {
         facturacionRealizadasTab.addEventListener('click', () => {
             facturacionRealizadasTab.classList.add('active');
             facturacionPendientesTab.classList.remove('active');
-            facturacionRealizadasView.classList.remove('hidden');
-            facturacionPendientesView.classList.add('hidden');
+            document.getElementById('view-realizadas').classList.remove('hidden');
+            document.getElementById('view-pendientes').classList.add('hidden');
         });
     }
 
-    document.getElementById('add-color-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoColor = { nombre: document.getElementById('nuevo-color-nombre').value, creadoEn: new Date() }; showModalMessage("Registrando color...", true); try { await addDoc(collection(db, "colores"), nuevoColor); e.target.reset(); hideModal(); showModalMessage("¡Color registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar color."); } });
-    document.getElementById('add-item-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoItem = { referencia: document.getElementById('nuevo-item-ref').value, descripcion: document.getElementById('nuevo-item-desc').value, creadoEn: new Date() }; showModalMessage("Registrando ítem...", true); try { await addDoc(collection(db, "items"), nuevoItem); e.target.reset(); hideModal(); showModalMessage("¡Ítem registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar ítem."); } });
-    document.getElementById('add-cliente-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoCliente = { nombre: document.getElementById('nuevo-cliente-nombre').value, email: document.getElementById('nuevo-cliente-email').value, telefono1: document.getElementById('nuevo-cliente-telefono1').value, telefono2: document.getElementById('nuevo-cliente-telefono2').value, nit: document.getElementById('nuevo-cliente-nit').value || '', creadoEn: new Date() }; showModalMessage("Registrando cliente...", true); try { await addDoc(collection(db, "clientes"), nuevoCliente); e.target.reset(); hideModal(); showModalMessage("¡Cliente registrado!", false, 2000); } catch (error) { console.error(error); hideModal(); showModalMessage("Error al registrar cliente."); } });
+    // --- FORMULARIOS ---
+    document.getElementById('add-color-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoColor = { nombre: document.getElementById('nuevo-color-nombre').value, creadoEn: new Date() }; try { await addDoc(collection(db, "colores"), nuevoColor); e.target.reset(); showModalMessage("¡Color registrado!", false, 2000); } catch (error) { showModalMessage("Error al registrar color."); } });
+    document.getElementById('add-item-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoItem = { referencia: document.getElementById('nuevo-item-ref').value, descripcion: document.getElementById('nuevo-item-desc').value, creadoEn: new Date() }; try { await addDoc(collection(db, "items"), nuevoItem); e.target.reset(); showModalMessage("¡Ítem registrado!", false, 2000); } catch (error) { showModalMessage("Error al registrar ítem."); } });
+    document.getElementById('add-cliente-form').addEventListener('submit', async (e) => { e.preventDefault(); const nuevoCliente = { nombre: document.getElementById('nuevo-cliente-nombre').value, email: document.getElementById('nuevo-cliente-email').value, telefono1: document.getElementById('nuevo-cliente-telefono1').value, telefono2: document.getElementById('nuevo-cliente-telefono2').value, nit: document.getElementById('nuevo-cliente-nit').value || '', creadoEn: new Date() }; try { await addDoc(collection(db, "clientes"), nuevoCliente); e.target.reset(); showModalMessage("¡Cliente registrado!", false, 2000); } catch (error) { showModalMessage("Error al registrar cliente."); } });
     document.getElementById('add-proveedor-form').addEventListener('submit', handleProveedorSubmit);
     document.getElementById('add-gasto-form').addEventListener('submit', handleGastoSubmit);
     document.getElementById('remision-form').addEventListener('submit', handleRemisionSubmit);
+
+    // --- ACCIONES REMISIÓN ---
     document.getElementById('add-item-btn').addEventListener('click', () => {
         const itemsContainer = document.getElementById('items-container');
         if (itemsContainer) itemsContainer.appendChild(createItemElement());
     });
-    const ivaCheckbox = document.getElementById('incluir-iva');
-    if (ivaCheckbox) ivaCheckbox.addEventListener('input', calcularTotales);
+    if (document.getElementById('incluir-iva')) document.getElementById('incluir-iva').addEventListener('input', calcularTotales);
+
+    // --- ENCABEZADO Y MODALES ---
     document.getElementById('summary-btn').addEventListener('click', showDashboardModal);
     document.getElementById('edit-profile-btn').addEventListener('click', showEditProfileModal);
     document.getElementById('loan-request-btn').addEventListener('click', showLoanRequestModal);
-    document.getElementById('show-policy-link').addEventListener('click', (e) => {
-        e.preventDefault();
-        policyModal.classList.remove('hidden');
-    });
+    document.getElementById('view-all-loans-btn').addEventListener('click', () => showAllLoansModal(allPendingLoans));
+    document.getElementById('logout-btn').addEventListener('click', () => { unsubscribeAllListeners(); signOut(auth); });
+    document.getElementById('show-policy-link').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('policy-modal').classList.remove('hidden'); });
+    document.getElementById('close-policy-modal').addEventListener('click', () => document.getElementById('policy-modal').classList.add('hidden'));
+    document.getElementById('accept-policy-btn').addEventListener('click', () => document.getElementById('policy-modal').classList.add('hidden'));
 
-    document.getElementById('close-policy-modal').addEventListener('click', () => {
-        policyModal.classList.add('hidden');
-    });
-    document.getElementById('accept-policy-btn').addEventListener('click', () => {
-        policyModal.classList.add('hidden');
-    });
-
-    // Delegación de eventos para los botones de la sección de empleados
+    // --- EMPLEADOS ---
     const empleadosView = document.getElementById('view-empleados');
     if (empleadosView) {
         empleadosView.addEventListener('click', async (e) => {
             const target = e.target;
-
-            // Lógica para los botones de estado
             if (target.classList.contains('user-status-btn')) {
                 const uid = target.dataset.uid;
                 const newStatus = target.dataset.status;
-                if (confirm(`¿Estás seguro de que quieres cambiar el estado de este usuario a "${newStatus}"?`)) {
-                    try {
-                        await updateDoc(doc(db, "users", uid), { status: newStatus });
-                        showTemporaryMessage("Estado del usuario actualizado.", "success");
-                    } catch (error) {
-                        console.error("Error al actualizar estado:", error);
-                        showTemporaryMessage("No se pudo actualizar el estado.", "error");
-                    }
-                }
+                if (confirm(`¿Cambiar estado a "${newStatus}"?`)) { await updateDoc(doc(db, "users", uid), { status: newStatus }); }
             }
-
-            // Lógica para el botón de gestionar
-            if (target.classList.contains('manage-user-btn')) {
-                showAdminEditUserModal(JSON.parse(target.dataset.userJson));
-            }
+            if (target.classList.contains('manage-user-btn')) { showAdminEditUserModal(JSON.parse(target.dataset.userJson)); }
         });
     }
 
+    // --- BUSCADORES ---
+    let searchTimeout;
+    document.getElementById('search-remisiones').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const term = e.target.value.trim();
+        searchTimeout = setTimeout(() => searchRemisionesGlobal(term), 500);
+    });
 
-    // Listeners para buscadores
-    document.getElementById('search-remisiones').addEventListener('input', renderRemisiones);
-    document.getElementById('search-clientes').addEventListener('input', renderClientes);
+    let searchClientesTimeout;
+    document.getElementById('search-clientes').addEventListener('input', (e) => {
+        clearTimeout(searchClientesTimeout);
+        const term = e.target.value.trim();
+        searchClientesTimeout = setTimeout(() => searchClientesGlobal(term), 500);
+    });
+
     document.getElementById('search-proveedores').addEventListener('input', renderProveedores);
     document.getElementById('search-items').addEventListener('input', renderItems);
     document.getElementById('search-colores').addEventListener('input', renderColores);
     document.getElementById('search-gastos').addEventListener('input', renderGastos);
 
-    // Listeners para filtros de fecha
+    // --- FILTROS FECHA ---
     populateDateFilters('filter-remisiones');
     populateDateFilters('filter-gastos');
-    document.getElementById('filter-remisiones-month').addEventListener('change', renderRemisiones);
-    document.getElementById('filter-remisiones-year').addEventListener('change', renderRemisiones);
+
+    const handleRemisionFilter = () => {
+        const month = document.getElementById('filter-remisiones-month').value;
+        const year = document.getElementById('filter-remisiones-year').value;
+        // Reiniciamos todo para una nueva búsqueda filtrada
+        lastRemisionDoc = null;
+        loadRemisiones(month, year, false);
+    };
+
+    document.getElementById('filter-remisiones-month').addEventListener('change', handleRemisionFilter);
+    document.getElementById('filter-remisiones-year').addEventListener('change', handleRemisionFilter);
     document.getElementById('filter-gastos-month').addEventListener('change', renderGastos);
     document.getElementById('filter-gastos-year').addEventListener('change', renderGastos);
 
-    // Fecha de recibido
-    const fechaRecibidoInput = document.getElementById('fecha-recibido');
-    if (fechaRecibidoInput) {
-        fechaRecibidoInput.value = new Date().toISOString().split('T')[0];
-    }
+    // --- CONFIGURACIÓN INICIAL ---
+    if (document.getElementById('fecha-recibido')) document.getElementById('fecha-recibido').value = new Date().toISOString().split('T')[0];
 
-    // Listeners para formateo de moneda
-    document.getElementById('view-gastos').addEventListener('focusout', (e) => { if (e.target.id === 'gasto-valor-total') { formatCurrencyInput(e.target); } });
-    document.getElementById('view-gastos').addEventListener('focus', (e) => { if (e.target.id === 'gasto-valor-total') { unformatCurrencyInput(e.target); } });
+    // Formateo de moneda
+    document.getElementById('view-gastos').addEventListener('focusout', (e) => { if (e.target.id === 'gasto-valor-total') formatCurrencyInput(e.target); });
+    document.getElementById('view-gastos').addEventListener('focus', (e) => { if (e.target.id === 'gasto-valor-total') unformatCurrencyInput(e.target); });
     document.getElementById('view-remisiones').addEventListener('focusout', (e) => { if (e.target.classList.contains('item-valor-unitario')) { formatCurrencyInput(e.target); calcularTotales(); } });
-    document.getElementById('view-remisiones').addEventListener('focus', (e) => { if (e.target.classList.contains('item-valor-unitario')) { unformatCurrencyInput(e.target); } });
-
-    // Listener para el nuevo botón de préstamos del admin
-    document.getElementById('view-all-loans-btn').addEventListener('click', () => {
-        showAllLoansModal(allPendingLoans);
-    });
+    document.getElementById('view-remisiones').addEventListener('focus', (e) => { if (e.target.classList.contains('item-valor-unitario')) unformatCurrencyInput(e.target); });
 }
 
 function switchView(viewName, tabs, views) {
@@ -633,9 +637,12 @@ function renderItems() {
 // --- FUNCIONES DE CARGA DE DATOS (ACTUALIZADAS) ---
 function loadClientes() {
     const q = query(collection(db, "clientes"), orderBy("nombre", "asc"));
+    
+    // Este listener descarga los 1,000 clientes una vez. 
+    // Si agregas uno nuevo, solo te cobra 1 lectura por ese nuevo.
     return onSnapshot(q, (snapshot) => {
         allClientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderClientes();
+        renderClientes(); // Redibuja con lo que haya en el buscador
     });
 }
 
@@ -653,68 +660,102 @@ function renderClientes() {
     const clientesListEl = document.getElementById('clientes-list');
     if (!clientesListEl) return;
 
-    // 1. Normalizamos el término de búsqueda una sola vez
-    const normalizedSearchTerm = normalizeText(document.getElementById('search-clientes').value);
+    // 1. Obtener el término de búsqueda del input (si existe)
+    const searchInputEl = document.getElementById('search-clientes-input');
+    const term = searchInputEl ? normalizeText(searchInputEl.value) : "";
 
-    const clientesConHistorial = allClientes.map(cliente => {
-        const remisionesCliente = allRemisiones.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
-        const totalComprado = remisionesCliente.reduce((sum, r) => sum + r.valorTotal, 0);
-        let ultimaCompra = 'N/A';
-        if (remisionesCliente.length > 0) {
-            remisionesCliente.sort((a, b) => new Date(b.fechaRecibido) - new Date(a.fechaRecibido));
-            ultimaCompra = remisionesCliente[0].fechaRecibido;
+    // 2. FILTRADO LOCAL (Aquí ocurre la magia sin gastar lecturas)
+    let filtered = allClientes.filter(c => {
+        const nombre = normalizeText(c.nombre || "");
+        const nit = (c.nit || "").toString();
+        const tel = (c.telefono1 || "").toString();
+        // Esto permite buscar "exito" y encontrar "Vidrios Exito"
+        return nombre.includes(term) || nit.includes(term) || tel.includes(term);
+    });
+
+    // 3. PAGINACIÓN VISUAL (Solo para que el navegador no se ponga lento)
+    // Usamos una variable interna para saber cuántos mostrar
+    if (!window._limitClientes || term !== window._lastTerm) {
+        window._limitClientes = 20;
+        window._lastTerm = term;
+    }
+    const totalEncontrados = filtered.length;
+    const itemsAMostrar = filtered.slice(0, window._limitClientes);
+
+    // 4. ESTRUCTURA HTML
+    clientesListEl.innerHTML = `
+        <div class="mb-6 relative">
+            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+            <input type="text" id="search-clientes-input" 
+                placeholder="Buscar por nombre, NIT o teléfono..." 
+                class="w-full pl-10 pr-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value="${term}">
+        </div>
+        <div id="clientes-items-container" class="space-y-3"></div>
+    `;
+
+    const itemsContainer = document.getElementById('clientes-items-container');
+
+    if (itemsAMostrar.length === 0) {
+        itemsContainer.innerHTML = `<p class="text-center text-gray-500 py-8">No se encontraron clientes con "${term}".</p>`;
+    } else {
+        itemsAMostrar.forEach(cliente => {
+            // Tu lógica de historial de compras (calculada en memoria)
+            const remisionesCliente = allRemisiones.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
+            const totalComprado = remisionesCliente.reduce((sum, r) => sum + r.valorTotal, 0);
+            let ultimaCompra = 'N/A';
+            if (remisionesCliente.length > 0) {
+                remisionesCliente.sort((a, b) => new Date(b.fechaRecibido) - new Date(a.fechaRecibido));
+                ultimaCompra = remisionesCliente[0].fechaRecibido;
+            }
+
+            const clienteDiv = document.createElement('div');
+            clienteDiv.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between sm:items-start gap-4 bg-white shadow-sm hover:border-blue-300 transition';
+
+            const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
+            const editButton = (currentUserData && currentUserData.role === 'admin')
+                ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300 w-full text-center">Editar</button>`
+                : '';
+
+            clienteDiv.innerHTML = `
+                <div class="flex-grow min-w-0">
+                    <p class="font-semibold text-lg truncate text-gray-800">${cliente.nombre}</p>
+                    <p class="text-sm text-gray-600">${cliente.email || 'Sin correo'} | ${telefonos}</p>
+                    ${cliente.nit ? `<p class="text-sm text-gray-500">NIT: ${cliente.nit}</p>` : ''}
+                    <div class="mt-2 pt-2 border-t border-gray-100 text-sm">
+                        <p><span class="font-semibold">Última Compra:</span> ${ultimaCompra}</p>
+                        <p><span class="font-semibold">Total Comprado:</span> ${formatCurrency(totalComprado)}</p>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 w-full sm:w-auto">${editButton}</div>
+            `;
+            itemsContainer.appendChild(clienteDiv);
+        });
+
+        // Botón "Cargar más" visual
+        if (totalEncontrados > window._limitClientes) {
+            const btnMore = document.createElement('button');
+            btnMore.className = "w-full py-3 text-blue-600 font-bold text-sm hover:bg-blue-50 mt-4 rounded-lg border-2 border-blue-50 border-dashed";
+            btnMore.textContent = `Ver más (${totalEncontrados - window._limitClientes} restantes)`;
+            btnMore.onclick = () => {
+                window._limitClientes += 50;
+                renderClientes();
+            };
+            clientesListEl.appendChild(btnMore);
         }
-        return { ...cliente, totalComprado, ultimaCompra };
-    });
-
-    const filtered = clientesConHistorial.filter(c => {
-        // 2. Creamos una cadena unificada con todos los datos del cliente y la normalizamos
-        const clientDataString = [
-            c.nombre,
-            c.email,
-            c.telefono1,
-            c.telefono2,
-            c.nit
-        ].join(' ');
-
-        const normalizedClientData = normalizeText(clientDataString);
-
-        // 3. Comparamos los textos ya normalizados
-        return normalizedClientData.includes(normalizedSearchTerm);
-    });
-
-    clientesListEl.innerHTML = '';
-    if (filtered.length === 0) {
-        clientesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No se encontraron clientes.</p>';
-        return;
     }
 
-    filtered.forEach(cliente => {
-        const clienteDiv = document.createElement('div');
-        clienteDiv.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between sm:items-start gap-4';
+    // Mantener el foco en el buscador al escribir
+    const input = document.getElementById('search-clientes-input');
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
 
-        const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
-        const editButton = (currentUserData && currentUserData.role === 'admin')
-            ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-300 w-full text-center">Editar</button>`
-            : '';
+    input.addEventListener('input', renderClientes);
 
-        clienteDiv.innerHTML = `
-            <div class="flex-grow min-w-0">
-                <p class="font-semibold text-lg truncate" title="${cliente.nombre}">${cliente.nombre}</p>
-                <p class="text-sm text-gray-600">${cliente.email || 'Sin correo'} | ${telefonos}</p>
-                ${cliente.nit ? `<p class="text-sm text-gray-500">NIT: ${cliente.nit}</p>` : ''}
-                <div class="mt-2 pt-2 border-t border-gray-100 text-sm">
-                    <p><span class="font-semibold">Última Compra:</span> ${cliente.ultimaCompra}</p>
-                    <p><span class="font-semibold">Total Comprado:</span> ${formatCurrency(cliente.totalComprado)}</p>
-                </div>
-            </div>
-            <div class="flex-shrink-0 w-full sm:w-auto">
-                 ${editButton}
-            </div>
-        `;
-        clientesListEl.appendChild(clienteDiv);
-    });
-    document.querySelectorAll('.edit-client-btn').forEach(btn => btn.addEventListener('click', (e) => showEditClientModal(JSON.parse(e.currentTarget.dataset.clientJson))));
+    // Listeners de edición
+    document.querySelectorAll('.edit-client-btn').forEach(btn => 
+        btn.addEventListener('click', (e) => showEditClientModal(JSON.parse(e.currentTarget.dataset.clientJson)))
+    );
 }
 
 function loadProveedores() {
@@ -751,15 +792,114 @@ function renderProveedores() {
     });
     document.querySelectorAll('.edit-provider-btn').forEach(btn => btn.addEventListener('click', (e) => showEditProviderModal(JSON.parse(e.currentTarget.dataset.providerJson))));
 }
-function loadRemisiones() {
-    const q = query(collection(db, "remisiones"), orderBy("numeroRemision", "desc"));
-    return onSnapshot(q, (snapshot) => {
-        allRemisiones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+let remisionesUnsubscribe = null;
+
+async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
+    if (cargandoMasRemisiones) return;
+
+    const remisionesListEl = document.getElementById('remisiones-list');
+    const remisionesRef = collection(db, "remisiones");
+    let q;
+
+    // Si es una carga inicial (no "Cargar más"), limpiamos la lista
+    if (!isMore) {
+        allRemisiones = [];
+        lastRemisionDoc = null;
+        if (remisionesListEl) remisionesListEl.innerHTML = '<p class="text-center py-4">Cargando historial...</p>';
+    }
+
+    // Construcción de la Query base
+    if (year !== 'all' && month !== 'all') {
+        // Filtro por fecha (mantiene tu lógica actual)
+        const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
+        const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
+        q = query(remisionesRef, where("fechaRecibido", ">=", start), where("fechaRecibido", "<=", end), orderBy("fechaRecibido", "desc"), orderBy("numeroRemision", "desc"), limit(50));
+    } else {
+        // Carga general de historial
+        q = query(remisionesRef, orderBy("numeroRemision", "desc"), limit(50));
+    }
+
+    // SI ES PAGINACIÓN: Empezar después del último doc
+    if (isMore && lastRemisionDoc) {
+        cargandoMasRemisiones = true;
+        q = query(q, startAfter(lastRemisionDoc));
+    }
+
+    try {
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty && isMore) {
+            showTemporaryMessage("No hay más remisiones para mostrar", "info");
+            document.getElementById('load-more-container')?.remove();
+            cargandoMasRemisiones = false;
+            return;
+        }
+
+        // Guardamos el último documento para la próxima vez
+        lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
+
+        const nuevasRemisiones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Unimos las nuevas con las que ya teníamos
+        allRemisiones = [...allRemisiones, ...nuevasRemisiones];
+
         renderRemisiones();
-        renderFacturacion();
-        renderClientes();
-    });
+        cargandoMasRemisiones = false;
+    } catch (error) {
+        console.error("Error cargando remisiones:", error);
+        cargandoMasRemisiones = false;
+    }
 }
+
+async function searchRemisionesGlobal(searchTerm) {
+    const term = (searchTerm || "").trim().toLowerCase();
+
+    if (!term) {
+        loadRemisiones();
+        return;
+    }
+
+    const remisionesRef = collection(db, "remisiones");
+
+    // 1. Intentar búsqueda por número de remisión (si es numérico)
+    if (!isNaN(term) && !term.includes(" ")) {
+        const qNum = query(remisionesRef, where("numeroRemision", "==", parseInt(term)));
+        const snap = await getDocs(qNum);
+        if (!snap.empty) {
+            allRemisiones = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderRemisiones();
+            return;
+        }
+    }
+
+    // 2. Búsqueda por coincidencia de texto (Case-Insensitive local)
+    // Para que "Exito" funcione en "Vidrios Exito", necesitamos filtrar en el cliente
+    // Pero para no gastar lecturas, limitamos la búsqueda a los documentos ya cargados 
+    // o traemos los últimos 200 para buscar dentro de ellos.
+
+    const qText = query(remisionesRef, orderBy("numeroRemision", "desc"), limit(200));
+    try {
+        const snapshot = await getDocs(qText);
+        const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Filtrado local por coincidencia en cualquier parte del nombre
+        allRemisiones = results.filter(rem => {
+            const nombreCliente = (rem.clienteNombre || "").toLowerCase();
+            const numRem = (rem.numeroRemision || "").toString();
+            return nombreCliente.includes(term) || numRem.includes(term);
+        });
+
+        renderRemisiones();
+    } catch (error) {
+        console.error("Error en búsqueda:", error);
+    }
+}
+
+/**
+ * Renderiza la lista de remisiones asegurando el orden correcto y 
+ * la precisión de fechas para Colombia.
+ */
 function renderRemisiones() {
     const remisionesListEl = document.getElementById('remisiones-list');
     if (!remisionesListEl) return;
@@ -770,41 +910,59 @@ function renderRemisiones() {
     const year = document.getElementById('filter-remisiones-year').value;
     const searchTerm = document.getElementById('search-remisiones').value.toLowerCase();
 
-    let filtered = allRemisiones;
+    let filtered = [...allRemisiones]; // Usamos una copia para no afectar el array original
 
+    // 1. Filtro para el rol de Planta
     if (isPlanta) {
         const allowedStates = ['Recibido', 'En Proceso', 'Procesado'];
         filtered = filtered.filter(r => allowedStates.includes(r.estado));
     }
 
+    // 2. Filtro por Fecha (Lógica de texto para evitar desfase de Colombia)
     if (year !== 'all') {
-        filtered = filtered.filter(r => new Date(r.fechaRecibido).getFullYear() == year);
-    }
-    if (month !== 'all') {
-        filtered = filtered.filter(r => new Date(r.fechaRecibido).getMonth() == month);
-    }
-    if (searchTerm) {
-        filtered = filtered.filter(r => r.clienteNombre.toLowerCase().includes(searchTerm) || r.numeroRemision.toString().includes(searchTerm));
+        filtered = filtered.filter(r => r.fechaRecibido.split('-')[0] === year);
     }
 
+    if (month !== 'all') {
+        const targetMonth = parseInt(month) + 1;
+        filtered = filtered.filter(r => parseInt(r.fechaRecibido.split('-')[1]) === targetMonth);
+    }
+
+    // 3. Filtro por Buscador
+    if (searchTerm) {
+        filtered = filtered.filter(r =>
+            r.clienteNombre.toLowerCase().includes(searchTerm) ||
+            r.numeroRemision.toString().includes(searchTerm)
+        );
+    }
+
+    // --- NUEVO: ORDENAMIENTO EXPLÍCITO ---
+    // Ordenamos por número de remisión de mayor a menor (más recientes primero)
+    filtered.sort((a, b) => b.numeroRemision - a.numeroRemision);
+    // --------------------------------------
+
     remisionesListEl.innerHTML = '';
-    if (filtered.length === 0) { remisionesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No se encontraron remisiones.</p>'; return; }
+    if (filtered.length === 0) {
+        remisionesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No se encontraron remisiones para este período.</p>';
+        return;
+    }
+
     filtered.forEach((remision) => {
         const el = document.createElement('div');
         const esAnulada = remision.estado === 'Anulada';
         const esEntregada = remision.estado === 'Entregado';
         el.className = `border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${esAnulada ? 'remision-anulada' : ''}`;
 
-        const totalPagadoConfirmado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+        const totalPagadoConfirmado = (remision.payments || [])
+            .filter(p => p.status === 'confirmado')
+            .reduce((sum, p) => sum + p.amount, 0);
         const totalAbonado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
         const saldoPendiente = remision.valorTotal - totalPagadoConfirmado;
 
         let paymentStatusBadge = '';
         if (!esAnulada) {
-            if (saldoPendiente <= 0) {
+            if (saldoPendiente <= 0.01) {
                 paymentStatusBadge = `<span class="payment-status payment-pagado">Pagado</span>`;
-            } else if (isPlanta) {
-                paymentStatusBadge = `<span class="payment-status payment-pendiente">Pendiente</span>`;
             } else if (totalAbonado > 0) {
                 paymentStatusBadge = `<span class="payment-status payment-abono">Abono</span>`;
             } else {
@@ -812,16 +970,16 @@ function renderRemisiones() {
             }
         }
 
-        const pdfUrl = isPlanta ? remision.pdfPlantaUrl : remision.pdfUrl;
         const pdfPath = isPlanta ? remision.pdfPlantaPath : remision.pdfPath;
-        const pdfButton = pdfPath ? `<button data-pdf-path="${pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center">Ver Remisión</button>` : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold btn-disabled">Generando PDF...</button>`;
+        const pdfButton = pdfPath
+            ? `<button data-pdf-path="${pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition">Ver PDF</button>`
+            : `<button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-not-allowed">Sin PDF</button>`;
 
         const anularButton = (esAnulada || esEntregada || isPlanta || (remision.payments && remision.payments.length > 0))
             ? ''
             : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
 
         const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">Pagos (${formatCurrency(saldoPendiente)})</button>`;
-
         const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount)
             ? ''
             : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
@@ -861,33 +1019,81 @@ function renderRemisiones() {
                 ${descuentoButton}
                 ${anularButton}
             </div>`;
+
         remisionesListEl.appendChild(el);
     });
-    document.querySelectorAll('.anular-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; if (confirm(`¿Estás seguro de que quieres ANULAR esta remisión? Se enviará un correo de notificación al cliente.`)) { handleAnularRemision(remisionId); } }));
-    document.querySelectorAll('.status-update-btn').forEach(button => button.addEventListener('click', (e) => { const remisionId = e.currentTarget.dataset.remisionId; const currentStatus = e.currentTarget.dataset.currentStatus; handleStatusUpdate(remisionId, currentStatus); }));
+
+    attachRemisionesListeners(); // Aseguramos que los botones funcionen
+
+    // --- AGREGAR ESTO AL FINAL DE LA FUNCIÓN ---
+    const listContainer = document.getElementById('remisiones-list');
+
+    // Eliminamos cualquier botón previo para no duplicarlo
+    document.getElementById('load-more-container')?.remove();
+
+    // Si cargamos 50 remisiones, es probable que haya más
+    if (allRemisiones.length >= 50) {
+        const loadMoreDiv = document.createElement('div');
+        loadMoreDiv.id = 'load-more-container';
+        loadMoreDiv.className = 'pt-6 pb-4 text-center';
+        loadMoreDiv.innerHTML = `
+            <button id="load-more-btn" class="bg-gray-200 text-gray-700 font-bold py-2 px-6 rounded-lg hover:bg-gray-300 transition shadow-sm">
+                Cargar siguientes 50 remisiones
+            </button>
+        `;
+        listContainer.appendChild(loadMoreDiv);
+
+        document.getElementById('load-more-btn').addEventListener('click', () => {
+            const month = document.getElementById('filter-remisiones-month').value;
+            const year = document.getElementById('filter-remisiones-year').value;
+            loadRemisiones(month, year, true); // true indica que es paginación
+        });
+    }
+}
+
+/**
+ * Función auxiliar para reasignar listeners a los botones generados dinámicamente.
+ */
+function attachRemisionesListeners() {
+    document.querySelectorAll('.anular-btn').forEach(button =>
+        button.addEventListener('click', (e) => {
+            const id = e.currentTarget.dataset.remisionId;
+            if (confirm("¿Estás seguro de que quieres ANULAR esta remisión?")) handleAnularRemision(id);
+        })
+    );
+
+    document.querySelectorAll('.status-update-btn').forEach(button =>
+        button.addEventListener('click', (e) => {
+            handleStatusUpdate(e.currentTarget.dataset.remisionId, e.currentTarget.dataset.currentStatus);
+        })
+    );
+
     document.querySelectorAll('.view-pdf-btn').forEach(button => {
         button.addEventListener('click', async (e) => {
             const pdfPath = e.currentTarget.dataset.pdfPath;
-            const remisionNum = e.currentTarget.dataset.remisionNum;
-
+            const num = e.currentTarget.dataset.remisionNum;
             showModalMessage("Generando enlace seguro...", true);
-
             try {
                 const getSignedUrl = httpsCallable(functions, 'getSignedUrlForPath');
                 const result = await getSignedUrl({ path: pdfPath });
-
                 hideModal();
-                showPdfModal(result.data.url, `Remisión N° ${remisionNum}`);
+                showPdfModal(result.data.url, `Remisión N° ${num}`);
             } catch (error) {
-                console.error("Error al obtener la URL firmada:", error);
                 hideModal();
-                showModalMessage("Error: No se pudo generar el enlace para ver el PDF.");
+                showModalMessage("Error al abrir el PDF.");
             }
         });
     });
-    document.querySelectorAll('.payment-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showPaymentModal(remision); }));
-    document.querySelectorAll('.discount-btn').forEach(button => button.addEventListener('click', (e) => { const remision = JSON.parse(e.currentTarget.dataset.remisionJson); showDiscountModal(remision); }));
+
+    document.querySelectorAll('.payment-btn').forEach(button =>
+        button.addEventListener('click', (e) => showPaymentModal(JSON.parse(e.currentTarget.dataset.remisionJson)))
+    );
+
+    document.querySelectorAll('.discount-btn').forEach(button =>
+        button.addEventListener('click', (e) => showDiscountModal(JSON.parse(e.currentTarget.dataset.remisionJson)))
+    );
 }
+
 function loadGastos() {
     const q = query(collection(db, "gastos"), orderBy("fecha", "desc"));
     return onSnapshot(q, (snapshot) => {
@@ -895,6 +1101,7 @@ function loadGastos() {
         renderGastos();
     });
 }
+
 function renderGastos() {
     const gastosListEl = document.getElementById('gastos-list');
     if (!gastosListEl) return;
@@ -942,87 +1149,147 @@ function renderGastos() {
 function renderFacturacion() {
     const pendientesListEl = document.getElementById('facturacion-pendientes-list');
     const realizadasListEl = document.getElementById('facturacion-realizadas-list');
+
     if (!pendientesListEl || !realizadasListEl) return;
 
-    const remisionesParaFacturar = allRemisiones.filter(r => r.incluyeIVA && r.estado !== 'Anulada');
+    // --- FUENTES DE DATOS ---
+    const pendientes = remisionesPendientesFactura;
+    const realizadas = remisionesFacturadasHistorial;
 
-    const pendientes = remisionesParaFacturar.filter(r => !r.facturado);
-    const realizadas = remisionesParaFacturar.filter(r => r.facturado);
-
+    // 1. RENDERIZAR PESTAÑA: PENDIENTES (Sin cambios)
     pendientesListEl.innerHTML = '';
     if (pendientes.length === 0) {
-        pendientesListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No hay remisiones pendientes de facturar.</p>';
+        pendientesListEl.innerHTML = '<div class="text-center py-10 bg-gray-50 rounded-lg border-2 border-dashed text-gray-500">No hay remisiones pendientes.</div>';
     } else {
         pendientes.forEach(remision => {
             const el = document.createElement('div');
-            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
-            // **** INICIO CORRECCIÓN AQUÍ ****
+            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white shadow-sm mb-3';
             el.innerHTML = `
                 <div class="flex-grow">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <span class="remision-id">N° ${remision.numeroRemision}</span>
-                        <p class="font-semibold text-lg">${remision.clienteNombre}</p>
+                    <div class="flex items-center gap-3">
+                        <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">N° ${remision.numeroRemision}</span>
+                        <p class="font-semibold text-lg text-gray-800">${remision.clienteNombre}</p>
                     </div>
-                    <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
+                    <p class="text-sm text-gray-600 mt-1">Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
                 </div>
-                <div class="flex-shrink-0 flex items-center gap-2">
-                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
-                    <button data-remision-id="${remision.id}" class="facturar-btn bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Facturar</button>
-                </div>
-            `;
-            // **** FIN CORRECCIÓN AQUÍ ****
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200">Ver</button>
+                    <button data-remision-id="${remision.id}" class="facturar-btn flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Facturar</button>
+                </div>`;
             pendientesListEl.appendChild(el);
         });
     }
 
-    realizadasListEl.innerHTML = '';
+    // 2. RENDERIZAR PESTAÑA: REALIZADAS (Interactiva)
+    realizadasListEl.innerHTML = `
+        <div class="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                <input type="text" id="search-facturadas" 
+                    placeholder="Filtrar por Cliente o N° de remisión..." 
+                    class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    value="${window._lastSearchFactura || ''}"
+                    autocomplete="off">
+            </div>
+            ${window._lastSearchFactura ? `
+                <p class="text-[11px] text-indigo-600 mt-2 font-medium flex justify-between items-center">
+                    <span>Resultados para: "${window._lastSearchFactura}"</span>
+                    <button id="clear-factura-search" class="hover:underline font-bold text-red-500">Limpiar X</button>
+                </p>` : ''}
+        </div>
+        <div id="realizadas-items-container" class="space-y-3"></div>
+    `;
+
+    const itemsContainer = document.getElementById('realizadas-items-container');
+
     if (realizadas.length === 0) {
-        realizadasListEl.innerHTML = '<p class="text-center text-gray-500 py-8">No hay remisiones facturadas.</p>';
+        itemsContainer.innerHTML = `
+            <div class="text-center py-10 text-gray-500">
+                <i class="fas fa-folder-open text-4xl mb-2 opacity-20"></i>
+                <p>No se encontraron resultados.</p>
+            </div>`;
     } else {
         realizadas.forEach(remision => {
             const el = document.createElement('div');
-            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4';
+            el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white shadow-sm hover:border-indigo-200 transition-colors';
 
-            // Calculamos pagos confirmados para saber si ya está pago total
             const totalPagado = (remision.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
             const saldoPendiente = remision.valorTotal - totalPagado;
 
             let actionButtons = '';
             if (remision.facturaPdfUrl) {
-                actionButtons += `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-green-700 mr-2">Ver Factura</button>`;
+                actionButtons += `<button data-pdf-url="${remision.facturaPdfUrl}" data-remision-num="${remision.numeroFactura || remision.numeroRemision}" class="view-factura-pdf-btn bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-100 transition">Ver Factura</button>`;
             } else {
-                actionButtons += `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-orange-600 mr-2">Adjuntar Factura</button>`;
+                actionButtons += `<button data-remision-id="${remision.id}" class="facturar-btn bg-orange-50 text-orange-700 border border-orange-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-100 transition">Subir PDF</button>`;
             }
 
-            // BOTÓN NUEVO: Retención (Solo si hay saldo > 0 y no está anulada)
-            if (saldoPendiente > 0) {
-                actionButtons += `<button data-remision-json='${JSON.stringify(remision)}' class="retencion-btn bg-purple-600 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-purple-700 mr-2">Retenciones</button>`;
+            if (saldoPendiente > 0.01) {
+                actionButtons += `<button data-remision-json='${JSON.stringify(remision)}' class="retencion-btn bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-100 transition">Retenciones</button>`;
             }
 
             el.innerHTML = `
-            <div class="flex-grow">
-                <div class="flex items-center gap-3 flex-wrap">
-                    <span class="remision-id">N° ${remision.numeroRemision}</span>
-                    <p class="font-semibold text-lg">${remision.clienteNombre}</p>
+                <div class="flex-grow">
+                    <div class="flex items-center gap-3">
+                        <span class="bg-gray-100 text-gray-600 text-[10px] font-black px-2 py-0.5 rounded border">N° ${remision.numeroRemision}</span>
+                        <p class="font-bold text-gray-800 truncate max-w-[200px] sm:max-w-none">${remision.clienteNombre}</p>
+                    </div>
+                    <div class="flex gap-4 mt-1">
+                        <p class="text-xs text-gray-500">Factura: <b class="text-indigo-600">${remision.numeroFactura || 'S/N'}</b></p>
+                        <p class="text-xs text-gray-500">Total: <b>${formatCurrency(remision.valorTotal)}</b></p>
+                    </div>
+                    <p class="text-[10px] mt-1 font-bold ${saldoPendiente > 0.01 ? 'text-red-500' : 'text-green-600'}">
+                        ${saldoPendiente > 0.01 ? `SALDO: ${formatCurrency(saldoPendiente)}` : '<i class="fas fa-check"></i> PAGO TOTAL'}
+                    </p>
                 </div>
-                <p class="text-sm text-gray-600 mt-1">Fecha: ${remision.fechaRecibido} &bull; Total: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
-                ${saldoPendiente < remision.valorTotal ? `<p class="text-xs text-red-600 font-bold">Saldo: ${formatCurrency(saldoPendiente)}</p>` : ''}
-            </div>
-            <div class="flex-shrink-0 flex items-center flex-wrap gap-2">
-                 <div class="text-right mr-2">
-                    <span class="status-badge status-entregado">Facturado</span>
-                    ${remision.numeroFactura ? `<p class="text-sm text-gray-600 mt-1">Factura N°: <span class="font-semibold">${remision.numeroFactura}</span></p>` : ''}
-                </div>
-                ${actionButtons}
-                <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-gray-600">Ver Remisión</button>
-            </div>
-        `;
-            realizadasListEl.appendChild(el);
+                <div class="flex-shrink-0 flex items-center gap-2">
+                    ${actionButtons}
+                    <button data-pdf-path="${remision.pdfPath}" data-remision-num="${remision.numeroRemision}" class="view-pdf-btn bg-gray-50 text-gray-400 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100">Remisión</button>
+                </div>`;
+            itemsContainer.appendChild(el);
+        });
+
+        // Paginación (Solo si no hay búsqueda)
+        if (!window._lastSearchFactura && realizadas.length >= 20) {
+            const loadMoreDiv = document.createElement('div');
+            loadMoreDiv.className = 'text-center py-6';
+            loadMoreDiv.innerHTML = `
+                <button id="load-more-fact-btn" class="bg-white border text-gray-600 px-8 py-2 rounded-full text-xs font-bold hover:bg-gray-50 shadow-sm transition">
+                    ${cargandoMasFacturadas ? '<i class="fas fa-sync fa-spin"></i>' : 'Cargar 20 más...'}
+                </button>`;
+            realizadasListEl.appendChild(loadMoreDiv);
+            document.getElementById('load-more-fact-btn').addEventListener('click', () => loadFacturadasHistorial(true));
+        }
+    }
+
+    // --- LÓGICA INTERACTIVA DEL BUSCADOR (DEBOUNCE) ---
+    const searchInput = document.getElementById('search-facturadas');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.trim();
+            window._lastSearchFactura = term;
+
+            clearTimeout(facturacionSearchTimeout);
+            facturacionSearchTimeout = setTimeout(() => {
+                loadFacturadasHistorial(false, term);
+            }, 400); // 400ms después de que el usuario deja de escribir
         });
     }
 
-    // **** INICIO CORRECCIÓN AQUÍ ****
-    // Unificamos los listeners para que todos funcionen igual
+    // Botón para limpiar búsqueda
+    const clearBtn = document.getElementById('clear-factura-search');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            window._lastSearchFactura = '';
+            loadFacturadasHistorial(false, '');
+        });
+    }
+
+    attachFacturacionListeners();
+}
+
+// Función para reasignar eventos a los elementos de facturación tras el renderizado
+function attachFacturacionListeners() {
+    // Botones para abrir el modal de Facturar/Adjuntar
     document.querySelectorAll('#view-facturacion .facturar-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const remisionId = e.currentTarget.dataset.remisionId;
@@ -1030,7 +1297,7 @@ function renderFacturacion() {
         });
     });
 
-    // Agregar el listener para el nuevo botón al final de renderFacturacion
+    // Botones para aplicar Retenciones
     document.querySelectorAll('.retencion-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const remision = JSON.parse(e.currentTarget.dataset.remisionJson);
@@ -1038,7 +1305,7 @@ function renderFacturacion() {
         });
     });
 
-    // Listener para los botones de remisión (ahora usa la lógica asíncrona)
+    // Botones para Ver PDF de Remisión (Lógica asíncrona segura)
     document.querySelectorAll('#view-facturacion .view-pdf-btn').forEach(button => {
         button.addEventListener('click', async (e) => {
             const pdfPath = e.currentTarget.dataset.pdfPath;
@@ -1060,7 +1327,7 @@ function renderFacturacion() {
         });
     });
 
-    // Listener para los botones de factura (puede seguir usando URL directa si la tienes)
+    // Botones para Ver PDF de Factura adjunta
     document.querySelectorAll('#view-facturacion .view-factura-pdf-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             const pdfUrl = e.currentTarget.dataset.pdfUrl;
@@ -1068,7 +1335,6 @@ function renderFacturacion() {
             showPdfModal(pdfUrl, `Factura N° ${remisionNum}`);
         });
     });
-    // **** FIN CORRECCIÓN AQUÍ ****
 }
 
 // --- FUNCIONES DE MANEJO DE ACCIONES ---
@@ -1101,6 +1367,11 @@ async function handleGastoSubmit(e) {
     showModalMessage("Registrando gasto...", true);
     try {
         await addDoc(collection(db, "gastos"), nuevoGasto);
+
+        const statsRef = doc(db, "estadisticas", "globales");
+        await actualizarSaldoPorGasto(nuevoGasto.fuentePago, nuevoGasto.valorTotal);
+
+
         e.target.reset();
         hideModal();
         showModalMessage("¡Gasto registrado con éxito!", false, 2000);
@@ -1176,10 +1447,9 @@ async function handleRemisionSubmit(e) {
         };
         await addDoc(collection(db, "remisiones"), nuevaRemision);
 
-        // --- LÍNEA CLAVE AÑADIDA ---
-        // Forzamos la actualización de la lista visualmente.
-        // onSnapshot debería hacer esto, pero si no lo hace, esta línea lo garantiza.
-        renderRemisiones();
+        if (formaDePago !== 'Pendiente') {
+            await actualizarSaldoPorPago(formaDePago, total);
+        }
 
         e.target.reset();
         document.getElementById('cliente-search-input').value = '';
@@ -1600,6 +1870,8 @@ function showPaymentModal(remision) {
                 showModalMessage("Confirmando pago...", true);
                 try {
                     await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
+                    const pagoConfirmado = remisionToUpdate.payments[paymentIndex];
+                    await actualizarSaldoPorPago(pagoConfirmado.method, pagoConfirmado.amount);
                     hideModal();
                     showModalMessage("¡Pago confirmado!", false, 1500);
                 } catch (error) {
@@ -1627,6 +1899,7 @@ function showPaymentModal(remision) {
                     showModalMessage("Rechazando pago...", true);
                     try {
                         await updateDoc(doc(db, "remisiones", remisionId), { payments: remisionToUpdate.payments });
+
                         hideModal();
                         showModalMessage("¡Pago rechazado!", false, 1500);
                     } catch (error) {
@@ -1675,305 +1948,428 @@ function showPaymentModal(remision) {
 
 function showDashboardModal() {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    const now = new Date();
+    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
+    // 1. Inyectar el HTML Estructural
     modalContentWrapper.innerHTML = `
-            <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto text-left flex flex-col" style="height: 80vh;">
-                <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
-                    <h2 class="text-xl font-semibold">Resumen Financiero</h2>
-                    <div class="flex items-center gap-4">
-                        ${!saldosYaConfigurados ? `
-                                <button id="btn-saldos-iniciales" onclick="showSaldosInicialesModal()" class="bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700 shadow-md flex items-center gap-2">
-                                    <i class="fas fa-coins"></i> Config. Saldos Iniciales
-                                </button>
-                            ` : ''}
-                        <button id="download-payments-excel-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Excel Pagos</button>
-                        <button id="download-report-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Descargar Reporte PDF</button>
-                        <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-                    </div>
-                </div>
-                <div class="border-b border-gray-200 flex-shrink-0">
-                    <nav class="-mb-px flex space-x-6 px-6">
-                        <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold">Resumen Mensual</button>
-                        <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold">Cartera</button>
-                        <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold">Clientes</button>
-                    </nav>
-                </div>
-                
-                <div id="dashboard-summary-view" class="p-6 space-y-6 overflow-y-auto flex-grow"> <div class="flex items-center gap-4"><select id="summary-month" class="p-2 border rounded-lg"></select><select id="summary-year" class="p-2 border rounded-lg"></select></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-green-100 p-4 rounded-lg"><div class="text-sm font-semibold text-green-800">VENTAS</div><div id="summary-sales" class="text-2xl font-bold"></div></div><div class="bg-red-100 p-4 rounded-lg"><div class="text-sm font-semibold text-red-800">GASTOS</div><div id="summary-expenses" class="text-2xl font-bold"></div></div><div class="bg-indigo-100 p-4 rounded-lg"><div class="text-sm font-semibold text-indigo-800">UTILIDAD/PÉRDIDA</div><div id="summary-profit" class="text-2xl font-bold"></div></div><div class="bg-yellow-100 p-4 rounded-lg"><div class="text-sm font-semibold text-yellow-800">CARTERA PENDIENTE (MES)</div><div id="summary-cartera" class="text-2xl font-bold"></div></div></div><div><h3 class="font-semibold mb-2">Saldos Estimados (Total)</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">EFECTIVO</div><div id="summary-efectivo" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">NEQUI</div><div id="summary-nequi" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">DAVIVIENDA</div><div id="summary-davivienda" class="text-xl font-bold"></div></div><div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">CARTERA TOTAL</div><div id="summary-cartera-total" class="text-xl font-bold"></div></div></div></div><div><h3 class="font-semibold mb-2">Utilidad/Pérdida (Últimos 6 Meses)</h3><div class="bg-gray-50 p-4 rounded-lg"><canvas id="profitLossChart"></canvas></div></div></div>
-                
-                <div id="dashboard-cartera-view" class="p-6 hidden flex-grow flex flex-col min-h-0">
-                <div class="border-b border-gray-200 flex-shrink-0">
-                        <nav class="-mb-px flex space-x-4">
-                            <button id="cartera-tab-detalle" class="cartera-tab-btn active py-3 px-1 text-sm font-semibold">Detalle por Remisión</button>
-                            <button id="cartera-tab-cliente" class="cartera-tab-btn py-3 px-1 text-sm font-semibold">Total por Cliente</button>
-                        </nav>
-                    </div>
-                    
-                    <div class="mt-4 flex-grow overflow-y-auto">
-                        <div id="cartera-detalle-view" class="">
-                            <div id="cartera-list" class="space-y-4"></div>
-                            <div id="cartera-total" class="text-right font-bold text-xl mt-4 flex-shrink-0"></div>
-                        </div>
-                        <div id="cartera-cliente-view" class="hidden">
-                            <div id="cartera-por-cliente-list" class="space-y-3"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="dashboard-clientes-view" class="p-6 hidden flex-grow overflow-y-auto">
-                    <h3 class="font-semibold mb-2 text-xl">Ranking de Clientes</h3>
-                    <div class="flex flex-wrap items-center gap-4 mb-4 p-2 bg-gray-50 rounded-lg">
-                        <div class="flex items-center gap-2">
-                            <label class="text-sm font-medium">Desde:</label>
-                            <select id="rank-start-month" class="p-2 border rounded-lg"></select>
-                            <select id="rank-start-year" class="p-2 border rounded-lg"></select>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label class="text-sm font-medium">Hasta:</label>
-                            <select id="rank-end-month" class="p-2 border rounded-lg"></select>
-                            <select id="rank-end-year" class="p-2 border rounded-lg"></select>
-                        </div>
-                        <button id="rank-filter-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Filtrar</button>
-                        <button id="rank-show-all-btn" class="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-700">Mostrar Todos</button>
-                    </div>
-                    <div id="top-clientes-list" class="space-y-3"></div>
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-auto text-left flex flex-col" style="height: 80vh;">
+            <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
+                <h2 class="text-xl font-semibold">Resumen Financiero</h2>
+                <div class="flex items-center gap-4">
+                    ${!saldosYaConfigurados ? `
+                        <button id="btn-saldos-iniciales" onclick="showSaldosInicialesModal()" class="bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700 shadow-md flex items-center gap-2">
+                            <i class="fas fa-coins"></i> Config. Saldos Iniciales
+                        </button>
+                    ` : ''}
+                    <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                 </div>
             </div>
-        `;
+
+            <div class="border-b border-gray-200 flex-shrink-0">
+                <nav class="-mb-px flex space-x-6 px-6">
+                    <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold">Resumen Mensual</button>
+                    <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold">Cartera</button>
+                    <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold">Clientes</button>
+                    <button id="dashboard-tab-actions" class="dashboard-tab-btn py-4 px-1 font-semibold">Acciones</button>
+                </nav>
+            </div>
+            
+            <div id="dashboard-summary-view" class="p-6 space-y-6 overflow-y-auto flex-grow">
+                 <div class="flex items-center gap-4">
+                    <select id="summary-month" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                    <select id="summary-year" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                 </div>
+                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-green-100 p-4 rounded-lg"><div class="text-sm font-semibold text-green-800">VENTAS</div><div id="summary-sales" class="text-2xl font-bold">$ 0</div></div>
+                    <div class="bg-red-100 p-4 rounded-lg"><div class="text-sm font-semibold text-red-800">GASTOS</div><div id="summary-expenses" class="text-2xl font-bold">$ 0</div></div>
+                    <div class="bg-indigo-100 p-4 rounded-lg"><div class="text-sm font-semibold text-indigo-800">UTILIDAD/PÉRDIDA</div><div id="summary-profit" class="text-2xl font-bold">$ 0</div></div>
+                    <div class="bg-yellow-100 p-4 rounded-lg"><div class="text-sm font-semibold text-yellow-800">CARTERA PENDIENTE (MES)</div><div id="summary-cartera" class="text-2xl font-bold">$ 0</div></div>
+                 </div>
+                 <div>
+                    <h3 class="font-semibold mb-2 text-gray-700">Saldos Estimados (Total Actual)</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">EFECTIVO</div><div id="summary-efectivo" class="text-xl font-bold">...</div></div>
+                        <div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">NEQUI</div><div id="summary-nequi" class="text-xl font-bold">...</div></div>
+                        <div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">DAVIVIENDA</div><div id="summary-davivienda" class="text-xl font-bold">...</div></div>
+                        <div class="bg-gray-100 p-4 rounded-lg"><div class="text-sm font-semibold text-gray-800">CARTERA TOTAL</div><div id="summary-cartera-total" class="text-xl font-bold">...</div></div>
+                    </div>
+                 </div>
+                 <div>
+                    <h3 class="font-semibold mb-2 text-gray-700">Dinero Recibido vs. Gastos (Últimos 6 Meses)</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg border shadow-inner"><canvas id="profitLossChart"></canvas></div>
+                 </div>
+            </div>
+            
+            <div id="dashboard-cartera-view" class="p-6 hidden flex-grow flex flex-col min-h-0">
+                <div class="border-b border-gray-200 flex-shrink-0">
+                    <nav class="-mb-px flex space-x-4">
+                        <button id="cartera-tab-detalle" class="cartera-tab-btn active py-3 px-1 text-sm font-semibold">Detalle por Remisión</button>
+                        <button id="cartera-tab-cliente" class="cartera-tab-btn py-3 px-1 text-sm font-semibold">Total por Cliente</button>
+                    </nav>
+                </div>
+                <div class="mt-4 flex-grow overflow-y-auto">
+                    <div id="cartera-detalle-view">
+                        <div id="cartera-list" class="space-y-4"></div>
+                        <div id="cartera-total" class="text-right font-bold text-xl mt-6 p-4 bg-red-50 rounded-lg text-red-700"></div>
+                    </div>
+                    <div id="cartera-cliente-view" class="hidden">
+                        <div id="cartera-por-cliente-list" class="space-y-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="dashboard-clientes-view" class="p-6 hidden flex-grow overflow-y-auto">
+                <h3 class="font-semibold mb-4 text-xl">Ranking de Mejores Clientes</h3>
+                <div class="flex flex-wrap items-center gap-4 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-bold text-gray-600">Desde:</label>
+                        <select id="rank-start-month" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                        <select id="rank-start-year" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-bold text-gray-600">Hasta:</label>
+                        <select id="rank-end-month" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                        <select id="rank-end-year" class="p-2 border rounded-lg bg-white shadow-sm"></select>
+                    </div>
+                    <button id="rank-filter-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 shadow-md transition">
+                        Filtrar Ranking
+                    </button>
+                </div>
+                <div id="top-clientes-list" class="space-y-3"></div>
+            </div>
+
+            <div id="dashboard-actions-view" class="p-6 hidden flex-grow overflow-y-auto">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">Exportación de Reportes</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                    <button id="download-payments-excel-btn" class="flex items-center justify-center gap-2 bg-green-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-green-700 transition shadow-sm">
+                        <i class="fas fa-file-excel text-xl"></i> Excel de Pagos
+                    </button>
+                    <button id="export-gastos-excel-btn" class="flex items-center justify-center gap-2 bg-orange-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-orange-700 transition shadow-sm">
+                        <i class="fas fa-receipt text-xl"></i> Excel de Gastos
+                    </button>
+                    <button id="export-remisiones-excel-btn" class="flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-teal-700 transition shadow-sm">
+                        <i class="fas fa-file-invoice text-xl"></i> Excel de Remisiones
+                    </button>
+                    <button id="download-report-btn" class="flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-blue-700 transition shadow-sm">
+                        <i class="fas fa-file-pdf text-xl"></i> Reporte Detallado PDF
+                    </button>
+                </div>
+
+                <h3 class="text-lg font-semibold mb-4 text-red-700 border-b pb-2">Mantenimiento de Datos</h3>
+                <div class="bg-red-50 p-6 rounded-xl border border-red-100">
+                    <p class="text-sm text-red-800 mb-2 font-bold">
+                        <i class="fas fa-exclamation-triangle"></i> Sincronización de Saldos Globales
+                    </p>
+                    <p class="text-xs text-red-700 mb-4 leading-relaxed">
+                        Si notas que los saldos de Efectivo, Nequi o Davivienda no coinciden con la realidad, usa este botón. 
+                        El sistema recalculará toda la historia para corregir posibles descuadres.
+                    </p>
+                    <button id="sync-balances-btn" class="w-full sm:w-auto bg-red-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-red-700 transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fas fa-sync-alt"></i> Sincronizar Saldos Ahora
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-dashboard-modal').addEventListener('click', hideModal);
 
-    const monthSelect = document.getElementById('summary-month');
-    const yearSelect = document.getElementById('summary-year');
-    const rankStartMonth = document.getElementById('rank-start-month');
-    const rankStartYear = document.getElementById('rank-start-year');
-    const rankEndMonth = document.getElementById('rank-end-month');
-    const rankEndYear = document.getElementById('rank-end-year');
+    // 2. Poblar Todos los Selectores de Fecha (Resumen y Ranking)
+    const selectors = {
+        months: [
+            document.getElementById('summary-month'),
+            document.getElementById('rank-start-month'),
+            document.getElementById('rank-end-month')
+        ],
+        years: [
+            document.getElementById('summary-year'),
+            document.getElementById('rank-start-year'),
+            document.getElementById('rank-end-year')
+        ]
+    };
 
-    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const now = new Date();
-
-    [monthSelect, rankStartMonth, rankEndMonth].forEach(sel => {
-        for (let i = 0; i < 12; i++) { const option = document.createElement('option'); option.value = i; option.textContent = monthNames[i]; if (i === now.getMonth()) option.selected = true; sel.appendChild(option); }
+    selectors.months.forEach(sel => {
+        if (!sel) return;
+        monthNames.forEach((name, i) => {
+            const opt = document.createElement('option');
+            opt.value = i; opt.textContent = name;
+            if (i === now.getMonth()) opt.selected = true;
+            sel.appendChild(opt);
+        });
     });
-    [yearSelect, rankStartYear, rankEndYear].forEach(sel => {
-        for (let i = 0; i < 5; i++) { const year = now.getFullYear() - i; const option = document.createElement('option'); option.value = year; option.textContent = year; sel.appendChild(option); }
+
+    selectors.years.forEach(sel => {
+        if (!sel) return;
+        for (let i = 0; i < 5; i++) {
+            const year = now.getFullYear() - i;
+            const opt = document.createElement('option');
+            opt.value = year; opt.textContent = year;
+            sel.appendChild(opt);
+        }
     });
 
-    const updateDashboardView = () => updateDashboard(parseInt(yearSelect.value), parseInt(monthSelect.value));
-    monthSelect.addEventListener('change', updateDashboardView);
-    yearSelect.addEventListener('change', updateDashboardView);
+    // 3. Lógica de Navegación entre Pestañas
+    const tabs = {
+        summary: document.getElementById('dashboard-tab-summary'),
+        cartera: document.getElementById('dashboard-tab-cartera'),
+        clientes: document.getElementById('dashboard-tab-clientes'),
+        actions: document.getElementById('dashboard-tab-actions')
+    };
+    const views = {
+        summary: document.getElementById('dashboard-summary-view'),
+        cartera: document.getElementById('dashboard-cartera-view'),
+        clientes: document.getElementById('dashboard-clientes-view'),
+        actions: document.getElementById('dashboard-actions-view')
+    };
+
+    Object.keys(tabs).forEach(key => {
+        tabs[key].addEventListener('click', () => {
+            Object.values(tabs).forEach(t => t.classList.remove('active'));
+            Object.values(views).forEach(v => v.classList.add('hidden'));
+            tabs[key].classList.add('active');
+            views[key].classList.remove('hidden');
+        });
+    });
+
+    // Sub-pestañas de Cartera
+    document.getElementById('cartera-tab-detalle').addEventListener('click', (e) => {
+        e.target.classList.add('active');
+        document.getElementById('cartera-tab-cliente').classList.remove('active');
+        document.getElementById('cartera-detalle-view').classList.remove('hidden');
+        document.getElementById('cartera-cliente-view').classList.add('hidden');
+    });
+    document.getElementById('cartera-tab-cliente').addEventListener('click', (e) => {
+        e.target.classList.add('active');
+        document.getElementById('cartera-tab-detalle').classList.remove('active');
+        document.getElementById('cartera-cliente-view').classList.remove('hidden');
+        document.getElementById('cartera-detalle-view').classList.add('hidden');
+    });
+
+    // 4. Listeners de Acciones y Filtros
+    document.getElementById('summary-month').addEventListener('change', () => updateDashboard(parseInt(document.getElementById('summary-year').value), parseInt(document.getElementById('summary-month').value)));
+    document.getElementById('summary-year').addEventListener('change', () => updateDashboard(parseInt(document.getElementById('summary-year').value), parseInt(document.getElementById('summary-month').value)));
 
     document.getElementById('rank-filter-btn').addEventListener('click', () => {
-        const startDate = new Date(rankStartYear.value, rankStartMonth.value, 1);
-        const endDate = new Date(rankEndYear.value, parseInt(rankEndMonth.value) + 1, 0);
-        renderTopClientes(startDate, endDate);
-    });
-    document.getElementById('rank-show-all-btn').addEventListener('click', () => renderTopClientes());
-
-    const summaryTab = document.getElementById('dashboard-tab-summary');
-    const carteraTab = document.getElementById('dashboard-tab-cartera');
-    const clientesTab = document.getElementById('dashboard-tab-clientes');
-    const summaryView = document.getElementById('dashboard-summary-view');
-    const carteraView = document.getElementById('dashboard-cartera-view');
-    const clientesView = document.getElementById('dashboard-clientes-view');
-
-    summaryTab.addEventListener('click', () => {
-        summaryTab.classList.add('active');
-        carteraTab.classList.remove('active');
-        clientesTab.classList.remove('active');
-        summaryView.classList.remove('hidden');
-        carteraView.classList.add('hidden');
-        clientesView.classList.add('hidden');
-    });
-    carteraTab.addEventListener('click', () => {
-        carteraTab.classList.add('active');
-        summaryTab.classList.remove('active');
-        clientesTab.classList.remove('active');
-        carteraView.classList.remove('hidden');
-        summaryView.classList.add('hidden');
-        clientesView.classList.add('hidden');
-    });
-    clientesTab.addEventListener('click', () => {
-        clientesTab.classList.add('active');
-        summaryTab.classList.remove('active');
-        carteraTab.classList.remove('active');
-        clientesView.classList.remove('hidden');
-        summaryView.classList.add('hidden');
-        carteraView.classList.add('hidden');
-    });
-
-    const carteraTabDetalle = document.getElementById('cartera-tab-detalle');
-    const carteraTabCliente = document.getElementById('cartera-tab-cliente');
-    const carteraDetalleView = document.getElementById('cartera-detalle-view');
-    const carteraClienteView = document.getElementById('cartera-cliente-view');
-
-    carteraTabDetalle.addEventListener('click', () => {
-        carteraTabDetalle.classList.add('active');
-        carteraTabCliente.classList.remove('active');
-        carteraDetalleView.classList.remove('hidden');
-        carteraClienteView.classList.add('hidden');
-    });
-    carteraTabCliente.addEventListener('click', () => {
-        carteraTabCliente.classList.add('active');
-        carteraTabDetalle.classList.remove('active');
-        carteraClienteView.classList.remove('hidden');
-        carteraDetalleView.classList.add('hidden');
+        const start = new Date(document.getElementById('rank-start-year').value, document.getElementById('rank-start-month').value, 1);
+        const end = new Date(document.getElementById('rank-end-year').value, parseInt(document.getElementById('rank-end-month').value) + 1, 0, 23, 59, 59);
+        renderTopClientes(start, end);
     });
 
     document.getElementById('download-payments-excel-btn').addEventListener('click', showExportPaymentsModal);
+    document.getElementById('export-gastos-excel-btn').addEventListener('click', showExportGastosModal);
+    document.getElementById('export-remisiones-excel-btn').addEventListener('click', showExportRemisionesModal);
     document.getElementById('download-report-btn').addEventListener('click', showReportDateRangeModal);
 
-    updateDashboardView();
-    renderCartera();
-    renderTopClientes();
-}
-
-function updateDashboard(year, month) {
-    // 1. Cálculos del mes seleccionado (Esto no cambia)
-    const salesThisMonth = allRemisiones.flatMap(r => r.payments || []).filter(p => {
-        const d = new Date(p.date);
-        return d.getMonth() === month && d.getFullYear() === year;
-    }).reduce((sum, p) => sum + p.amount, 0);
-
-    const expensesThisMonth = allGastos.filter(g => {
-        const d = new Date(g.fecha);
-        return d.getMonth() === month && d.getFullYear() === year;
-    }).reduce((sum, g) => sum + g.valorTotal, 0);
-
-    document.getElementById('summary-sales').textContent = formatCurrency(salesThisMonth);
-    document.getElementById('summary-expenses').textContent = formatCurrency(expensesThisMonth);
-    document.getElementById('summary-profit').textContent = formatCurrency(salesThisMonth - expensesThisMonth);
-
-    const carteraThisMonth = allRemisiones.filter(r => {
-        const d = new Date(r.fechaRecibido);
-        return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada';
-    }).reduce((sum, r) => {
-        const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0);
-        const saldo = r.valorTotal - totalPagado;
-        return sum + (saldo > 0 ? saldo : 0);
-    }, 0);
-    document.getElementById('summary-cartera').textContent = formatCurrency(carteraThisMonth);
-
-    const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => {
-        const totalPagado = (r.payments || []).reduce((s, p) => s + p.amount, 0);
-        const saldo = r.valorTotal - totalPagado;
-        return sum + (saldo > 0 ? saldo : 0);
-    }, 0);
-    document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCartera);
-
-    // 2. CÁLCULO DE SALDOS TOTALES (AQUÍ ESTÁ LA CORRECCIÓN)
-    // Antes iniciábamos en 0. Ahora iniciamos con los Saldos Base cargados.
-    const accountBalances = {
-        Efectivo: globalSaldosBase.Efectivo || 0,
-        Nequi: globalSaldosBase.Nequi || 0,
-        Davivienda: globalSaldosBase.Davivienda || 0
-    };
-
-    // Sumar todas las entradas históricas
-    allRemisiones.forEach(r => (r.payments || []).forEach(p => {
-        if (accountBalances[p.method] !== undefined) accountBalances[p.method] += p.amount;
-    }));
-
-    // Restar todas las salidas históricas
-    allGastos.forEach(g => {
-        if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal;
+    document.getElementById('sync-balances-btn').addEventListener('click', () => {
+        if (confirm("¿Seguro que quieres resincronizar los saldos? Esto recalculará todo el historial contable.")) {
+            migrarSaldosAGlobales();
+        }
     });
 
-    document.getElementById('summary-efectivo').textContent = formatCurrency(accountBalances.Efectivo);
-    document.getElementById('summary-nequi').textContent = formatCurrency(accountBalances.Nequi);
-    document.getElementById('summary-davivienda').textContent = formatCurrency(accountBalances.Davivienda);
+    // 5. Carga Inicial de Datos
+    updateDashboard(now.getFullYear(), now.getMonth());
+    renderCartera();
+    renderTopClientes(); // Cargará el mes actual por defecto
+}
 
-    // 3. Gráficos (Esto no cambia)
-    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-    const labels = [];
-    const salesData = [];
-    const expensesData = [];
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        const m = d.getMonth();
-        const y = d.getFullYear();
-        labels.push(monthNames[m]);
-        const monthlySales = allRemisiones.flatMap(r => r.payments || []).filter(p => {
-            const pDate = new Date(p.date);
-            return pDate.getMonth() === m && pDate.getFullYear() === y;
-        }).reduce((sum, p) => sum + p.amount, 0);
-        const monthlyExpenses = allGastos.filter(g => {
-            const gDate = new Date(g.fecha);
-            return gDate.getMonth() === m && gDate.getFullYear() === y;
-        }).reduce((sum, g) => sum + g.valorTotal, 0);
-        salesData.push(monthlySales);
-        expensesData.push(monthlyExpenses);
+// Función helper para inicializar los selectores de fecha
+function initDashboardSelectors() {
+    const monthSelect = document.getElementById('summary-month');
+    const yearSelect = document.getElementById('summary-year');
+    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const now = new Date();
+
+    if (monthSelect) {
+        monthNames.forEach((name, i) => {
+            const opt = document.createElement('option');
+            opt.value = i; opt.textContent = name;
+            if (i === now.getMonth()) opt.selected = true;
+            monthSelect.appendChild(opt);
+        });
+        monthSelect.addEventListener('change', updateDashboardView);
     }
+    if (yearSelect) {
+        for (let i = 0; i < 5; i++) {
+            const y = now.getFullYear() - i;
+            const opt = document.createElement('option');
+            opt.value = y; opt.textContent = y;
+            yearSelect.appendChild(opt);
+        }
+        yearSelect.addEventListener('change', updateDashboardView);
+    }
+}
+
+// Función helper para refrescar los datos del dashboard
+function updateDashboardView() {
+    const y = parseInt(document.getElementById('summary-year').value);
+    const m = parseInt(document.getElementById('summary-month').value);
+    updateDashboard(y, m);
+}
+
+/**
+ * Actualiza el Dashboard con precisión horaria para Colombia.
+ * Filtra desde el primer hasta el último segundo del mes seleccionado.
+ */
+async function updateDashboard(year, month) {
+    const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+    const startDate = new Date(year, month - 5, 1);
+    const endDate = new Date(year, month + 1, 0);
+
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    const currentPrefix = `${year}-${(month + 1).toString().padStart(2, '0')}`;
+
+    try {
+        const qRem = query(collection(db, "remisiones"),
+            where("fechaRecibido", ">=", startStr),
+            where("fechaRecibido", "<=", endStr),
+            where("estado", "!=", "Anulada"));
+
+        const qGas = query(collection(db, "gastos"),
+            where("fecha", ">=", startStr),
+            where("fecha", "<=", endStr));
+
+        const [snapRem, snapGas] = await Promise.all([getDocs(qRem), getDocs(qGas)]);
+
+        const allDataRem = snapRem.docs.map(d => d.data());
+        const allDataGas = snapGas.docs.map(d => d.data());
+
+        const labels = [];
+        const chartSales = [];
+        const chartExpenses = [];
+
+        let salesForCard = 0;
+        let expensesForCard = 0;
+        let carteraForCard = 0;
+
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(year, month - i, 1);
+            const m = d.getMonth();
+            const y = d.getFullYear();
+            const prefix = `${y}-${(m + 1).toString().padStart(2, '0')}`;
+
+            labels.push(monthNamesShort[m]);
+
+            const monthlyExpenses = allDataGas
+                .filter(g => g.fecha.startsWith(prefix))
+                .reduce((sum, g) => sum + (g.valorTotal || 0), 0);
+
+            const monthlyRecaudos = [...allDataRem, ...remisionesCartera]
+                .flatMap(r => r.payments || [])
+                .filter(p => p.status === 'confirmado' && p.date.startsWith(prefix))
+                .reduce((sum, p) => sum + p.amount, 0);
+
+            chartSales.push(monthlyRecaudos);
+            chartExpenses.push(monthlyExpenses);
+
+            if (prefix === currentPrefix) {
+                expensesForCard = monthlyExpenses;
+                salesForCard = allDataRem
+                    .filter(r => r.fechaRecibido.startsWith(prefix))
+                    .reduce((sum, r) => sum + (r.valorTotal || 0), 0);
+
+                carteraForCard = allDataRem
+                    .filter(r => r.fechaRecibido.startsWith(prefix))
+                    .reduce((sum, r) => {
+                        const paid = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
+                        return sum + Math.max(0, r.valorTotal - paid);
+                    }, 0);
+            }
+        }
+
+        // --- ACTUALIZACIÓN DE LA UI (TARJETAS MENSUALES) ---
+        const salesEl = document.getElementById('summary-sales');
+        if (salesEl) {
+            salesEl.textContent = formatCurrency(salesForCard);
+            document.getElementById('summary-expenses').textContent = formatCurrency(expensesForCard);
+            document.getElementById('summary-profit').textContent = formatCurrency(salesForCard - expensesForCard);
+            document.getElementById('summary-cartera').textContent = formatCurrency(carteraForCard);
+
+            const totalCarteraGlobal = remisionesCartera.reduce((sum, r) => {
+                const paid = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
+                return sum + Math.max(0, r.valorTotal - paid);
+            }, 0);
+            document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCarteraGlobal);
+
+            // --- ESTA ES LA PARTE QUE FALTABA: PINTAR LOS SALDOS GLOBALES ---
+            document.getElementById('summary-efectivo').textContent = formatCurrency(globalesSaldos.Efectivo);
+            document.getElementById('summary-nequi').textContent = formatCurrency(globalesSaldos.Nequi);
+            document.getElementById('summary-davivienda').textContent = formatCurrency(globalesSaldos.Davivienda);
+        }
+
+        renderProfitLossChart(labels, chartSales, chartExpenses);
+
+    } catch (error) {
+        console.error("Error en sincronización de datos:", error);
+    }
+}
+
+
+// Función auxiliar para renderizar el gráfico
+function renderProfitLossChart(labels, salesData, expensesData) {
     const ctx = document.getElementById('profitLossChart').getContext('2d');
-    if (profitLossChart) {
-        profitLossChart.destroy();
-    }
+    if (profitLossChart) profitLossChart.destroy();
+
     profitLossChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels,
-            datasets: [{
-                label: 'Ventas',
-                data: salesData,
-                backgroundColor: 'rgba(75, 192, 192, 0.6)'
-            }, {
-                label: 'Gastos',
-                data: expensesData,
-                backgroundColor: 'rgba(255, 99, 132, 0.6)'
-            }]
+            datasets: [
+                {
+                    label: 'Dinero Recibido (Pagos)', // Antes decía 'Ventas'
+                    data: salesData,
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                },
+                {
+                    label: 'Gastos Pagados', // Antes decía 'Gastos'
+                    data: expensesData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)'
+                }
+            ]
         },
         options: {
+            responsive: true,
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) { return formatCurrency(value); }
+                    }
                 }
             }
         }
     });
 }
 
-function calculateOverdueDays(dateString) {
-    const today = new Date();
-    const receivedDate = new Date(dateString);
-    today.setHours(0, 0, 0, 0);
-    receivedDate.setHours(0, 0, 0, 0);
-    const diffTime = today - receivedDate;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-}
-
 function renderCartera() {
-    // Apunta a los contenedores correctos dentro del modal
     const porClienteListEl = document.getElementById('cartera-por-cliente-list');
     const detalleListEl = document.getElementById('cartera-list');
     const totalEl = document.getElementById('cartera-total');
 
     if (!porClienteListEl || !detalleListEl || !totalEl) return;
 
-    // 1. CALCULAR SALDOS Y DÍAS DE VENCIMIENTO
-    const today = new Date();
-    const remisionesPendientes = allRemisiones
-        .map(remision => {
-            const totalPagado = (remision.payments || [])
-                .filter(p => p.status === 'confirmado')
-                .reduce((acc, p) => acc + p.amount, 0);
-            const saldoPendiente = remision.valorTotal - totalPagado;
+    // --- CAMBIO CLAVE: Usamos remisionesCartera en lugar de allRemisiones ---
+    const remisionesPendientes = remisionesCartera.map(remision => {
+        const totalPagado = (remision.payments || [])
+            .filter(p => p.status === 'confirmado')
+            .reduce((acc, p) => acc + p.amount, 0);
+        const saldoPendiente = remision.valorTotal - totalPagado;
 
-            // Cálculo de días vencidos
-            const fechaRecibido = new Date(remision.fechaRecibido);
-            // Asegurarse de que la hora no afecte el cálculo de días
-            fechaRecibido.setHours(0, 0, 0, 0);
-            today.setHours(0, 0, 0, 0);
-            const diffTime = today - fechaRecibido;
-            const diasVencidos = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        // Cálculo de días vencidos
+        const today = new Date();
+        const fechaRecibido = new Date(remision.fechaRecibido);
+        fechaRecibido.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        const diffTime = today - fechaRecibido;
+        const diasVencidos = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-            return { ...remision, saldoPendiente, diasVencidos };
-        })
-        .filter(remision => remision.saldoPendiente > 0.01 && remision.estado !== 'Anulada');
+        return { ...remision, saldoPendiente, diasVencidos };
+    });
 
-    // 2. CALCULAR CARTERA TOTAL POR CLIENTE (sin cambios)
+    // 2. CALCULAR CARTERA TOTAL POR CLIENTE
     const carteraPorCliente = remisionesPendientes.reduce((acc, remision) => {
         const cliente = acc[remision.clienteNombre] || { totalDeuda: 0, remisionesCount: 0 };
         cliente.totalDeuda += remision.saldoPendiente;
@@ -1981,9 +2377,10 @@ function renderCartera() {
         acc[remision.clienteNombre] = cliente;
         return acc;
     }, {});
+
     const clientesOrdenados = Object.entries(carteraPorCliente).sort(([, a], [, b]) => b.totalDeuda - a.totalDeuda);
 
-    // 3. RENDERIZAR CARTERA POR CLIENTE (sin cambios)
+    // 3. RENDERIZAR CARTERA POR CLIENTE
     porClienteListEl.innerHTML = '';
     if (clientesOrdenados.length === 0) {
         porClienteListEl.innerHTML = '<p class="text-center text-gray-500 py-4 bg-gray-50 rounded-lg">No hay cartera pendiente por cliente.</p>';
@@ -1998,22 +2395,20 @@ function renderCartera() {
                 </div>
                 <div class="text-right">
                     <p class="font-bold text-lg text-red-600">${formatCurrency(data.totalDeuda)}</p>
-                </div>
-            `;
+                </div>`;
             porClienteListEl.appendChild(el);
         });
     }
 
-    // 4. RENDERIZAR DETALLE DE CARTERA CON EL DISEÑO ANTIGUO
+    // 4. RENDERIZAR DETALLE DE CARTERA
     detalleListEl.innerHTML = '';
     if (remisionesPendientes.length === 0) {
         detalleListEl.innerHTML = '<p class="text-center text-gray-500 py-8 bg-gray-50 rounded-lg">¡Felicidades! No hay remisiones pendientes de cobro.</p>';
     } else {
+        // Ordenamos por antigüedad (la más vieja primero para cobrarla rápido)
         remisionesPendientes.sort((a, b) => new Date(a.fechaRecibido) - new Date(b.fechaRecibido));
         remisionesPendientes.forEach(remision => {
             const el = document.createElement('div');
-            // **** INICIO DE LA MODIFICACIÓN ****
-            // Se restaura el diseño anterior con todos los detalles
             el.className = 'bg-white border p-4 rounded-lg flex justify-between items-center';
 
             const diasVencidosTexto = remision.diasVencidos > 0
@@ -2030,60 +2425,109 @@ function renderCartera() {
                     <p class="text-sm text-red-700 font-semibold">Saldo Pendiente</p>
                     <p class="font-bold text-2xl text-red-600">${formatCurrency(remision.saldoPendiente)}</p>
                     <p class="text-xs font-semibold ${remision.diasVencidos > 15 ? 'text-red-500' : 'text-yellow-600'} mt-1">${diasVencidosTexto}</p>
-                </div>
-            `;
-            // **** FIN DE LA MODIFICACIÓN ****
+                </div>`;
             detalleListEl.appendChild(el);
         });
     }
 
-    // 5. RENDERIZAR TOTAL GENERAL (sin cambios)
+    // 5. RENDERIZAR TOTAL GENERAL
     const totalCartera = remisionesPendientes.reduce((sum, r) => sum + r.saldoPendiente, 0);
     totalEl.innerHTML = `Cartera Total Pendiente: ${formatCurrency(totalCartera)}`;
 }
 
-function renderTopClientes(startDate, endDate) {
+async function renderTopClientes(startDate, endDate) {
     const container = document.getElementById('top-clientes-list');
     if (!container) return;
 
-    let remisionesToAnalyze = allRemisiones;
-    if (startDate && endDate) {
-        remisionesToAnalyze = allRemisiones.filter(r => {
-            const d = new Date(r.fechaRecibido);
-            return d >= startDate && d <= endDate;
+    container.innerHTML = '<p class="text-center text-gray-500 py-8">Calculando ranking del periodo...</p>';
+
+    // 1. Si no hay fechas, definimos el mes actual por defecto (Ahorro de recursos)
+    const now = new Date();
+    const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+
+    try {
+        // 2. CONSULTA ÚNICA: Traemos solo las remisiones del rango solicitado
+        // Esto es mucho más barato que traer toda la historia
+        const q = query(
+            collection(db, "remisiones"),
+            where("fechaRecibido", ">=", startStr),
+            where("fechaRecibido", "<=", endStr),
+            where("estado", "!=", "Anulada")
+        );
+
+        const snap = await getDocs(q);
+        const remisionesRango = snap.docs.map(d => d.data());
+
+        // 3. PROCESAMIENTO LOCAL
+        // Sumamos las ventas agrupándolas por el ID del cliente
+        const ventasPorCliente = remisionesRango.reduce((acc, r) => {
+            acc[r.idCliente] = (acc[r.idCliente] || 0) + (r.valorTotal || 0);
+            return acc;
+        }, {});
+
+        // Cruzamos con la lista global de clientes para tener los nombres
+        const ranking = allClientes
+            .map(cliente => ({
+                ...cliente,
+                totalComprado: ventasPorCliente[cliente.id] || 0,
+                numCompras: remisionesRango.filter(r => r.idCliente === cliente.id).length
+            }))
+            .filter(c => c.totalComprado > 0) // Solo mostramos los que compraron algo en este periodo
+            .sort((a, b) => b.totalComprado - a.totalComprado); // Ordenamos de mayor a menor
+
+        // 4. RENDERIZADO
+        container.innerHTML = '';
+        if (ranking.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-8 bg-gray-50 rounded-lg">
+                    <p class="text-gray-500">No se encontraron ventas entre ${startStr} y ${endStr}.</p>
+                </div>`;
+            return;
+        }
+
+        ranking.forEach((cliente, index) => {
+            const el = document.createElement('div');
+            el.className = 'border p-4 rounded-lg flex justify-between items-center bg-white shadow-sm hover:border-indigo-300 transition-colors';
+            el.innerHTML = `
+                <div class="flex items-center gap-4">
+                    <span class="text-xl font-bold text-gray-300 w-8">#${index + 1}</span>
+                    <div>
+                        <p class="font-semibold text-gray-800">${cliente.nombre}</p>
+                        <p class="text-xs text-gray-500">${cliente.numCompras} remisión(es) en este periodo</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-lg text-indigo-600">${formatCurrency(cliente.totalComprado)}</p>
+                </div>`;
+            container.appendChild(el);
         });
+
+    } catch (error) {
+        console.error("Error al generar ranking:", error);
+        container.innerHTML = '<p class="text-center text-red-500">Error al conectar con la base de datos.</p>';
     }
+}
 
-    const clientesConHistorial = allClientes.map(cliente => {
-        const remisionesCliente = remisionesToAnalyze.filter(r => r.idCliente === cliente.id && r.estado !== 'Anulada');
-        const totalComprado = remisionesCliente.reduce((sum, r) => sum + r.valorTotal, 0);
-        return { ...cliente, totalComprado, numCompras: remisionesCliente.length };
-    }).filter(c => c.numCompras > 0)
-        .sort((a, b) => b.totalComprado - a.totalComprado);
+const modal = document.getElementById('modal');
+let modalTimeout;
 
-    container.innerHTML = '';
-    if (clientesConHistorial.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 py-8">No hay datos de compras de clientes para el rango seleccionado.</p>';
+function showModalMessage(message, isLoader = false, duration = 0) {
+    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+
+    // Si ya hay un dashboard abierto, no queremos borrarlo todo con el loader
+    // Solo mostramos el loader si el modal está oculto o no contiene el dashboard
+    const isDashboardOpen = document.getElementById('dashboard-summary-view') !== null;
+
+    if (isLoader && isDashboardOpen) {
+        // En lugar de borrar todo, podemos mostrar un aviso sutil o simplemente ignorar el loader masivo
+        console.log("Dashboard abierto: " + message);
         return;
     }
 
-    clientesConHistorial.forEach(cliente => {
-        const el = document.createElement('div');
-        el.className = 'border p-4 rounded-lg';
-        el.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <p class="font-semibold text-lg">${cliente.nombre}</p>
-                    <p class="font-bold text-xl text-green-600">${formatCurrency(cliente.totalComprado)}</p>
-                </div>
-                <p class="text-sm text-gray-600">${cliente.numCompras} ${cliente.numCompras === 1 ? 'compra' : 'compras'}</p>
-            `;
-        container.appendChild(el);
-    });
-}
-const modal = document.getElementById('modal');
-let modalTimeout;
-function showModalMessage(message, isLoader = false, duration = 0) {
-    const modalContentWrapper = document.getElementById('modal-content-wrapper');
     modalContentWrapper.innerHTML = `<div id="modal-content" class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-center"></div>`;
     const modalContent = document.getElementById('modal-content');
     clearTimeout(modalTimeout);
@@ -2239,12 +2683,12 @@ function downloadPaymentsExcel(startDateStr, endDateStr) {
     allRemisiones.forEach(remision => {
         if (remision.payments && remision.payments.length > 0) {
             remision.payments.forEach(p => {
-                
+
                 // --- FILTRO DE FECHAS ---
                 const paymentDate = new Date(p.date + 'T12:00:00');
 
                 if (paymentDate >= start && paymentDate <= end) {
-                    
+
                     // Lógica para determinar quién revisó el pago
                     let revisadoPor = "Pendiente";
                     if (p.status === 'confirmado') {
@@ -2259,7 +2703,7 @@ function downloadPaymentsExcel(startDateStr, endDateStr) {
                     else estadoLegible = p.status.charAt(0).toUpperCase() + p.status.slice(1);
 
                     const fila = {
-                        "Fecha Pago": p.date, 
+                        "Fecha Pago": p.date,
                         "N° Remisión": remision.numeroRemision,
                         "Cliente": remision.clienteNombre,
                         "Método": p.method,
@@ -2289,15 +2733,15 @@ function downloadPaymentsExcel(startDateStr, endDateStr) {
         const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
 
         const wscols = [
-            {wch: 12}, // Fecha
-            {wch: 10}, // Remision
-            {wch: 30}, // Cliente
-            {wch: 12}, // Metodo
-            {wch: 15}, // Estado (Más ancho ahora)
-            {wch: 15}, // Valor
-            {wch: 20}, // Registrado
-            {wch: 25}, // Confirmado (Más ancho por si dice "Rechazó")
-            {wch: 20}  // Fecha Reg
+            { wch: 12 }, // Fecha
+            { wch: 10 }, // Remision
+            { wch: 30 }, // Cliente
+            { wch: 12 }, // Metodo
+            { wch: 15 }, // Estado (Más ancho ahora)
+            { wch: 15 }, // Valor
+            { wch: 20 }, // Registrado
+            { wch: 25 }, // Confirmado (Más ancho por si dice "Rechazó")
+            { wch: 20 }  // Fecha Reg
         ];
         worksheet['!cols'] = wscols;
 
@@ -2982,6 +3426,9 @@ function renderPagosTab(empleado, container) {
             };
             await addDoc(collection(db, "gastos"), nuevoGasto);
 
+            const statsRef = doc(db, "estadisticas", "globales");
+            await actualizarSaldoPorGasto(nuevoGasto.fuentePago, nuevoGasto.valorTotal);
+
             showModalMessage("Pago registrado y añadido a gastos.", false, 2500);
             e.target.reset();
             motivoPagoSelect.dispatchEvent(new Event('change'));
@@ -3456,7 +3903,7 @@ function showDiscountModal(remision) {
 function showFacturaModal(remisionId) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     modalContentWrapper.innerHTML = `
-            <div class="bg-white rounded-lg p-6 shadow-xl max-w-md w-full mx-auto text-left">
+            <div class="bg-white rounded-lg p-6 shadow-xl max-md w-full mx-auto text-left">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold">Registrar Factura</h2>
                     <button id="close-factura-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
@@ -3476,6 +3923,7 @@ function showFacturaModal(remisionId) {
         `;
     document.getElementById('modal').classList.remove('hidden');
     document.getElementById('close-factura-modal').addEventListener('click', hideModal);
+
     document.getElementById('factura-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const numeroFactura = document.getElementById('factura-numero').value;
@@ -3489,10 +3937,12 @@ function showFacturaModal(remisionId) {
 
         showModalMessage("Subiendo factura y actualizando...", true);
         try {
+            // 1. Subir el archivo a Storage
             const storageRef = ref(storage, `facturas/${remisionId}-${file.name}`);
             const snapshot = await uploadBytes(storageRef, file);
             const downloadURL = await getDownloadURL(snapshot.ref);
 
+            // 2. Actualizar el documento en Firestore
             await updateDoc(doc(db, "remisiones", remisionId), {
                 facturado: true,
                 numeroFactura: numeroFactura,
@@ -3502,6 +3952,14 @@ function showFacturaModal(remisionId) {
 
             hideModal();
             showModalMessage("¡Remisión facturada con éxito!", false, 2000);
+
+            // --- ESTA ES LA LÍNEA INTEGRADA ---
+            // Refresca la lista de la pestaña "Realizadas" inmediatamente
+            if (typeof loadFacturadasHistorial === 'function') {
+                await loadFacturadasHistorial();
+            }
+            // ----------------------------------
+
         } catch (error) {
             console.error("Error al facturar:", error);
             showModalMessage("Error al procesar la factura.");
@@ -3677,6 +4135,9 @@ async function handleApproveLoan(loan, paymentMethod) {
             isLoanAdvance: true
         };
         await addDoc(collection(db, "gastos"), nuevoGasto);
+
+        const statsRef = doc(db, "estadisticas", "globales");
+        await actualizarSaldoPorGasto(nuevoGasto.fuentePago, nuevoGasto.valorTotal);
 
         const nuevoPago = {
             motivo: `Préstamo: ${loan.reason.substring(0, 30)}`,
@@ -3954,7 +4415,7 @@ window.formatCurrencyInput = formatCurrencyInput;
 
 function showExportPaymentsModal() {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
-    
+
     // Fechas por defecto (Primer día del mes actual y día de hoy)
     const date = new Date();
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -3993,7 +4454,7 @@ function showExportPaymentsModal() {
         e.preventDefault();
         const startDate = document.getElementById('export-start-date').value;
         const endDate = document.getElementById('export-end-date').value;
-        
+
         if (startDate > endDate) {
             showModalMessage("La fecha de inicio no puede ser mayor a la fecha fin.");
             return;
@@ -4003,4 +4464,435 @@ function showExportPaymentsModal() {
         downloadPaymentsExcel(startDate, endDate);
         hideModal();
     });
+}
+
+// --- CARGA ESPECIALIZADA PARA FACTURACIÓN ---
+function loadRemisionesFacturacion() {
+    if (facturacionUnsubscribe) facturacionUnsubscribe();
+
+    // Traemos TODAS las pendientes (sin limit) para que siempre veas tu trabajo pendiente completo
+    const q = query(
+        collection(db, "remisiones"),
+        where("incluyeIVA", "==", true),
+        where("facturado", "==", false),
+        where("estado", "!=", "Anulada")
+    );
+
+    facturacionUnsubscribe = onSnapshot(q, (snapshot) => {
+        remisionesPendientesFactura = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderFacturacion();
+    });
+    return facturacionUnsubscribe;
+}
+
+async function loadFacturadasHistorial(isMore = false, searchTerm = "") {
+    if (cargandoMasFacturadas) return;
+
+    const remisionesRef = collection(db, "remisiones");
+    const term = searchTerm.trim().toLowerCase();
+
+    let q;
+
+    if (term) {
+        // --- MODO BÚSQUEDA ---
+        // Si hay búsqueda, traemos coincidencias directas (sin paginación para simplificar)
+        if (!isNaN(term)) {
+            // Si es un número, busca por número de remisión exacto
+            q = query(remisionesRef, where("facturado", "==", true), where("numeroRemision", "==", parseInt(term)));
+        } else {
+            // Si es texto, trae las últimas 100 facturadas y filtraremos localmente
+            q = query(remisionesRef, where("facturado", "==", true), orderBy("numeroRemision", "desc"), limit(100));
+        }
+    } else {
+        // --- MODO NORMAL (PAGINADO) ---
+        q = query(
+            remisionesRef,
+            where("facturado", "==", true),
+            orderBy("numeroRemision", "desc"),
+            limit(20) // <--- CAMBIO A 20
+        );
+
+        if (isMore && lastFacturadaDoc) {
+            cargandoMasFacturadas = true;
+            q = query(q, startAfter(lastFacturadaDoc));
+        } else {
+            remisionesFacturadasHistorial = [];
+            lastFacturadaDoc = null;
+        }
+    }
+
+    try {
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            if (!isMore) remisionesFacturadasHistorial = [];
+            renderFacturacion();
+            cargandoMasFacturadas = false;
+            return;
+        }
+
+        let resultados = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Si es búsqueda por texto (cliente), filtramos localmente los 100 resultados
+        if (term && isNaN(term)) {
+            resultados = resultados.filter(r => r.clienteNombre.toLowerCase().includes(term));
+        }
+
+        if (!term) {
+            lastFacturadaDoc = snapshot.docs[snapshot.docs.length - 1];
+            remisionesFacturadasHistorial = [...remisionesFacturadasHistorial, ...resultados];
+        } else {
+            remisionesFacturadasHistorial = resultados; // En búsqueda mostramos solo lo hallado
+        }
+
+        renderFacturacion();
+        cargandoMasFacturadas = false;
+    } catch (error) {
+        console.error("Error en historial facturas:", error);
+        cargandoMasFacturadas = false;
+    }
+}
+
+// --- CARGA ESPECIALIZADA PARA CARTERA (Saldos Pendientes) ---
+function loadRemisionesCartera() {
+    if (carteraUnsubscribe) carteraUnsubscribe();
+
+    // Incluimos 'Entregado' para no perder de vista las deudas de remisiones ya finalizadas
+    const q = query(
+        collection(db, "remisiones"),
+        where("estado", "in", ["Recibido", "En Proceso", "Procesado", "Entregado"]),
+        orderBy("numeroRemision", "desc")
+    );
+
+    carteraUnsubscribe = onSnapshot(q, (snapshot) => {
+        // Guardamos solo las que realmente tienen saldo > 0
+        remisionesCartera = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(r => {
+                const pagado = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
+                return (r.valorTotal - pagado) > 0.01 && r.estado !== 'Anulada';
+            });
+        renderCartera();
+    });
+    return carteraUnsubscribe;
+}
+
+function showExportRemisionesModal() {
+    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    const date = new Date();
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const today = date.toISOString().split('T')[0];
+
+    modalContentWrapper.innerHTML = `
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Exportar Remisiones</h2>
+                <button id="close-export-rem-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">Selecciona el rango de fechas para exportar el valor de las remisiones.</p>
+            <form id="export-remisiones-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+                    <input type="date" id="export-rem-start" class="w-full p-2 border rounded-lg mt-1" value="${firstDay}" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Fin</label>
+                    <input type="date" id="export-rem-end" class="w-full p-2 border rounded-lg mt-1" value="${today}" required>
+                </div>
+                <button type="submit" class="w-full bg-teal-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-700">Descargar Excel</button>
+            </form>
+        </div>
+    `;
+
+    document.getElementById('modal').classList.remove('hidden');
+    document.getElementById('close-export-rem-modal').addEventListener('click', hideModal);
+
+    document.getElementById('export-remisiones-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const start = document.getElementById('export-rem-start').value;
+        const end = document.getElementById('export-rem-end').value;
+        downloadRemisionesExcel(start, end);
+        hideModal();
+    });
+}
+
+function downloadRemisionesExcel(startDateStr, endDateStr) {
+    if (typeof XLSX === 'undefined') {
+        showModalMessage("Error: La librería de Excel no está cargada.");
+        return;
+    }
+
+    const start = startDateStr;
+    const end = endDateStr;
+
+    // Filtramos las remisiones por fecha y que no estén anuladas
+    const remisionesFiltradas = allRemisiones.filter(r =>
+        r.fechaRecibido >= start &&
+        r.fechaRecibido <= end &&
+        r.estado !== 'Anulada'
+    );
+
+    if (remisionesFiltradas.length === 0) {
+        showModalMessage(`No hay remisiones (no anuladas) entre ${startDateStr} y ${endDateStr}.`);
+        return;
+    }
+
+    // Mapeamos los datos para el Excel
+    const dataParaExcel = remisionesFiltradas.map(r => ({
+        "N° Remisión": r.numeroRemision,
+        "Fecha": r.fechaRecibido,
+        "Cliente": r.clienteNombre,
+        "Estado": r.estado,
+        "Subtotal": r.subtotal || 0,
+        "IVA": r.valorIVA || 0,
+        "Total": r.valorTotal || 0,
+        "Forma de Pago": r.formaPago,
+        "Facturado": r.facturado ? "Sí" : "No"
+    }));
+
+    // Ordenar por número de remisión descendente
+    dataParaExcel.sort((a, b) => b["N° Remisión"] - a["N° Remisión"]);
+
+    try {
+        const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
+
+        // Ajustar anchos de columna
+        worksheet['!cols'] = [
+            { wch: 12 }, { wch: 12 }, { wch: 35 }, { wch: 15 },
+            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Remisiones");
+
+        const fileName = `Remisiones_Valores_${startDateStr}_a_${endDateStr}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        showModalMessage("Excel de remisiones generado.", false, 2000);
+    } catch (error) {
+        console.error("Error al exportar remisiones:", error);
+        showModalMessage("Error al generar el archivo Excel.");
+    }
+}
+
+function showExportGastosModal() {
+    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    const date = new Date();
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const today = date.toISOString().split('T')[0];
+
+    modalContentWrapper.innerHTML = `
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Exportar Gastos</h2>
+                <button id="close-export-gastos-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">Selecciona el rango de fechas para exportar el detalle de gastos y sueldos.</p>
+            <form id="export-gastos-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+                    <input type="date" id="export-gas-start" class="w-full p-2 border rounded-lg mt-1" value="${firstDay}" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Fecha Fin</label>
+                    <input type="date" id="export-gas-end" class="w-full p-2 border rounded-lg mt-1" value="${today}" required>
+                </div>
+                <button type="submit" class="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700">Descargar Excel Gastos</button>
+            </form>
+        </div>
+    `;
+
+    document.getElementById('modal').classList.remove('hidden');
+    document.getElementById('close-export-gastos-modal').addEventListener('click', hideModal);
+
+    document.getElementById('export-gastos-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const start = document.getElementById('export-gas-start').value;
+        const end = document.getElementById('export-gas-end').value;
+        downloadGastosExcel(start, end);
+        hideModal();
+    });
+}
+
+function downloadGastosExcel(startDateStr, endDateStr) {
+    if (typeof XLSX === 'undefined') {
+        showModalMessage("Error: La librería de Excel no está cargada.");
+        return;
+    }
+
+    // Filtramos del array global de gastos (allGastos)
+    const gastosFiltrados = allGastos.filter(g =>
+        g.fecha >= startDateStr &&
+        g.fecha <= endDateStr
+    );
+
+    if (gastosFiltrados.length === 0) {
+        showModalMessage(`No se encontraron gastos entre ${startDateStr} y ${endDateStr}.`);
+        return;
+    }
+
+    // Mapeamos los campos para el archivo Excel
+    const dataParaExcel = gastosFiltrados.map(g => ({
+        "Fecha": g.fecha,
+        "Descripción / Concepto": g.descripcion,
+        "Categoría": g.categoria || "General",
+        "Fuente de Pago": g.fuentePago,
+        "Valor Total": g.valorTotal || 0,
+        "Registrado por": g.createdBy || "Sistema"
+    }));
+
+    // Ordenamos por fecha (más reciente primero)
+    dataParaExcel.sort((a, b) => b.Fecha.localeCompare(a.Fecha));
+
+    try {
+        const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
+
+        // Ajustar anchos de columna para que se vea profesional
+        worksheet['!cols'] = [
+            { wch: 12 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Gastos");
+
+        const fileName = `Reporte_Gastos_${startDateStr}_a_${endDateStr}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        showModalMessage("Excel de gastos generado correctamente.", false, 2000);
+    } catch (error) {
+        console.error("Error al exportar gastos:", error);
+        showModalMessage("Hubo un error al generar el archivo de Gastos.");
+    }
+}
+
+async function actualizarSaldoPorPago(metodo, monto) {
+    if (!metodo || metodo === 'Pendiente') return;
+    const statsRef = doc(db, "estadisticas", "globales");
+    await updateDoc(statsRef, { [`saldo${metodo}`]: increment(monto) });
+}
+
+async function actualizarSaldoPorGasto(metodo, monto) {
+    if (!metodo) return;
+    const statsRef = doc(db, "estadisticas", "globales");
+    await updateDoc(statsRef, { [`saldo${metodo}`]: increment(-monto) });
+}
+
+function listenGlobalSaldos() {
+    const statsRef = doc(db, "estadisticas", "globales");
+
+    onSnapshot(statsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const d = docSnap.data();
+
+            // 1. GUARDAMOS en la variable global (esto es lo más importante)
+            globalesSaldos.Efectivo = d.saldoEfectivo || 0;
+            globalesSaldos.Nequi = d.saldoNequi || 0;
+            globalesSaldos.Davivienda = d.saldoDavivienda || 0;
+
+            // 2. ACTUALIZAMOS la UI solo si el dashboard está abierto en este segundo
+            const efEl = document.getElementById('summary-efectivo');
+            if (efEl) {
+                efEl.textContent = formatCurrency(globalesSaldos.Efectivo);
+                document.getElementById('summary-nequi').textContent = formatCurrency(globalesSaldos.Nequi);
+                document.getElementById('summary-davivienda').textContent = formatCurrency(globalesSaldos.Davivienda);
+            }
+        }
+    });
+}
+async function migrarSaldosAGlobales() {
+    showModalMessage("Iniciando migración de saldos históricos...", true);
+
+    // 1. Saldo inicial configurado por ti
+    let saldos = {
+        saldoEfectivo: globalSaldosBase.Efectivo || 0,
+        saldoNequi: globalSaldosBase.Nequi || 0,
+        saldoDavivienda: globalSaldosBase.Davivienda || 0
+    };
+
+    try {
+        // 2. Sumar todos los pagos confirmados de la historia
+        const snapRem = await getDocs(collection(db, "remisiones"));
+        snapRem.forEach(doc => {
+            const r = doc.data();
+            if (r.estado !== 'Anulada' && r.payments) {
+                r.payments.forEach(p => {
+                    if (p.status === 'confirmado') {
+                        if (p.method === 'Efectivo') saldos.saldoEfectivo += p.amount;
+                        if (p.method === 'Nequi') saldos.saldoNequi += p.amount;
+                        if (p.method === 'Davivienda') saldos.saldoDavivienda += p.amount;
+                    }
+                });
+            }
+        });
+
+        // 3. Restar todos los gastos de la historia
+        const snapGas = await getDocs(collection(db, "gastos"));
+        snapGas.forEach(doc => {
+            const g = doc.data();
+            if (g.fuentePago === 'Efectivo') saldos.saldoEfectivo -= g.valorTotal;
+            if (g.fuentePago === 'Nequi') saldos.saldoNequi -= g.valorTotal;
+            if (g.fuentePago === 'Davivienda') saldos.saldoDavivienda -= g.valorTotal;
+        });
+
+        // 4. Guardar el resultado en el nuevo documento "Bolsa de Totales"
+        await setDoc(doc(db, "estadisticas", "globales"), saldos);
+
+        hideModal();
+        showModalMessage("¡Migración completada! Saldos sincronizados.");
+        console.log("Saldos migrados:", saldos);
+    } catch (error) {
+        console.error("Error en migración:", error);
+        showModalMessage("Error en la migración. Revisa la consola.");
+    }
+}
+
+async function searchClientesGlobal(searchTerm) {
+    const term = searchTerm.trim().toLowerCase();
+    const normalizedTerm = normalizeText(term);
+
+    // Si el buscador está vacío, volvemos a la carga normal
+    if (!term) {
+        lastClienteDoc = null;
+        loadClientes();
+        return;
+    }
+
+    const clientesRef = collection(db, "clientes");
+    let resultados = [];
+
+    try {
+        // 1. Si es un número, buscamos coincidencia exacta por NIT o Teléfono en TODA la DB
+        if (!isNaN(term)) {
+            const qNit = query(clientesRef, where("nit", "==", term));
+            const qTel = query(clientesRef, where("telefono1", "==", term));
+            
+            const [snapNit, snapTel] = await Promise.all([getDocs(qNit), getDocs(qTel)]);
+            
+            resultados = [
+                ...snapNit.docs.map(d => ({ id: d.id, ...d.data() })),
+                ...snapTel.docs.map(d => ({ id: d.id, ...d.data() }))
+            ];
+        } 
+        
+        // 2. Si es texto o si no encontró nada por número, buscamos por nombre
+        // Como Firestore no tiene "contiene", traemos una muestra de 200 y filtramos localmente
+        if (resultados.length === 0) {
+            const qName = query(clientesRef, orderBy("nombre", "asc"), limit(200));
+            const snapName = await getDocs(qName);
+            const allFetched = snapName.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            resultados = allFetched.filter(c => 
+                normalizeText(c.nombre).includes(normalizedTerm) ||
+                (c.email && c.email.toLowerCase().includes(term))
+            );
+        }
+
+        // 3. Actualizamos la lista global y renderizamos
+        clientesRenderizados = resultados;
+        window._lastSearchCliente = term; // Guardamos para el render
+        renderClientes();
+
+    } catch (error) {
+        console.error("Error en búsqueda global de clientes:", error);
+    }
 }
