@@ -81,12 +81,11 @@ const RRHH_DOCUMENT_TYPES = [
 
 // --- MANEJO DE AUTENTICACIÓN Y VISTAS ---
 let activeListeners = [];
+
 function unsubscribeAllListeners() {
     activeListeners.forEach(unsubscribe => unsubscribe());
     activeListeners = [];
 }
-
-
 
 onAuthStateChanged(auth, async (user) => {
     unsubscribeAllListeners();
@@ -168,25 +167,36 @@ function startApp() {
 }
 
 function loadAllData() {
+    // 1. Carga de Catálogos Maestros (Tiempo Real)
     activeListeners.push(loadClientes());
     activeListeners.push(loadProveedores());
     activeListeners.push(loadItems());
     activeListeners.push(loadColores());
 
-    // Consultas especializadas de la Opción A
-    activeListeners.push(loadRemisiones()); // Historial paginado
-    activeListeners.push(loadRemisionesFacturacion()); // Solo pendientes
-    activeListeners.push(loadRemisionesCartera()); // Solo cartera activa
+    // 2. Historial de Remisiones (Tiempo Real)
+    // Invocamos la función. Ella misma gestiona el remisionesSnapUnsubscribe interno.
+    loadRemisiones(); 
+    // Agregamos una función anónima para limpiar el listener del historial al cerrar sesión
+    activeListeners.push(() => {
+        if (remisionesSnapUnsubscribe) remisionesSnapUnsubscribe();
+    });
 
+    // 3. Consultas especializadas (Facturación y Cartera)
+    activeListeners.push(loadRemisionesFacturacion());
+    activeListeners.push(loadRemisionesCartera());
 
+    // 4. Módulo de Mensajería / CRM (Tiempo Real)
+    activeListeners.push(listenChatList());
+
+    // 5. Gastos (Paginación - Consulta única inicial)
+    // Nota: loadGastos suele ser getDocs para no saturar, pero se llama aquí
     loadGastos();
 
+    // 6. Funciones exclusivas para Administradores
     if (currentUserData && currentUserData.role === 'admin') {
         activeListeners.push(loadEmpleados());
         activeListeners.push(loadAllLoanRequests());
     }
-
-    activeListeners.push(listenChatList());
 }
 
 // 2. Función loadViewTemplates corregida (Se eliminó la carga de datos al final)
@@ -771,62 +781,95 @@ function renderProveedores() {
     document.querySelectorAll('.edit-provider-btn').forEach(btn => btn.addEventListener('click', (e) => showEditProviderModal(JSON.parse(e.currentTarget.dataset.providerJson))));
 }
 
-let remisionesUnsubscribe = null;
+let remisionesSnapUnsubscribe = null;
+
 
 async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
     if (cargandoMasRemisiones) return;
 
-    const remisionesListEl = document.getElementById('remisiones-list');
     const remisionesRef = collection(db, "remisiones");
     let q;
 
-    // Si es una carga inicial (no "Cargar más"), limpiamos la lista
+    // 1. Si NO es paginación ("Cargar más"), limpiamos todo y apagamos el escucha anterior
     if (!isMore) {
+        if (remisionesSnapUnsubscribe) remisionesSnapUnsubscribe();
         allRemisiones = [];
         lastRemisionDoc = null;
-        if (remisionesListEl) remisionesListEl.innerHTML = '<p class="text-center py-4">Cargando historial...</p>';
+        const listEl = document.getElementById('remisiones-list');
+        if (listEl) listEl.innerHTML = '<p class="text-center py-4 text-xs text-gray-500">Sincronizando historial...</p>';
     }
 
-    // Construcción de la Query base
+    // 2. Construcción de la Query (Tu lógica de filtros se mantiene)
     if (year !== 'all' && month !== 'all') {
-        // Filtro por fecha (mantiene tu lógica actual)
         const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
         const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
-        q = query(remisionesRef, where("fechaRecibido", ">=", start), where("fechaRecibido", "<=", end), orderBy("fechaRecibido", "desc"), orderBy("numeroRemision", "desc"), limit(50));
+        q = query(remisionesRef, 
+            where("fechaRecibido", ">=", start), 
+            where("fechaRecibido", "<=", end), 
+            orderBy("fechaRecibido", "desc"), 
+            orderBy("numeroRemision", "desc"), 
+            limit(50)
+        );
     } else {
-        // Carga general de historial
         q = query(remisionesRef, orderBy("numeroRemision", "desc"), limit(50));
     }
 
-    // SI ES PAGINACIÓN: Empezar después del último doc
+    // 3. Manejo de Paginación
     if (isMore && lastRemisionDoc) {
         cargandoMasRemisiones = true;
         q = query(q, startAfter(lastRemisionDoc));
-    }
-
-    try {
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty && isMore) {
-            showTemporaryMessage("No hay más remisiones para mostrar", "info");
-            document.getElementById('load-more-container')?.remove();
+        
+        // Para "Cargar más" usamos getDocs (una sola vez) y lo añadimos al array
+        try {
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                showTemporaryMessage("No hay más registros");
+                cargandoMasRemisiones = false;
+                return;
+            }
+            lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
+            const nuevas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Unimos evitando duplicados
+            nuevas.forEach(n => {
+                if (!allRemisiones.find(r => r.id === n.id)) allRemisiones.push(n);
+            });
+            
+            renderRemisiones();
             cargandoMasRemisiones = false;
-            return;
-        }
+        } catch (e) { console.error(e); cargandoMasRemisiones = false; }
+        
+    } else {
+        // 4. ESCUCHA EN TIEMPO REAL (Para la carga inicial y actualizaciones)
+        remisionesSnapUnsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+                
+                if (change.type === "added") {
+                    // Solo añadimos si no existe ya (por si la paginación se cruza)
+                    const index = allRemisiones.findIndex(r => r.id === data.id);
+                    if (index === -1) allRemisiones.push(data);
+                }
+                if (change.type === "modified") {
+                    // AQUÍ ESTÁ LA MAGIA: Si el pago se aprueba, Firestore avisa, 
+                    // buscamos la remisión en el array y la reemplazamos.
+                    const index = allRemisiones.findIndex(r => r.id === data.id);
+                    if (index !== -1) allRemisiones[index] = data;
+                }
+                if (change.type === "removed") {
+                    allRemisiones = allRemisiones.filter(r => r.id !== data.id);
+                }
+            });
 
-        // Guardamos el último documento para la próxima vez
-        lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
+            // Guardamos el último para la siguiente página
+            if (snapshot.docs.length > 0) {
+                lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
+            }
 
-        const nuevasRemisiones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Unimos las nuevas con las que ya teníamos
-        allRemisiones = [...allRemisiones, ...nuevasRemisiones];
-
-        renderRemisiones();
-        cargandoMasRemisiones = false;
-    } catch (error) {
-        console.error("Error cargando remisiones:", error);
-        cargandoMasRemisiones = false;
+            renderRemisiones();
+        }, (error) => {
+            console.error("Error en el listener de remisiones:", error);
+        });
     }
 }
 
@@ -914,10 +957,8 @@ function renderRemisiones() {
         );
     }
 
-    // --- NUEVO: ORDENAMIENTO EXPLÍCITO ---
-    // Ordenamos por número de remisión de mayor a menor (más recientes primero)
+    // --- ORDENAMIENTO EXPLÍCITO ---
     filtered.sort((a, b) => b.numeroRemision - a.numeroRemision);
-    // --------------------------------------
 
     remisionesListEl.innerHTML = '';
     if (filtered.length === 0) {
@@ -929,16 +970,22 @@ function renderRemisiones() {
         const el = document.createElement('div');
         const esAnulada = remision.estado === 'Anulada';
         const esEntregada = remision.estado === 'Entregado';
-        el.className = `border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${esAnulada ? 'remision-anulada' : ''}`;
-
+        
+        // --- CÁLCULO DE SALDOS ACTUALIZADO ---
+        // Sumamos solo lo que ya ha sido confirmado por otro administrador
         const totalPagadoConfirmado = (remision.payments || [])
             .filter(p => p.status === 'confirmado')
             .reduce((sum, p) => sum + p.amount, 0);
+        
+        // El saldo pendiente real es el total menos lo confirmado
+        const saldoPendiente = Math.max(0, remision.valorTotal - totalPagadoConfirmado);
+        
+        // Para el badge de "Abono", miramos si hay cualquier pago registrado (aunque no esté confirmado)
         const totalAbonado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
-        const saldoPendiente = remision.valorTotal - totalPagadoConfirmado;
 
         let paymentStatusBadge = '';
         if (!esAnulada) {
+            // Si el saldo confirmado cubre el total, está pagado
             if (saldoPendiente <= 0.01) {
                 paymentStatusBadge = `<span class="payment-status payment-pagado">Pagado</span>`;
             } else if (totalAbonado > 0) {
@@ -957,7 +1004,9 @@ function renderRemisiones() {
             ? ''
             : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-600 transition">Anular</button>`;
 
+        // Aquí el botón mostrará ($ 0) inmediatamente cuando saldoPendiente sea 0
         const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">Pagos (${formatCurrency(saldoPendiente)})</button>`;
+        
         const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount)
             ? ''
             : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
@@ -977,6 +1026,7 @@ function renderRemisiones() {
             discountInfo = `<span class="text-xs font-semibold bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full">DTO ${remision.discount.percentage.toFixed(2)}%</span>`;
         }
 
+        el.className = `border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${esAnulada ? 'remision-anulada' : ''}`;
         el.innerHTML = `
             <div class="flex-grow">
                 <div class="flex items-center gap-3 flex-wrap">
@@ -1001,15 +1051,12 @@ function renderRemisiones() {
         remisionesListEl.appendChild(el);
     });
 
-    attachRemisionesListeners(); // Aseguramos que los botones funcionen
+    attachRemisionesListeners();
 
-    // --- AGREGAR ESTO AL FINAL DE LA FUNCIÓN ---
+    // --- MANEJO DE PAGINACIÓN AL FINAL ---
     const listContainer = document.getElementById('remisiones-list');
-
-    // Eliminamos cualquier botón previo para no duplicarlo
     document.getElementById('load-more-container')?.remove();
 
-    // Si cargamos 50 remisiones, es probable que haya más
     if (allRemisiones.length >= 50) {
         const loadMoreDiv = document.createElement('div');
         loadMoreDiv.id = 'load-more-container';
@@ -1024,7 +1071,7 @@ function renderRemisiones() {
         document.getElementById('load-more-btn').addEventListener('click', () => {
             const month = document.getElementById('filter-remisiones-month').value;
             const year = document.getElementById('filter-remisiones-year').value;
-            loadRemisiones(month, year, true); // true indica que es paginación
+            loadRemisiones(month, year, true);
         });
     }
 }
