@@ -163,6 +163,8 @@ function startApp() {
     // Inicializar buscadores
     setupSearchInputs();
 
+    setupMobileInfoToggle();
+
     isAppInitialized = true;
 }
 
@@ -175,7 +177,7 @@ function loadAllData() {
 
     // 2. Historial de Remisiones (Tiempo Real)
     // Invocamos la función. Ella misma gestiona el remisionesSnapUnsubscribe interno.
-    loadRemisiones(); 
+    loadRemisiones();
     // Agregamos una función anónima para limpiar el listener del historial al cerrar sesión
     activeListeners.push(() => {
         if (remisionesSnapUnsubscribe) remisionesSnapUnsubscribe();
@@ -803,11 +805,11 @@ async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
     if (year !== 'all' && month !== 'all') {
         const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
         const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
-        q = query(remisionesRef, 
-            where("fechaRecibido", ">=", start), 
-            where("fechaRecibido", "<=", end), 
-            orderBy("fechaRecibido", "desc"), 
-            orderBy("numeroRemision", "desc"), 
+        q = query(remisionesRef,
+            where("fechaRecibido", ">=", start),
+            where("fechaRecibido", "<=", end),
+            orderBy("fechaRecibido", "desc"),
+            orderBy("numeroRemision", "desc"),
             limit(50)
         );
     } else {
@@ -818,7 +820,7 @@ async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
     if (isMore && lastRemisionDoc) {
         cargandoMasRemisiones = true;
         q = query(q, startAfter(lastRemisionDoc));
-        
+
         // Para "Cargar más" usamos getDocs (una sola vez) y lo añadimos al array
         try {
             const snapshot = await getDocs(q);
@@ -829,22 +831,22 @@ async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
             }
             lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
             const nuevas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
+
             // Unimos evitando duplicados
             nuevas.forEach(n => {
                 if (!allRemisiones.find(r => r.id === n.id)) allRemisiones.push(n);
             });
-            
+
             renderRemisiones();
             cargandoMasRemisiones = false;
         } catch (e) { console.error(e); cargandoMasRemisiones = false; }
-        
+
     } else {
         // 4. ESCUCHA EN TIEMPO REAL (Para la carga inicial y actualizaciones)
         remisionesSnapUnsubscribe = onSnapshot(q, (snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 const data = { id: change.doc.id, ...change.doc.data() };
-                
+
                 if (change.type === "added") {
                     // Solo añadimos si no existe ya (por si la paginación se cruza)
                     const index = allRemisiones.findIndex(r => r.id === data.id);
@@ -970,16 +972,16 @@ function renderRemisiones() {
         const el = document.createElement('div');
         const esAnulada = remision.estado === 'Anulada';
         const esEntregada = remision.estado === 'Entregado';
-        
+
         // --- CÁLCULO DE SALDOS ACTUALIZADO ---
         // Sumamos solo lo que ya ha sido confirmado por otro administrador
         const totalPagadoConfirmado = (remision.payments || [])
-            .filter(p => p.status === 'confirmado')
+            .filter(p => p.status === 'confirmado') // Filtro crítico
             .reduce((sum, p) => sum + p.amount, 0);
-        
+
         // El saldo pendiente real es el total menos lo confirmado
         const saldoPendiente = Math.max(0, remision.valorTotal - totalPagadoConfirmado);
-        
+
         // Para el badge de "Abono", miramos si hay cualquier pago registrado (aunque no esté confirmado)
         const totalAbonado = (remision.payments || []).reduce((sum, p) => sum + p.amount, 0);
 
@@ -1006,7 +1008,7 @@ function renderRemisiones() {
 
         // Aquí el botón mostrará ($ 0) inmediatamente cuando saldoPendiente sea 0
         const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition">Pagos (${formatCurrency(saldoPendiente)})</button>`;
-        
+
         const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount)
             ? ''
             : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-cyan-600 transition">Descuento</button>`;
@@ -1165,33 +1167,64 @@ async function loadGastos(month = 'all', year = 'all', isMore = false) {
 
 function renderGastos() {
     const gastosListEl = document.getElementById('gastos-list');
-    if (!gastosListEl) return;
+    const searchInput = document.getElementById('search-gastos');
+    if (!gastosListEl || !searchInput) return;
 
-    // ... (Tu lógica de filtrado actual se mantiene igual) ...
+    // 1. Capturamos y normalizamos el término de búsqueda
+    const searchTerm = normalizeText(searchInput.value);
 
+    // 2. Filtramos la lista local de gastos
+    const filtered = allGastos.filter(gasto => {
+        // Normalizamos los campos donde queremos buscar
+        const nombreProv = normalizeText(gasto.proveedorNombre || "");
+        const numFact = normalizeText(gasto.numeroFactura || "");
+
+        // Retornamos true si el término está en el nombre o en la factura
+        return nombreProv.includes(searchTerm) || numFact.includes(searchTerm);
+    });
+
+    // 3. Limpiamos la lista visual
     gastosListEl.innerHTML = '';
-    allGastos.forEach((gasto) => {
+
+    // 4. Si no hay resultados tras filtrar
+    if (filtered.length === 0) {
+        gastosListEl.innerHTML = `
+            <p class="text-center text-gray-500 py-8 bg-gray-50 rounded-lg border-2 border-dashed">
+                No se encontraron gastos que coincidan con "${searchInput.value}"
+            </p>`;
+        return;
+    }
+
+    // 5. Dibujamos los gastos filtrados
+    filtered.forEach((gasto) => {
         const el = document.createElement('div');
-        el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white shadow-sm';
+        el.className = 'border p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white shadow-sm hover:border-orange-300 transition-colors';
         el.innerHTML = `
             <div class="w-full sm:w-auto">
-                <p class="font-semibold">${gasto.proveedorNombre}</p>
-                <p class="text-sm text-gray-600">${gasto.fecha} | Factura: ${gasto.numeroFactura || 'N/A'}</p>
+                <p class="font-bold text-gray-800">${gasto.proveedorNombre}</p>
+                <p class="text-xs text-gray-500">${gasto.fecha} | <span class="font-medium text-gray-700">Factura: ${gasto.numeroFactura || 'N/A'}</span></p>
             </div>
             <div class="text-left sm:text-right w-full sm:w-auto">
-                <p class="font-bold text-lg text-red-600">${formatCurrency(gasto.valorTotal)}</p>
-                <p class="text-sm text-gray-500">Pagado con: ${gasto.fuentePago}</p>
+                <p class="font-black text-lg text-red-600">${formatCurrency(gasto.valorTotal)}</p>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Pagado con: ${gasto.fuentePago}</p>
             </div>`;
         gastosListEl.appendChild(el);
     });
 
-    // Botón de paginación
-    if (allGastos.length >= 50) {
+    // 6. Botón de paginación (Solo se muestra si no estamos buscando para no romper la lógica de Firestore)
+    if (allGastos.length >= 50 && searchTerm === "") {
+        const btnContainer = document.createElement('div');
+        btnContainer.className = "pt-4";
         const btn = document.createElement('button');
-        btn.className = "w-full mt-4 bg-gray-200 py-2 rounded-lg font-bold";
+        btn.className = "w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition shadow-sm border border-gray-200";
         btn.textContent = "Cargar más gastos";
-        btn.onclick = () => loadGastos(document.getElementById('filter-gastos-month').value, document.getElementById('filter-gastos-year').value, true);
-        gastosListEl.appendChild(btn);
+        btn.onclick = () => loadGastos(
+            document.getElementById('filter-gastos-month').value,
+            document.getElementById('filter-gastos-year').value,
+            true
+        );
+        btnContainer.appendChild(btn);
+        gastosListEl.appendChild(btnContainer);
     }
 }
 
@@ -1796,7 +1829,7 @@ async function showPaymentModal(remisionOriginal) {
 
     paymentModalUnsubscribe = onSnapshot(remRef, (docSnap) => {
         if (!docSnap.exists()) return;
-        
+
         const remision = { id: docSnap.id, ...docSnap.data() };
 
         // --- CÁLCULOS ---
@@ -1892,18 +1925,32 @@ async function showPaymentModal(remisionOriginal) {
         document.querySelectorAll('.confirm-payment-btn').forEach(btn => {
             btn.onclick = async (e) => {
                 const idx = parseInt(e.currentTarget.dataset.paymentIndex);
-                e.currentTarget.disabled = true; // Evitar doble clic
+                e.currentTarget.disabled = true;
                 try {
                     const freshSnap = await getDoc(remRef);
                     const freshData = freshSnap.data();
                     const p = freshData.payments[idx];
-                    
+
                     p.status = 'confirmado';
                     p.confirmedBy = currentUser.uid;
                     p.confirmedAt = new Date();
-                    
+
                     await updateDoc(remRef, { payments: freshData.payments });
                     await actualizarSaldoPorPago(p.method, p.amount);
+
+                    // ==========================================
+                    // ACTUALIZACIÓN MANUAL PARA EL HISTORIAL
+                    // ==========================================
+                    // Buscamos la remisión en el array de la lista principal
+                    const indexEnHistorial = allRemisiones.findIndex(r => r.id === remisionId);
+                    if (indexEnHistorial !== -1) {
+                        // Actualizamos los datos en la memoria del navegador
+                        allRemisiones[indexEnHistorial].payments = freshData.payments;
+                        // Mandamos a redibujar el historial de remisiones inmediatamente
+                        renderRemisiones();
+                    }
+                    // ==========================================
+
                     showTemporaryMessage("Pago confirmado", "success");
                 } catch (err) { console.error(err); }
             };
@@ -1933,7 +1980,7 @@ async function showPaymentModal(remisionOriginal) {
             const amountInput = document.getElementById('new-payment-amount');
             amountInput.onfocus = (e) => unformatCurrencyInput(e.target);
             amountInput.onblur = (e) => formatCurrencyInput(e.target);
-            
+
             addPayForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const amount = unformatCurrency(amountInput.value);
@@ -4899,9 +4946,13 @@ let currentChatUnsubscribe = null;
 function selectContact(phone) {
     activeChatPhone = phone;
 
+    toggleMobileChatView(true);
+
     // UI: Mostrar el área de chat y ocultar el mensaje de bienvenida
+
     document.getElementById('wa-no-chat-selected').classList.add('hidden');
     document.getElementById('wa-chat-active').classList.remove('hidden');
+    document.getElementById('wa-chat-active').classList.add('flex');
 
     const cliente = allClientes.find(c => c.telefono1 === phone || c.telefono2 === phone);
     document.getElementById('active-chat-name').textContent = cliente ? cliente.nombre : phone;
@@ -5021,10 +5072,15 @@ async function sendWAReply() {
     }
 }
 
+/**
+ * Escucha la lista de chats en tiempo real y actualiza la UI del CRM.
+ * Incluye el contador global de mensajes no leídos para el menú principal.
+ */
 function listenChatList() {
     const listEl = document.getElementById('wa-contacts-list');
+    const globalBadge = document.getElementById('global-unread-badge');
 
-    // Escuchamos la colección de chats ordenados por el más reciente
+    // Escuchamos la colección de chats ordenados por la fecha del último mensaje
     const q = query(collection(db, "chats"), orderBy("fechaUltimo", "desc"));
 
     return onSnapshot(q, (snapshot) => {
@@ -5033,128 +5089,146 @@ function listenChatList() {
 
         if (snapshot.empty) {
             listEl.innerHTML = '<p class="text-center text-gray-400 text-xs py-10">No hay conversaciones aún.</p>';
+            if (globalBadge) globalBadge.classList.add('hidden');
             return;
         }
 
+        let totalUnreadGlobal = 0; // Acumulador para el badge de la pestaña principal
+
         snapshot.forEach(docChat => {
             const chat = docChat.data();
-            const phone = docChat.id; // El ID del documento es el teléfono
+            const phone = docChat.id; // El ID del documento es el número de teléfono
 
-            // Buscamos si el cliente existe en nuestra base de datos local
+            // Sumamos al contador global
+            totalUnreadGlobal += (chat.noLeidos || 0);
+
+            // Buscamos si el teléfono pertenece a un cliente registrado
             const cliente = allClientes.find(c => c.telefono1 === phone || c.telefono2 === phone);
             const nombreMostrar = cliente ? cliente.nombre : phone;
             const isSelected = activeChatPhone === phone;
 
             const div = document.createElement('div');
-            div.className = `p-4 cursor-pointer hover:bg-gray-50 border-l-4 transition-all ${isSelected ? 'bg-white border-green-500 shadow-sm' : 'border-transparent bg-gray-50/50'}`;
+            // Diseño de la tarjeta de contacto
+            div.className = `p-4 cursor-pointer hover:bg-gray-50 border-l-4 transition-all ${
+                isSelected ? 'bg-white border-indigo-500 shadow-sm' : 'border-transparent bg-gray-50/30'
+            }`;
 
             div.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 ${cliente ? 'bg-green-600' : 'bg-gray-400'} rounded-full flex items-center justify-center text-white font-bold shrink-0">
+                    <div class="w-12 h-12 ${cliente ? 'bg-green-600' : 'bg-gray-400'} rounded-full flex items-center justify-center text-white font-bold shrink-0 shadow-sm">
                         ${nombreMostrar.charAt(0).toUpperCase()}
                     </div>
+                    
                     <div class="overflow-hidden flex-grow">
                         <div class="flex justify-between items-start">
                             <p class="font-bold text-sm text-gray-800 truncate pr-2">${nombreMostrar}</p>
-                            <span class="text-[9px] text-gray-400 whitespace-nowrap">${chat.fechaUltimo?.toDate().toLocaleDateString() || ''}</span>
+                            <span class="text-[9px] text-gray-400 whitespace-nowrap">
+                                ${chat.fechaUltimo ? chat.fechaUltimo.toDate().toLocaleDateString([], {day:'2-digit', month:'2-digit'}) : ''}
+                            </span>
                         </div>
                         <div class="flex justify-between items-center mt-1">
-                            <p class="text-xs text-gray-500 truncate w-32">${chat.ultimoMensaje || 'Archivo'}</p>
-                            ${chat.noLeidos > 0 ? `<span class="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">${chat.noLeidos}</span>` : ''}
+                            <p class="text-xs text-gray-500 truncate w-40 italic">
+                                ${chat.ultimoMensaje || 'Archivo multimedia'}
+                            </p>
+                            ${chat.noLeidos > 0 ? 
+                                `<span class="bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                                    ${chat.noLeidos}
+                                </span>` : ''
+                            }
                         </div>
                     </div>
                 </div>
             `;
+
+            // Al hacer clic, abrimos la conversación
             div.onclick = () => selectContact(phone);
             listEl.appendChild(div);
         });
+
+        // --- ACTUALIZACIÓN DE LA BOLITA ROJA GLOBAL ---
+        if (globalBadge) {
+            if (totalUnreadGlobal > 0) {
+                globalBadge.textContent = totalUnreadGlobal > 99 ? '99+' : totalUnreadGlobal;
+                globalBadge.classList.remove('hidden');
+                // Opcional: Cambiar el título de la pestaña del navegador
+                document.title = `(${totalUnreadGlobal}) PrismaColor - Gestión`;
+            } else {
+                globalBadge.classList.add('hidden');
+                document.title = `PrismaColor - Sistema de Gestión`;
+            }
+        }
+    }, (error) => {
+        console.error("Error escuchando lista de chats:", error);
     });
 }
 
 // 1. FUNCIÓN: Actualizar el Sidebar y el Cronómetro
 async function updateClientContext(phone, messages) {
     const cliente = allClientes.find(c => c.telefono1 === phone || c.telefono2 === phone);
+
+    // Elementos de la UI
     const timerEl = document.getElementById('wa-window-timer');
     const sideCompras = document.getElementById('wa-side-total-compras');
     const sideDeuda = document.getElementById('wa-side-total-deuda');
     const sideList = document.getElementById('wa-side-remisiones-list');
+    const labelCompras = document.querySelector('#wa-client-sidebar p.text-indigo-500'); // El label pequeño
 
-    // 1. Lógica del Timer (Ventana 24h) - Se mantiene igual
+    // 1. Timer WhatsApp (Sin cambios)
     const lastIncoming = messages.filter(m => m.tipo === 'entrante').pop();
     if (lastIncoming && lastIncoming.fecha) {
         const lastDate = lastIncoming.fecha.toDate();
-        const now = new Date();
-        const diffMs = 86400000 - (now - lastDate);
+        const diffMs = 86400000 - (new Date() - lastDate);
         if (diffMs > 0) {
             const h = Math.floor(diffMs / 3600000);
             const m = Math.floor((diffMs % 3600000) / 60000);
-            timerEl.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-clock"></i> Ventana: ${h}h ${m}m</span>`;
+            timerEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fa-solid fa-clock"></i> Ventana: ${h}h ${m}m</span>`;
         } else {
-            timerEl.innerHTML = `<span class="text-red-600 font-bold"><i class="fa-solid fa-circle-exclamation"></i> Ventana cerrada</span>`;
+            timerEl.innerHTML = `<span class="text-rose-600 font-bold"><i class="fa-solid fa-circle-exclamation"></i> Ventana cerrada</span>`;
         }
     }
 
     if (!cliente) {
-        sideList.innerHTML = '<p class="text-center text-[10px] text-gray-400 py-4">Número no registrado</p>';
+        sideList.innerHTML = '<p class="text-center text-[10px] text-gray-400 py-4 italic">Cliente no identificado</p>';
         return;
     }
 
-    // 2. BUSQUEDA REAL DE DEUDAS (Aquí está la magia)
-    sideList.innerHTML = '<p class="text-center text-[10px] text-gray-400 py-4 italic">Cargando deudas...</p>';
-
     try {
-        const pendientes = await getDeudasActualizadas(cliente.id);
+        // Ejecutamos la consulta optimizada
+        const resumen = await getResumenFinancieroOptimizado(cliente.id);
 
-        let deudaTotal = 0;
+        // Actualizamos la UI
+        if (labelCompras) labelCompras.textContent = "Compras (Mes Actual)"; // Cambiamos el texto para claridad
+        sideCompras.textContent = formatCurrency(resumen.comprasMes);
+        sideDeuda.textContent = formatCurrency(resumen.totalDeuda);
+
+        // Pintar lista de deudas
         let remisionesHTML = '';
-
-        pendientes.sort((a, b) => b.numeroRemision - a.numeroRemision).forEach(r => {
-            deudaTotal += r.saldoCalculado;
+        resumen.listaPendientes.sort((a, b) => b.numeroRemision - a.numeroRemision).forEach(r => {
             remisionesHTML += `
-                <div class="bg-white border border-gray-200 p-2 rounded-lg shadow-sm hover:border-green-500 cursor-pointer transition-all group" 
+                <div class="bg-white border border-gray-100 p-3 rounded-xl shadow-sm hover:border-emerald-500 cursor-pointer transition-all group" 
                      onclick="prepararAbonoDesdeCRM('${r.id}')">
                     <div class="flex justify-between items-center">
-                        <span class="font-bold text-gray-700 text-xs">#${r.numeroRemision}</span>
-                        <span class="text-red-600 font-bold text-xs">${formatCurrency(r.saldoCalculado)}</span>
+                        <span class="font-black text-gray-700 text-[11px]">#${r.numeroRemision}</span>
+                        <span class="text-rose-600 font-black text-[11px]">${formatCurrency(r.saldoCalculado)}</span>
                     </div>
-                    <div class="flex justify-between items-center mt-1">
-                        <p class="text-[9px] text-gray-400">${r.fechaRecibido}</p>
-                        <span class="text-[9px] text-green-600 font-bold opacity-0 group-hover:opacity-100 uppercase">Abonar ></span>
-                    </div>
-                </div>
-            `;
+                    <p class="text-[9px] text-gray-400 font-medium mt-1">${r.fechaRecibido}</p>
+                </div>`;
         });
 
-        // Actualizar UI
-        sideDeuda.textContent = formatCurrency(deudaTotal);
-        sideList.innerHTML = remisionesHTML || '<p class="text-center text-[10px] text-gray-400 py-4">Sin deudas pendientes</p>';
+        sideList.innerHTML = remisionesHTML || '<div class="text-center py-4 text-gray-400 text-[10px] uppercase font-bold">Sin deudas</div>';
 
-        // Actualizar el botón principal de Reportar Pago
-        const reportBtn = document.getElementById('wa-side-report-payment');
-        reportBtn.onclick = () => {
-            if (pendientes.length === 0) {
-                showTemporaryMessage("No hay deudas pendientes");
-            } else if (pendientes.length === 1) {
-                prepararAbonoDesdeCRM(pendientes[0].id);
-            } else {
-                showRemisionSelectorModal(pendientes, cliente.nombre);
-            }
+        // Listeners de botones de acción
+        document.getElementById('wa-side-report-payment').onclick = () => {
+            if (resumen.listaPendientes.length === 0) showTemporaryMessage("No hay deudas activas");
+            else if (resumen.listaPendientes.length === 1) prepararAbonoDesdeCRM(resumen.listaPendientes[0].id);
+            else showRemisionSelectorModal(resumen.listaPendientes, cliente.nombre);
         };
+
+        document.getElementById('wa-side-send-statement').onclick = () => sendAccountStatement(phone);
 
     } catch (error) {
-        console.error("Error al cargar deudas en CRM:", error);
-        sideList.innerHTML = '<p class="text-center text-red-400 text-[10px]">Error al cargar deudas</p>';
+        console.error("Error al actualizar contexto:", error);
     }
-
-    const statementBtn = document.getElementById('wa-side-send-statement');
-    if (statementBtn) {
-        statementBtn.onclick = () => {
-            if (confirm(`¿Enviar estado de cuenta a ${cliente.nombre}?`)) {
-                sendAccountStatement(phone);
-            }
-        };
-    }
-
 }
 
 function showRemisionSelectorModal(pendientes, clienteNombre) {
@@ -5305,3 +5379,116 @@ async function sendAccountStatement(phone) {
         showModalMessage("Error al enviar el estado de cuenta.");
     }
 }
+
+// Obtiene el resumen financiero optimizado (Mes actual y deudas recientes)
+async function getResumenFinancieroOptimizado(clienteId) {
+    const remisionesRef = collection(db, "remisiones");
+
+    // Calculamos el primer día del mes actual para las compras
+    const ahora = new Date();
+    const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString().split('T')[0];
+
+    // Calculamos una fecha de "corte" para deudas (ej. hace 4 meses) 
+    // para no leer toda la historia, pero no perder deudas viejas.
+    const fechaCorteDeudas = new Date();
+    fechaCorteDeudas.setMonth(fechaCorteDeudas.getMonth() - 4);
+    const fechaCorteStr = fechaCorteDeudas.toISOString().split('T')[0];
+
+    // CONSULTA: Solo remisiones desde la fecha de corte
+    const q = query(
+        remisionesRef,
+        where("idCliente", "==", clienteId),
+        where("fechaRecibido", ">=", fechaCorteStr),
+        where("estado", "!=", "Anulada")
+    );
+
+    const snapshot = await getDocs(q);
+
+    let comprasMesActual = 0;
+    let acumuladoDeudaTotal = 0;
+    let remisionesConSaldo = [];
+
+    snapshot.forEach(docSnap => {
+        const r = docSnap.data();
+        const id = docSnap.id;
+
+        // 1. Sumar a compras solo si es del mes actual
+        if (r.fechaRecibido >= primerDiaMes) {
+            comprasMesActual += (r.valorTotal || 0);
+        }
+
+        // 2. Calcular saldo pendiente (Confirmados vs Total)
+        const pagado = (r.payments || [])
+            .filter(p => p.status === 'confirmado')
+            .reduce((acc, p) => acc + p.amount, 0);
+
+        const saldo = r.valorTotal - pagado;
+
+        // 3. Si hay deuda, la guardamos
+        if (saldo > 100) {
+            acumuladoDeudaTotal += saldo;
+            remisionesConSaldo.push({ id, ...r, saldoCalculado: saldo });
+        }
+    });
+
+    return {
+        comprasMes: comprasMesActual,
+        totalDeuda: acumuladoDeudaTotal,
+        listaPendientes: remisionesConSaldo
+    };
+}
+
+// Maneja la navegación tipo WhatsApp en móviles
+function toggleMobileChatView(showChat) {
+    const contactsContainer = document.getElementById('wa-contacts-container');
+    const chatArea = document.getElementById('wa-chat-area');
+    const noChatSelected = document.getElementById('wa-no-chat-selected');
+    const chatActive = document.getElementById('wa-chat-active');
+
+    if (window.innerWidth < 768) { // Solo lógica móvil
+        if (showChat) {
+            // 1. Ocultar lista de contactos
+            contactsContainer.classList.add('hidden');
+            // 2. Mostrar área de chat
+            chatArea.classList.remove('hidden');
+            chatArea.classList.add('flex', 'w-full');
+            // 3. Ocultar mensaje de "selecciona un chat" y mostrar el chat real
+            noChatSelected.classList.add('hidden');
+            chatActive.classList.remove('hidden');
+            chatActive.classList.add('flex');
+        } else {
+            // Volver a la lista
+            contactsContainer.classList.remove('hidden');
+            chatArea.classList.add('hidden');
+            chatActive.classList.add('hidden');
+            activeChatPhone = null;
+        }
+    }
+}
+// Listener para el botón volver
+document.getElementById('wa-back-btn').addEventListener('click', () => toggleMobileChatView(false));
+
+// Función para manejar la visibilidad de la info en móvil
+function setupMobileInfoToggle() {
+    const trigger = document.getElementById('wa-header-info-trigger');
+    const sidebar = document.getElementById('wa-client-sidebar');
+    const closeBtn = document.getElementById('close-info-mobile');
+
+    if (trigger && sidebar) {
+        trigger.addEventListener('click', (e) => {
+            // Evitamos que se active si se hace clic en el botón "atrás" de la lista de chats
+            if (e.target.closest('#wa-back-btn')) return;
+            
+            if (window.innerWidth < 1024) {
+                sidebar.classList.add('active-mobile');
+            }
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            sidebar.classList.remove('active-mobile');
+        });
+    }
+}
+

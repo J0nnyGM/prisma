@@ -95,8 +95,8 @@
         </div>
     </div>
 
-    <div id="app-view" class="hidden min-h-screen p-4 sm:p-6 lg:p-8">
-        <div class="max-w-7xl mx-auto">
+    <div id="app-view" class="hidden min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:px-8">
             <header class="mb-4">
                 <div class="flex justify-center py-4">
                     <img src="/app/recursos/LOGO PRISMA.jpg" alt="Logo Prisma" class="h-16 w-auto">
@@ -132,7 +132,13 @@
                     <button id="tab-remisiones"
                         class="tab-btn active py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Remisiones</button>
                     <button id="tab-mensajes"
-                        class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Mensajes</button>
+                        class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap relative">
+                        Mensajes
+                        <span id="global-unread-badge"
+                            class="hidden absolute -top-1 -right-3 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
+                            0
+                        </span>
+                    </button>
                     <button id="tab-facturacion"
                         class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap">Facturación</button>
                     <button id="tab-clientes"
@@ -149,8 +155,10 @@
                         class="tab-btn py-4 px-1 text-lg font-semibold text-gray-500 hover:text-gray-800 whitespace-nowrap hidden">Empleados</button>
                 </nav>
             </div>
+        </div>
 
-            <main>
+        <main class="w-full">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div id="view-remisiones"></div>
                 <div id="view-facturacion" class="hidden"></div>
                 <div id="view-clientes" class="hidden"></div>
@@ -159,109 +167,120 @@
                 <div id="view-gastos" class="hidden"></div>
                 <div id="view-proveedores" class="hidden"></div>
                 <div id="view-empleados" class="hidden"></div>
+            </div>
 
-                <div id="view-mensajes" class="hidden">
-                    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col md:flex-row"
-                        style="height: calc(100vh - 280px);">
+            <div id="view-mensajes" class="hidden w-full h-full pb-6">
+                <div class="lg:w-[80%] mx-auto px-4 lg:px-0">
+                    <div class="w-full bg-white shadow-2xl flex flex-col md:flex-row overflow-hidden border border-gray-200 rounded-2xl"
+                        style="height: calc(100vh - 220px); min-height: 550px;">
 
-                        <div class="w-full md:w-80 border-r border-gray-200 flex flex-col bg-gray-50">
-                            <div class="p-4 border-b bg-white">
-                                <h2 class="text-xl font-bold text-gray-800">Mensajes WhatsApp</h2>
+                        <div id="wa-contacts-container"
+                            class="w-full md:w-80 border-r border-gray-200 flex flex-col bg-white shrink-0">
+                            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                                <h2 class="text-xl font-black text-gray-800">Chats</h2>
+                                <span
+                                    class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase">API</span>
                             </div>
-                            <div id="wa-contacts-list" class="flex-grow overflow-y-auto divide-y divide-gray-200">
+                            <div id="wa-contacts-list"
+                                class="flex-grow overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
                             </div>
                         </div>
 
-                        <div id="wa-chat-area" class="flex-grow flex flex-col bg-[#e5ddd5]">
+                        <div id="wa-chat-area" class="flex-grow flex flex-col bg-[#f0f2f5] relative min-w-0">
+
                             <div id="wa-no-chat-selected"
                                 class="flex-grow flex flex-col items-center justify-center text-gray-400">
-                                <i class="fa-brands fa-whatsapp text-6xl mb-4 opacity-20"></i>
-                                <p>Selecciona un cliente para ver la conversación</p>
+                                <div class="bg-white p-6 rounded-full shadow-sm mb-4">
+                                    <i class="fa-brands fa-whatsapp text-5xl opacity-20"></i>
+                                </div>
+                                <p class="font-bold text-sm uppercase tracking-widest">PrismaColor CRM</p>
                             </div>
 
                             <div id="wa-chat-active" class="hidden flex-grow flex flex-row overflow-hidden">
-                                <div class="flex-grow flex flex-col border-r border-gray-200 bg-[#e5ddd5]">
+
+                                <div class="flex-grow flex flex-col min-w-0 bg-[#e5ddd5] border-r border-gray-200">
                                     <div class="p-3 bg-white border-b shadow-sm flex items-center justify-between">
-                                        <div class="flex items-center gap-3">
-                                            <div class="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold cursor-pointer"
-                                                id="wa-header-avatar">
+                                        <div class="flex items-center gap-3 cursor-pointer flex-grow"
+                                            id="wa-header-info-trigger">
+                                            <button id="wa-back-btn"
+                                                class="md:hidden text-gray-500 hover:text-gray-800 pr-2">
+                                                <i class="fa-solid fa-arrow-left"></i>
+                                            </button>
+                                            <div
+                                                class="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold shrink-0 shadow-md">
                                                 <i class="fa-solid fa-user"></i>
                                             </div>
-                                            <div>
-                                                <span id="active-chat-name"
-                                                    class="font-bold text-gray-800 cursor-pointer hover:underline"></span>
-                                                <div id="wa-window-timer" class="text-[10px] font-bold"></div>
+                                            <div class="min-w-0">
+                                                <p id="active-chat-name" class="font-black text-gray-800 truncate"></p>
+                                                <div id="wa-window-timer"
+                                                    class="text-[10px] font-bold text-emerald-600"></div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div id="whatsapp-messages-list"
-                                        class="flex-grow overflow-y-auto p-4 space-y-3 flex flex-col"></div>
+                                        class="flex-grow overflow-y-auto p-4 space-y-3 flex flex-col custom-scrollbar">
+                                    </div>
 
                                     <div class="p-4 bg-white border-t flex items-center gap-2">
-                                        <input type="text" id="wa-reply-input" placeholder="Escribe tu respuesta..."
-                                            class="flex-grow p-2 border rounded-full focus:ring-2 focus:ring-green-500 outline-none">
+                                        <input type="text" id="wa-reply-input" placeholder="Escribe un mensaje..."
+                                            class="flex-grow p-3 bg-gray-100 border-none rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm">
                                         <button id="wa-send-btn"
-                                            class="bg-green-600 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-green-700 transition">
+                                            class="bg-green-600 text-white w-12 h-12 rounded-xl flex items-center justify-center hover:bg-green-700 transition shadow-md">
                                             <i class="fa-solid fa-paper-plane"></i>
                                         </button>
                                     </div>
                                 </div>
 
                                 <div id="wa-client-sidebar"
-                                    class="w-72 bg-white flex flex-col hidden lg:flex shadow-inner">
-                                    <div class="p-4 border-b bg-gray-50">
-                                        <h3 class="font-bold text-gray-700 flex items-center gap-2">
-                                            <i class="fa-solid fa-circle-info text-blue-500"></i> Perfil del Cliente
-                                        </h3>
+                                    class="w-72 bg-white flex flex-col hidden lg:flex shrink-0 shadow-inner">
+                                    <div
+                                        class="p-4 border-b bg-gray-50 font-bold text-xs uppercase tracking-widest text-gray-500 flex justify-between items-center">
+                                        <span>Información del Cliente</span>
+                                        <button id="close-info-mobile"
+                                            class="lg:hidden text-gray-500 text-xl">&times;</button>
                                     </div>
-                                    <div class="p-4 space-y-6 overflow-y-auto flex-grow">
+
+                                    <div class="p-4 space-y-6 overflow-y-auto flex-grow custom-scrollbar">
                                         <div class="grid grid-cols-1 gap-2">
-                                            <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                                                <p class="text-[10px] text-blue-600 font-bold uppercase">Compras Totales
+                                            <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                                                <p class="text-[9px] text-indigo-500 font-black uppercase">Compras Mes
                                                 </p>
-                                                <p id="wa-side-total-compras" class="text-lg font-black text-blue-900">$
-                                                    0</p>
+                                                <p id="wa-side-total-compras"
+                                                    class="text-lg font-black text-indigo-900">$ 0</p>
                                             </div>
-                                            <div id="wa-side-deuda-container"
-                                                class="bg-red-50 p-3 rounded-lg border border-red-100">
-                                                <p class="text-[10px] text-red-600 font-bold uppercase">Saldo Pendiente
-                                                </p>
-                                                <p id="wa-side-total-deuda" class="text-lg font-black text-red-900">$ 0
+                                            <div class="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                                                <p class="text-[9px] text-rose-500 font-black uppercase">Saldo Deuda</p>
+                                                <p id="wa-side-total-deuda" class="text-lg font-black text-rose-900">$ 0
                                                 </p>
                                             </div>
                                         </div>
-
                                         <div>
                                             <p
-                                                class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-widest text-center">
-                                                Remisiones Pendientes</p>
-                                            <div id="wa-side-remisiones-list" class="space-y-2">
-                                            </div>
+                                                class="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest text-center">
+                                                Facturas Pendientes</p>
+                                            <div id="wa-side-remisiones-list" class="space-y-2"></div>
                                         </div>
-
-                                        <div class="pt-4 border-t">
+                                        <div class="pt-4 border-t space-y-2">
                                             <button id="wa-side-report-payment"
-                                                class="w-full bg-green-600 text-white font-bold py-2 rounded-lg text-sm hover:bg-green-700 transition flex items-center justify-center gap-2">
-                                                <i class="fa-solid fa-hand-holding-dollar"></i> Reportar Pago
+                                                class="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-emerald-700 transition flex items-center justify-center gap-2">
+                                                <i class="fa-solid fa-plus"></i> REGISTRAR PAGO
                                             </button>
-                                        </div>
-
-                                        <div class="pt-2">
                                             <button id="wa-side-send-statement"
-                                                class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                                                <i class="fa-solid fa-file-invoice-dollar"></i> Enviar Estado de Cuenta
+                                                class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                                                <i class="fa-solid fa-share"></i> ENVIAR ESTADO
                                             </button>
                                         </div>
                                     </div>
                                 </div>
+
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-            </main>
-        </div>
+        </main>
     </div>
 
     <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">

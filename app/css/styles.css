@@ -193,3 +193,81 @@ body {
 .status-updated {
     animation: highlight-success 2s ease-out;
 }
+
+@media (min-width: 768px) {
+    /* En escritorio, siempre mostramos ambos */
+    #wa-chat-area {
+        display: flex !important;
+    }
+    #view-mensajes .md\:w-80 {
+        display: flex !important;
+    }
+}
+
+@media (max-width: 767px) {
+    /* En móvil, el área de mensajes debe ser pantalla completa */
+    #view-mensajes .max-w-6xl, 
+    #view-mensajes .lg\:w-\[80\%\] {
+        width: 100% !important;
+        margin: 0 !important;
+        height: calc(100vh - 150px) !important; /* Ajuste para ver el nav */
+    }
+}
+
+/* Scrollbar Profesional */
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+/* Responsive tipo WhatsApp */
+@media (max-width: 767px) {
+    #view-mensajes .lg\:w-\[80\%\] { width: 100% !important; margin: 0 !important; }
+    #view-mensajes > div > div { height: calc(100vh - 160px) !important; border-radius: 0; }
+    
+    /* Cuando el chat está activo, ocultamos la lista de contactos en móvil */
+    #wa-chat-active:not(.hidden) ~ #wa-contacts-container {
+        display: none;
+    }
+}
+
+/* Bolita de notificaciones en el menú */
+#global-unread-badge {
+    box-shadow: 0 0 0 2px white;
+    transform: translate(50%, -50%);
+}
+
+@media (max-width: 767px) {
+    /* Forzar que el contenedor de mensajes no se encoja */
+    #wa-chat-active {
+        width: 100% !important;
+        display: none; /* Por defecto oculto hasta que JS lo active */
+    }
+    
+    #wa-chat-active.flex {
+        display: flex !important;
+    }
+
+    /* Ocultar el sidebar derecho en móviles siempre para ganar espacio */
+    #wa-client-sidebar {
+        display: none !important;
+    }
+
+    /* Ajustar altura para que el input no quede tapado por el teclado */
+    #whatsapp-messages-list {
+        height: 60vh;
+    }
+}
+
+@media (max-width: 1023px) {
+    /* El sidebar ocupará toda la vista del módulo de mensajes en móvil */
+    #wa-client-sidebar.active-mobile {
+        display: flex !important;
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 40;
+        background-color: white;
+    }
+}
