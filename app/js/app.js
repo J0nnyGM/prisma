@@ -5360,8 +5360,8 @@ async function sendAccountStatement(phone) {
             mensajeFinal += `------------------------------------------\n`;
             mensajeFinal += `*Medios de Pago:*\n`;
             mensajeFinal += `• Llave: @9010430572\n`; // Cambia por tus datos reales
-            mensajeFinal += `• Davivienda: Corriente #4776 6999 5664\n\n`;
-            mensajeFinal += `• Nequi: 313 252 2810\n`; // Cambia por tus datos reales
+            mensajeFinal += `• Davivienda: Corriente #477669995664\n`;
+            mensajeFinal += `• Nequi: 3132522810\n`; // Cambia por tus datos reales
             mensajeFinal += `Por favor envíanos el comprobante por este medio. ¡Gracias!`;
         } else {
             mensajeFinal += `🎉 *¡Felicidades!* No tienes cuentas pendientes a la fecha.\n\nGracias por ser un cliente.`;
