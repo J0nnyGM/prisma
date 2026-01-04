@@ -42,6 +42,7 @@ let globalesSaldos = {
     Davivienda: 0
 };
 
+let gastosSnapUnsubscribe = null; // Variable para apagar el escucha de gastos
 
 let paymentModalUnsubscribe = null; // Variable para apagar el escucha del modal
 
@@ -193,6 +194,9 @@ function loadAllData() {
     // 5. Gastos (Paginación - Consulta única inicial)
     // Nota: loadGastos suele ser getDocs para no saturar, pero se llama aquí
     loadGastos();
+    activeListeners.push(() => {
+        if (gastosSnapUnsubscribe) gastosSnapUnsubscribe();
+    });
 
     // 6. Funciones exclusivas para Administradores
     if (currentUserData && currentUserData.role === 'admin') {
@@ -398,8 +402,10 @@ function setupEventListeners() {
     Object.keys(tabs).forEach(key => { if (tabs[key]) tabs[key].addEventListener('click', () => switchView(key, tabs, views)) });
 
     // --- FACTURACIÓN TABS ---
+    // --- FACTURACIÓN TABS ---
     const facturacionPendientesTab = document.getElementById('tab-pendientes');
     const facturacionRealizadasTab = document.getElementById('tab-realizadas');
+
     if (facturacionPendientesTab) {
         facturacionPendientesTab.addEventListener('click', () => {
             facturacionPendientesTab.classList.add('active');
@@ -408,12 +414,16 @@ function setupEventListeners() {
             document.getElementById('view-realizadas').classList.add('hidden');
         });
     }
+
     if (facturacionRealizadasTab) {
         facturacionRealizadasTab.addEventListener('click', () => {
             facturacionRealizadasTab.classList.add('active');
             facturacionPendientesTab.classList.remove('active');
             document.getElementById('view-realizadas').classList.remove('hidden');
             document.getElementById('view-pendientes').classList.add('hidden');
+
+            // --- CORRECCIÓN CLAVE: Cargar los datos al abrir la pestaña ---
+            loadFacturadasHistorial();
         });
     }
 
@@ -1123,16 +1133,19 @@ function attachRemisionesListeners() {
 
 async function loadGastos(month = 'all', year = 'all', isMore = false) {
     if (cargandoMasGastos) return;
-    const gastosListEl = document.getElementById('gastos-list');
     const gastosRef = collection(db, "gastos");
     let q;
 
+    // 1. Limpiar escucha previo si no es paginación
     if (!isMore) {
+        if (gastosSnapUnsubscribe) gastosSnapUnsubscribe();
         allGastos = [];
         lastGastoDoc = null;
-        if (gastosListEl) gastosListEl.innerHTML = '<p class="text-center py-4">Cargando gastos...</p>';
+        const listEl = document.getElementById('gastos-list');
+        if (listEl) listEl.innerHTML = '<p class="text-center py-4 text-xs text-gray-500">Sincronizando gastos...</p>';
     }
 
+    // 2. Construcción de Query con filtros
     if (year !== 'all' && month !== 'all') {
         const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
         const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
@@ -1141,26 +1154,53 @@ async function loadGastos(month = 'all', year = 'all', isMore = false) {
         q = query(gastosRef, orderBy("fecha", "desc"), limit(50));
     }
 
+    // 3. Lógica para "Cargar más" (Paginación)
     if (isMore && lastGastoDoc) {
         cargandoMasGastos = true;
         q = query(q, startAfter(lastGastoDoc));
-    }
+        try {
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                showTemporaryMessage("No hay más gastos");
+                cargandoMasGastos = false;
+                return;
+            }
+            lastGastoDoc = snapshot.docs[snapshot.docs.length - 1];
+            const nuevos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    try {
-        const snapshot = await getDocs(q);
-        if (snapshot.empty && isMore) {
-            showTemporaryMessage("No hay más gastos", "info");
+            // Unir evitando duplicados
+            nuevas.forEach(n => {
+                if (!allGastos.find(g => g.id === n.id)) allGastos.push(n);
+            });
+
+            renderGastos();
             cargandoMasGastos = false;
-            return;
-        }
-        lastGastoDoc = snapshot.docs[snapshot.docs.length - 1];
-        const nuevos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        allGastos = [...allGastos, ...nuevos];
-        renderGastos();
-        cargandoMasGastos = false;
-    } catch (error) {
-        console.error("Error:", error);
-        cargandoMasGastos = false;
+        } catch (e) { console.error(e); cargandoMasGastos = false; }
+
+    } else {
+        // 4. ESCUCHA EN TIEMPO REAL para la carga inicial y filtros
+        gastosSnapUnsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+
+                if (change.type === "added") {
+                    const index = allGastos.findIndex(g => g.id === data.id);
+                    if (index === -1) allGastos.push(data);
+                }
+                if (change.type === "modified") {
+                    const index = allGastos.findIndex(g => g.id === data.id);
+                    if (index !== -1) allGastos[index] = data;
+                }
+                if (change.type === "removed") {
+                    allGastos = allGastos.filter(g => g.id !== data.id);
+                }
+            });
+
+            if (snapshot.docs.length > 0) {
+                lastGastoDoc = snapshot.docs[snapshot.docs.length - 1];
+            }
+            renderGastos();
+        });
     }
 }
 
@@ -4008,9 +4048,13 @@ function showFacturaModal(remisionId) {
 
             hideModal();
             showModalMessage("¡Remisión facturada con éxito!", false, 2000);
+
+            // --- AÑADE ESTO AQUÍ ---
+            // Refresca la lista de realizadas para que la nueva factura aparezca de primera
+            loadFacturadasHistorial();
+
         } catch (error) {
             console.error("Error al facturar:", error);
-            showModalMessage("Error al procesar la factura.");
         }
     });
 }
@@ -5109,9 +5153,8 @@ function listenChatList() {
 
             const div = document.createElement('div');
             // Diseño de la tarjeta de contacto
-            div.className = `p-4 cursor-pointer hover:bg-gray-50 border-l-4 transition-all ${
-                isSelected ? 'bg-white border-indigo-500 shadow-sm' : 'border-transparent bg-gray-50/30'
-            }`;
+            div.className = `p-4 cursor-pointer hover:bg-gray-50 border-l-4 transition-all ${isSelected ? 'bg-white border-indigo-500 shadow-sm' : 'border-transparent bg-gray-50/30'
+                }`;
 
             div.innerHTML = `
                 <div class="flex items-center gap-3">
@@ -5123,18 +5166,18 @@ function listenChatList() {
                         <div class="flex justify-between items-start">
                             <p class="font-bold text-sm text-gray-800 truncate pr-2">${nombreMostrar}</p>
                             <span class="text-[9px] text-gray-400 whitespace-nowrap">
-                                ${chat.fechaUltimo ? chat.fechaUltimo.toDate().toLocaleDateString([], {day:'2-digit', month:'2-digit'}) : ''}
+                                ${chat.fechaUltimo ? chat.fechaUltimo.toDate().toLocaleDateString([], { day: '2-digit', month: '2-digit' }) : ''}
                             </span>
                         </div>
                         <div class="flex justify-between items-center mt-1">
                             <p class="text-xs text-gray-500 truncate w-40 italic">
                                 ${chat.ultimoMensaje || 'Archivo multimedia'}
                             </p>
-                            ${chat.noLeidos > 0 ? 
-                                `<span class="bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                            ${chat.noLeidos > 0 ?
+                    `<span class="bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
                                     ${chat.noLeidos}
                                 </span>` : ''
-                            }
+                }
                         </div>
                     </div>
                 </div>
@@ -5300,7 +5343,7 @@ async function prepararAbonoDesdeCRM(remisionId) {
     // 3. Si la encontramos (por cualquier vía), abrimos el modal
     if (remision) {
         hideModal(); // Cerramos el loader si se activó
-        
+
         // Pequeño delay para asegurar que el DOM se limpie antes de abrir el nuevo modal
         setTimeout(() => {
             showPaymentModal(remision);
@@ -5500,7 +5543,7 @@ function setupMobileInfoToggle() {
         trigger.addEventListener('click', (e) => {
             // Evitamos que se active si se hace clic en el botón "atrás" de la lista de chats
             if (e.target.closest('#wa-back-btn')) return;
-            
+
             if (window.innerWidth < 1024) {
                 sidebar.classList.add('active-mobile');
             }
