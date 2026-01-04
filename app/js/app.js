@@ -5276,17 +5276,38 @@ window.showRemisionSelectorModal = showRemisionSelectorModal;
 window.hideModal = hideModal;
 window.prepararAbonoDesdeCRM = prepararAbonoDesdeCRM; // Nueva función auxiliar
 
-// Función auxiliar para abrir el pago buscando la remisión por ID
-function prepararAbonoDesdeCRM(remisionId) {
-    const remision = allRemisiones.find(r => r.id === remisionId);
+/**
+ * Prepara la apertura del modal de pagos desde el CRM.
+ * Si la remisión no está cargada localmente, la busca en el servidor.
+ */
+async function prepararAbonoDesdeCRM(remisionId) {
+    // 1. Intentar encontrarla en la memoria local (rápido)
+    let remision = allRemisiones.find(r => r.id === remisionId);
+
+    // 2. Si NO está en memoria (es una remisión antigua), traerla de la DB
+    if (!remision) {
+        showModalMessage("Buscando información de remisión...", true);
+        try {
+            const remDoc = await getDoc(doc(db, "remisiones", remisionId));
+            if (remDoc.exists()) {
+                remision = { id: remDoc.id, ...remDoc.data() };
+            }
+        } catch (error) {
+            console.error("Error al recuperar remisión remota:", error);
+        }
+    }
+
+    // 3. Si la encontramos (por cualquier vía), abrimos el modal
     if (remision) {
-        hideModal(); // Cerramos el selector si estaba abierto
-        // Pequeño delay para dejar que el DOM respire entre modales
+        hideModal(); // Cerramos el loader si se activó
+        
+        // Pequeño delay para asegurar que el DOM se limpie antes de abrir el nuevo modal
         setTimeout(() => {
             showPaymentModal(remision);
-        }, 100);
+        }, 150);
     } else {
-        showTemporaryMessage("No se encontró la información de la remisión", "error");
+        hideModal();
+        showTemporaryMessage("No se pudo cargar la remisión. Intente de nuevo.", "error");
     }
 }
 
