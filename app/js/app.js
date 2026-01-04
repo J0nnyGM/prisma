@@ -5359,11 +5359,12 @@ async function sendAccountStatement(phone) {
             mensajeFinal += `\n*TOTAL PENDIENTE: ${formatCurrency(totalDeuda)}*\n\n`;
             mensajeFinal += `------------------------------------------\n`;
             mensajeFinal += `*Medios de Pago:*\n`;
-            mensajeFinal += `• Nequi: 310 000 0000\n`; // Cambia por tus datos reales
-            mensajeFinal += `• Davivienda: Ahorros #000-0000-00\n\n`;
+            mensajeFinal += `• Llave: @9010430572\n`; // Cambia por tus datos reales
+            mensajeFinal += `• Davivienda: Corriente #4776 6999 5664\n\n`;
+            mensajeFinal += `• Nequi: 313 252 2810\n`; // Cambia por tus datos reales
             mensajeFinal += `Por favor envíanos el comprobante por este medio. ¡Gracias!`;
         } else {
-            mensajeFinal += `🎉 *¡Felicidades!* No tienes cuentas pendientes a la fecha.\n\nGracias por ser un cliente cumplido.`;
+            mensajeFinal += `🎉 *¡Felicidades!* No tienes cuentas pendientes a la fecha.\n\nGracias por ser un cliente.`;
         }
 
         // 3. Envío Real por WhatsApp usando tu Cloud Function
