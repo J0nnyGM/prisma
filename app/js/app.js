@@ -264,7 +264,7 @@ function updateUIVisibility(userData) {
     // Muestra los botones correctos del encabezado según el rol
     document.getElementById('view-all-loans-btn').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('summary-btn').style.display = isAdmin ? 'block' : 'none';
-    document.getElementById('loan-request-btn').style.display = isAdmin ? 'none' : 'block';
+    document.getElementById('loan-request-btn').style.display = isAdmin ? 'none' : 'block'; 
 
 
     // Ajusta la vista de remisiones para el rol de planta
