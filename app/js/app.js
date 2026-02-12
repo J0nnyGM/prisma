@@ -152,14 +152,17 @@ function startApp() {
     // Configurar los listeners de eventos (clicks, submits)
     setupEventListeners();
 
-    setupWhatsAppEvents(); // <--- ESTO SOLUCIONA EL ERROR DE LA LÍNEA 162
+    setupWhatsAppEvents(); 
 
     // ÚNICA CARGA DE DATOS: Aquí es donde se activan los onSnapshot
     loadAllData();
 
-    loadSaldosBase();
+    // --- CAMBIO AQUÍ ---
+    // Eliminamos loadSaldosBase(); y ponemos esto:
+    activeListeners.push(listenSaldosConfig()); 
+    // -------------------
 
-    listenGlobalSaldos(); // <--- AGREGA ESTA LÍNEA AQUÍ
+    listenGlobalSaldos(); 
 
     // Inicializar buscadores
     setupSearchInputs();
@@ -4814,23 +4817,30 @@ retencionForm.addEventListener('submit', async (e) => {
     }
 });
 
-// --- Lógica de Saldos Iniciales ---
+// --- Lógica de Saldos Iniciales (OPTIMIZADA) ---
 let globalSaldosBase = { Efectivo: 0, Nequi: 0, Davivienda: 0 };
-let saldosYaConfigurados = false; // <--- NUEVA VARIABLE DE CONTROL
+let saldosYaConfigurados = false; 
 
-// Cargar saldos al iniciar la app
-async function loadSaldosBase() {
-    try {
-        const docRef = doc(db, 'configuracion', 'saldos_globales');
-        const docSnap = await getDoc(docRef);
-
+// Esta función ahora escucha en tiempo real
+function listenSaldosConfig() {
+    const docRef = doc(db, 'configuracion', 'saldos_globales');
+    
+    // Retornamos el unsubscribe para que se gestione con los demás listeners
+    return onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             globalSaldosBase = docSnap.data();
-            saldosYaConfigurados = true; // <--- SI EXISTE EL DOC, MARCAMOS COMO TRUE
+            saldosYaConfigurados = true;
+            
+            // MAGIA EXTRA: Si el modal está abierto y el botón sigue ahí, lo borramos en vivo
+            const btn = document.getElementById('btn-saldos-iniciales');
+            if (btn) btn.remove();
+            
+        } else {
+            saldosYaConfigurados = false;
         }
-    } catch (error) {
-        console.error("Error cargando saldos base:", error);
-    }
+    }, (error) => {
+        console.error("Error escuchando configuración de saldos:", error);
+    });
 }
 
 
