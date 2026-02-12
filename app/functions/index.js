@@ -8,6 +8,9 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios");
 
+// Importamos webhook una sola vez
+const waWebhook = require("./webhook"); // <--- LIMPIEZA: Importación única
+
 admin.initializeApp();
 
 // --- CONFIGURACIÓN CON VARIABLES DE ENTORNO (.ENV) ---
@@ -17,7 +20,6 @@ const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL;
 
 if (SENDGRID_API_KEY) {
-    // Limpiamos la clave por si se colaron espacios o comillas del .env
     const cleanKey = SENDGRID_API_KEY.replace(/['"\s]/g, '');
     try {
         sgMail.setApiKey(cleanKey);
@@ -30,7 +32,9 @@ if (SENDGRID_API_KEY) {
 
 // Configuración de WhatsApp
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN?.replace(/['"\s]/g, '');
-const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID?.replace(/['"\s]/g, '');
+
+// CORREGIDO: El nombre de la variable debe coincidir con su uso más abajo
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID?.replace(/['"\s]/g, ''); 
 
 const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 
@@ -39,9 +43,6 @@ const BUCKET_NAME = "prismacolorsas.firebasestorage.app";
 //              FUNCIONES ÚTILES
 // ==========================================
 
-/**
- * Formatea un número como moneda colombiana (COP).
- */
 function formatCurrency(value) {
     return new Intl.NumberFormat("es-CO", {
         style: "currency",
@@ -51,9 +52,6 @@ function formatCurrency(value) {
     }).format(value || 0);
 }
 
-/**
- * Formatea un número de teléfono de Colombia al formato E.164.
- */
 function formatColombianPhone(phone) {
     if (!phone || typeof phone !== "string") {
         return null;
@@ -69,21 +67,21 @@ function formatColombianPhone(phone) {
 }
 
 /**
- * --- NUEVO: Envía un mensaje de plantilla de WhatsApp con un documento. ---
- * @param {string} toPhoneNumber Número del destinatario en formato E.164.
- * @param {string} customerName Nombre del cliente para la plantilla.
- * @param {string} remisionNumber Número de la remisión.
- * @param {string} status Estado actual de la remisión.
- * @param {string} pdfUrl URL pública del PDF a enviar.
- * @return {Promise<object>} La respuesta de la API de Meta.
+ * Envía un mensaje de plantilla de WhatsApp con un documento.
  */
 async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber, status, pdfUrl) {
+    // Verificación de seguridad
+    if (!WHATSAPP_PHONE_NUMBER_ID) {
+        throw new Error("ERROR CRÍTICO: WHATSAPP_PHONE_NUMBER_ID no está definido. Revisa tu .env");
+    }
+
     const formattedPhone = formatColombianPhone(toPhoneNumber);
     if (!formattedPhone) {
         throw new Error("Número de teléfono inválido o no proporcionado.");
     }
 
     const API_VERSION = "v19.0";
+    // AHORA SÍ: La variable existe
     const url = `https://graph.facebook.com/${API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const payload = {
@@ -126,24 +124,16 @@ async function sendWhatsAppRemision(toPhoneNumber, customerName, remisionNumber,
     return axios.post(url, payload, { headers });
 }
 
-/**
- * Función para generar un PDF de la remisión.
- * @param {object} remision El objeto con los datos de la remisión.
- * @param {boolean} isForPlanta Indica si el PDF es para el rol de planta.
- * @return {Buffer} El PDF como un buffer de datos.
- */
+// ... (El código de generarPDF se mantiene igual, lo omito para ahorrar espacio) ...
 function generarPDF(remisionData, esPlanta) {
     const remision = remisionData;
     const isForPlanta = esPlanta;
-
-    // eslint-disable-next-line new-cap
     const doc = new jsPDF();
 
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     doc.text("REMISION DE SERVICIO", 105, 20, { align: "center" });
 
-    // Marca de agua "ANULADA"
     if (remision.estado === "Anulada") {
         doc.setFontSize(60);
         doc.setTextColor(255, 0, 0);
@@ -211,12 +201,10 @@ function generarPDF(remisionData, esPlanta) {
     const finalY = doc.lastAutoTable.finalY;
     let yPos = finalY + 10;
 
-    // Observaciones
     if (remision.observaciones && remision.observaciones.trim() !== "") {
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
         doc.text("Observaciones:", 20, yPos);
-
         doc.setFont("helvetica", "normal");
         const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170);
         doc.text(textoObservaciones, 20, yPos + 5);
@@ -258,7 +246,6 @@ function generarPDF(remisionData, esPlanta) {
         doc.text(`Estado: ${remision.estado}`, 20, yPos);
     }
 
-    // Firma
     yPos = Math.max(yPos, finalY + 20);
     yPos = 250;
     doc.line(40, yPos, 120, yPos);
@@ -266,7 +253,6 @@ function generarPDF(remisionData, esPlanta) {
     doc.setFont("helvetica", "normal");
     doc.text("Firma y Sello de Recibido", 75, yPos + 5, { align: "center" });
 
-    // Footer
     doc.setLineCap(2);
     doc.line(20, 270, 190, 270);
     const footerText1 = "NO SE ENTREGA TRABAJO SINO HA SIDO CANCELADO.";
@@ -279,22 +265,14 @@ function generarPDF(remisionData, esPlanta) {
     return Buffer.from(doc.output("arraybuffer"));
 }
 
-
 // ==========================================
 //              TRIGGERS DE FIRESTORE
 // ==========================================
 
-/**
- * Se activa al crear un nuevo usuario.
- * Asigna rol 'admin' al primero, 'planta' a los demás.
- */
 exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
     const usersCollection = admin.firestore().collection("users");
     const snapshot = await usersCollection.limit(2).get();
-
-    // Si es el primer usuario, lo hacemos admin y lo activamos
     if (snapshot.size === 1) {
-        functions.logger.log(`Asignando rol de 'admin' y estado 'active' al primer usuario: ${user.uid}`);
         return usersCollection.doc(user.uid).update({
             role: "admin",
             status: "active",
@@ -307,14 +285,9 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
             "permissions.empleados": true,
         });
     }
-
-    functions.logger.log(`Nuevo usuario ${user.uid} registrado como 'planta' (pending).`);
     return null;
 });
 
-/**
- * Trigger al CREAR Remisión: Genera PDFs, guarda rutas y envía notificaciones.
- */
 exports.onRemisionCreate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
     .onCreate(async (snap, context) => {
@@ -344,7 +317,6 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                 pdfPlantaPath: filePathPlanta
             });
 
-            // URL firmada v4 para enviar en las notificaciones
             const [url] = await file.getSignedUrl({
                 action: "read",
                 expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -435,7 +407,10 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
     });
 
 /**
- * Trigger al ACTUALIZAR Remisión: Detecta cambios de estado (Anulada/Entregado) o pagos totales.
+ * Trigger al ACTUALIZAR Remisión: 
+ * 1. Detecta cambios de estado (Anulada/Entregado) y notifica.
+ * 2. Detecta pagos totales para notificar cancelación.
+ * 3. Actualiza automáticamente 'saldoPendiente' y 'formaPago'.
  */
 exports.onRemisionUpdate = functions.region("us-central1").firestore
     .document("remisiones/{remisionId}")
@@ -444,6 +419,8 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
         const afterData = change.after.data();
         const remisionId = context.params.remisionId;
         const log = (message) => functions.logger.log(`[Upd ${remisionId}] ${message}`);
+
+        // --- 1. LÓGICA DE NOTIFICACIONES (CORREO / WHATSAPP / PDF) ---
 
         const sendNotifications = async (motivo, pdfUrlToSend, pdfBuffer) => {
             // Correo
@@ -500,7 +477,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             return { pdfUrl: url, pdfBuffer: pdfBuffer };
         };
 
-        // 1. Cambio de Estado (Anulada / Entregado)
+        // A. Cambio de Estado (Anulada / Entregado)
         if ((beforeData.estado !== "Anulada" && afterData.estado === "Anulada") || (beforeData.estado !== "Entregado" && afterData.estado === "Entregado")) {
             const motivo = afterData.estado === "Anulada" ? "Anulación" : "Entrega";
             try {
@@ -509,17 +486,16 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             } catch (e) { log(`Error procesando ${motivo}: ${e}`); }
         }
 
-        // 2. Pago Final
+        // B. Pago Final Detectado (Notificación)
         const totalPagadoAntes = (beforeData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
         const totalPagadoDespues = (afterData.payments || []).filter((p) => p.status === "confirmado").reduce((sum, p) => sum + p.amount, 0);
 
         if (totalPagadoAntes < afterData.valorTotal && totalPagadoDespues >= afterData.valorTotal) {
-            log("Pago final detectado.");
+            log("Pago final detectado (Notificación).");
             try {
-                const updatedData = { ...afterData, formaPago: "Cancelado" };
+                // Generamos PDF actualizado
+                const updatedData = { ...afterData, formaPago: "Cancelado" }; // Simulamos el dato para el PDF
                 const { pdfBuffer } = await regeneratePdfs(updatedData);
-
-                await change.after.ref.update({ formaPago: "Cancelado" });
 
                 const msg = {
                     to: afterData.clienteEmail,
@@ -534,15 +510,94 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                     }],
                 };
                 await sgMail.send(msg);
-            } catch (e) { log(`Error pago final: ${e}`); }
+            } catch (e) { log(`Error notif pago final: ${e}`); }
+        }
+
+        // --- 2. LÓGICA DE SALDO PENDIENTE (AUTOMATIZACIÓN) ---
+        // Esta parte actualiza la DB para que el filtro de cartera funcione eficientemente
+
+        let nuevoSaldo = afterData.valorTotal - totalPagadoDespues;
+        if (nuevoSaldo < 0) nuevoSaldo = 0; // Evitar negativos
+        if (afterData.estado === 'Anulada') nuevoSaldo = 0; // Anulada no debe nada
+
+        // Verificamos si cambió el saldo o la forma de pago para actualizar la DB
+        // Usamos una tolerancia de 1 peso para decimales
+        const saldoAnterior = afterData.saldoPendiente;
+        const formaPagoActual = afterData.formaPago;
+        
+        let nuevaFormaPago = formaPagoActual;
+        
+        // Calcular la nueva forma de pago correcta basada en el saldo
+        if (nuevoSaldo <= 0) {
+            nuevaFormaPago = "Cancelado";
+        } else if (formaPagoActual === "Cancelado" && nuevoSaldo > 0) {
+            // Si estaba cancelado pero ahora debe (ej: anularon un pago), vuelve a pendiente
+            nuevaFormaPago = "Pendiente";
+        }
+
+        // Solo escribimos en Firestore si hay cambios reales para evitar bucles infinitos
+        // Comparación segura para saldoAnterior (undefined check)
+        const saldoCambio = saldoAnterior === undefined || Math.abs(nuevoSaldo - saldoAnterior) > 1;
+        const formaPagoCambio = nuevaFormaPago !== formaPagoActual;
+
+        if (saldoCambio || formaPagoCambio) {
+            log(`Actualizando saldo: ${nuevoSaldo} (Antes: ${saldoAnterior}) | Estado: ${nuevaFormaPago}`);
+            return change.after.ref.update({
+                saldoPendiente: nuevoSaldo,
+                formaPago: nuevaFormaPago
+            });
         }
 
         return null;
     });
 
 /**
- * Trigger para Reenviar Correo manualmente (desde un botón en el front).
+ * Callable: MIGRACIÓN DE CARTERA
+ * Recorre todas las remisiones y les calcula el 'saldoPendiente'.
  */
+exports.migrarSaldosCartera = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida");
+
+    const batchSize = 500;
+    const collectionRef = admin.firestore().collection("remisiones");
+    const snapshot = await collectionRef.get(); // Leemos todo una última vez
+    
+    let batch = admin.firestore().batch();
+    let count = 0;
+    let totalUpdated = 0;
+
+    snapshot.docs.forEach((doc) => {
+        const r = doc.data();
+        
+        // Calcular saldo
+        const pagado = (r.payments || [])
+            .filter(p => p.status === 'confirmado')
+            .reduce((sum, p) => sum + p.amount, 0);
+        
+        let saldo = (r.valorTotal || 0) - pagado;
+        if (saldo < 0) saldo = 0;
+        if (r.estado === 'Anulada') saldo = 0;
+
+        // Solo actualizamos si no tiene el campo o está mal
+        if (r.saldoPendiente === undefined || Math.abs(r.saldoPendiente - saldo) > 1) {
+            batch.update(doc.ref, { saldoPendiente: saldo });
+            count++;
+            totalUpdated++;
+        }
+
+        if (count >= batchSize) {
+            batch.commit();
+            batch = admin.firestore().batch();
+            count = 0;
+        }
+    });
+
+    if (count > 0) await batch.commit();
+
+    return { success: true, actualizados: totalUpdated };
+});
+
+// ... (onResendEmailRequest, getFirebaseConfig, applyDiscount, updateEmployeeDocument, etc... SE MANTIENEN IGUAL) ...
 exports.onResendEmailRequest = functions.region("us-central1").firestore
     .document("resendQueue/{queueId}")
     .onCreate(async (snap, context) => {
@@ -550,11 +605,9 @@ exports.onResendEmailRequest = functions.region("us-central1").firestore
         try {
             const remisionDoc = await admin.firestore().collection("remisiones").doc(request.remisionId).get();
             if (!remisionDoc.exists) return snap.ref.delete();
-
             const rData = remisionDoc.data();
             const bucket = admin.storage().bucket(BUCKET_NAME);
             const [pdfBuffer] = await bucket.file(rData.pdfPath).download();
-
             const msg = {
                 to: rData.clienteEmail,
                 from: FROM_EMAIL,
@@ -574,19 +627,8 @@ exports.onResendEmailRequest = functions.region("us-central1").firestore
         }
     });
 
-
-// ==========================================
-//              FUNCIONES CALLABLE (HTTP)
-// ==========================================
-
-/**
- * Devuelve la configuración de Firebase al cliente usando .ENV
- */
 exports.getFirebaseConfig = functions.https.onCall((data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-    }
-
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     const config = {
         apiKey: process.env.PRISMA_API_KEY,
         authDomain: process.env.PRISMA_AUTH_DOMAIN,
@@ -596,36 +638,23 @@ exports.getFirebaseConfig = functions.https.onCall((data, context) => {
         appId: process.env.PRISMA_APP_ID,
         measurementId: process.env.PRISMA_MEASUREMENT_ID
     };
-
-    if (!config.apiKey) {
-        throw new functions.https.HttpsError("internal", "Configuración de servidor incompleta.");
-    }
+    if (!config.apiKey) throw new functions.https.HttpsError("internal", "Configuración de servidor incompleta.");
     return config;
 });
 
-/**
- * Aplica un descuento a una remisión.
- */
 exports.applyDiscount = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-
     const { remisionId, discountPercentage } = data;
-    if (discountPercentage < 0 || discountPercentage > 5.0001) {
-        throw new functions.https.HttpsError("out-of-range", "Descuento máximo 5%.");
-    }
-
+    if (discountPercentage < 0 || discountPercentage > 5.0001) throw new functions.https.HttpsError("out-of-range", "Descuento máximo 5%.");
     const remisionRef = admin.firestore().collection("remisiones").doc(remisionId);
-
     try {
         const remSnap = await remisionRef.get();
         if (!remSnap.exists) throw new functions.https.HttpsError("not-found", "No existe la remisión.");
-
         const rData = remSnap.data();
         const discountAmount = Math.round(rData.subtotal * (discountPercentage / 100));
         const subWithDisc = rData.subtotal - discountAmount;
         const newIva = rData.incluyeIVA ? Math.round(subWithDisc * 0.19) : 0;
         const newTotal = subWithDisc + newIva;
-
         const updatedData = {
             valorTotal: newTotal,
             valorIVA: newIva,
@@ -636,26 +665,18 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
                 appliedAt: new Date(),
             },
         };
-
         await remisionRef.update(updatedData);
-
-        // Regenerar PDF y notificar
         const finalData = { ...rData, ...updatedData };
         const pdfBuffer = generarPDF(finalData, false);
         const pdfPlantaBuffer = generarPDF(finalData, true);
-
         const bucket = admin.storage().bucket(BUCKET_NAME);
         const file = bucket.file(`remisiones/${finalData.numeroRemision}.pdf`);
         await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
-
         const filePlanta = bucket.file(`remisiones/planta-${finalData.numeroRemision}.pdf`);
         await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-
         const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
         const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
-
         await remisionRef.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
-
         const msg = {
             to: finalData.clienteEmail,
             from: FROM_EMAIL,
@@ -669,21 +690,16 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
             }],
         };
         await sgMail.send(msg);
-
         return { success: true };
     } catch (e) {
         throw new functions.https.HttpsError("internal", e.message);
     }
 });
 
-/**
- * Actualiza documentos de empleados (Admin only).
- */
 exports.updateEmployeeDocument = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     const adminUser = await admin.firestore().collection("users").doc(context.auth.uid).get();
     if (adminUser.data().role !== "admin") throw new functions.https.HttpsError("permission-denied", "Solo admin.");
-
     const { employeeId, docType, fileUrl } = data;
     await admin.firestore().collection("users").doc(employeeId).update({
         [`documentos.${docType}`]: fileUrl
@@ -691,37 +707,27 @@ exports.updateEmployeeDocument = functions.https.onCall(async (data, context) =>
     return { success: true };
 });
 
-/**
- * Obtiene URL firmada (V4) para ver archivos protegidos.
- */
 exports.getSignedUrlForPath = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-
     const bucket = admin.storage().bucket(BUCKET_NAME);
     const [signedUrl] = await bucket.file(data.path).getSignedUrl({
         action: 'read',
-        expires: Date.now() + 15 * 60 * 1000, // 15 min
+        expires: Date.now() + 15 * 60 * 1000,
         version: 'v4',
     });
     return { url: signedUrl };
 });
 
-/**
- * Repara URLs firmadas que hayan caducado o estén rotas (Admin tool).
- */
 exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     const userSnap = await admin.firestore().collection("users").doc(uid).get();
     if (userSnap.data().role !== "admin") throw new functions.https.HttpsError("permission-denied", "Solo admin.");
-
     const { fromDate = "2025-08-14", onlyBroken = true } = data;
     const from = new Date(fromDate);
-
     const bucket = admin.storage().bucket(BUCKET_NAME);
     const remSnap = await admin.firestore().collection("remisiones")
         .where("timestamp", ">=", from).get();
-
     let fixed = 0, skipped = 0, errors = 0;
     for (const doc of remSnap.docs) {
         const r = doc.data();
@@ -734,12 +740,10 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
                     }
                 } catch (_) { }
             }
-
             const [url] = await bucket.file(`remisiones/${r.numeroRemision}.pdf`)
                 .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
             const [urlPlanta] = await bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`)
                 .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
-
             await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
             fixed++;
         } catch (e) {
@@ -750,46 +754,33 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
     return { fixed, skipped, errors, total: remSnap.size };
 });
 
-/**
- * NUEVO: Aplica retenciones financieras (Restar del saldo).
- * CORRECCIÓN: Ahora es genérica, no pide tipo específico.
- */
 exports.applyRetention = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-
-    // Ya no extraemos 'retentionType'
     const { remisionId, amount } = data;
-
     if (!remisionId || !amount || amount <= 0) {
         throw new functions.https.HttpsError("invalid-argument", "Datos inválidos.");
     }
-
     const db = admin.firestore();
     const remRef = db.collection("remisiones").doc(remisionId);
-
     try {
         await db.runTransaction(async (t) => {
             const doc = await t.get(remRef);
             if (!doc.exists) throw "No existe la remisión";
             const rData = doc.data();
-
             const totalPagado = (rData.payments || [])
                 .filter(p => p.status === 'confirmado')
                 .reduce((sum, p) => sum + p.amount, 0);
-
             const saldo = rData.valorTotal - totalPagado;
             if (amount > saldo) throw new functions.https.HttpsError("failed-precondition", "La retención excede el saldo.");
-
             const retentionPayment = {
                 amount: amount,
                 date: new Date().toISOString().split('T')[0],
-                method: "Retención", // <--- AHORA ES UN NOMBRE FIJO Y GENÉRICO
+                method: "Retención",
                 registeredAt: new Date(),
                 registeredBy: context.auth.uid,
                 status: 'confirmado',
                 isRetention: true
             };
-
             const newPayments = [...(rData.payments || []), retentionPayment];
             t.update(remRef, { payments: newPayments });
         });
@@ -799,12 +790,332 @@ exports.applyRetention = functions.https.onCall(async (data, context) => {
     }
 });
 
-const { whatsappWebhook } = require("./webhook");
+// ==========================================
+//      AGREGACIÓN AUTOMÁTICA (DASHBOARD)
+// ==========================================
 
-exports.whatsappWebhook = whatsappWebhook;
+/**
+ * Helper para actualizar estadísticas mensuales
+ */
+async function updateMonthlyStats(dateStr, changeSales, changeIncome, changeExpenses) {
+    if (!dateStr) return;
+    const date = new Date(dateStr);
+    // ID del documento será "YYYY_MM" (ej: 2024_05)
+    const docId = `${date.getFullYear()}_${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    const statsRef = admin.firestore().collection("estadisticas_mensuales").doc(docId);
 
-const waWebhook = require("./webhook");
+    await statsRef.set({
+        totalVentas: admin.firestore.FieldValue.increment(changeSales),
+        totalIngresos: admin.firestore.FieldValue.increment(changeIncome), // Pagos recibidos
+        totalGastos: admin.firestore.FieldValue.increment(changeExpenses),
+        ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+}
 
+/**
+ * Trigger: Escucha cambios en REMISIONES
+ * CORREGIDO: "Ventas" ahora es el valor total de la remisión (independiente de si pagan).
+ * "Ingresos" es lo que realmente entra a caja (pagos).
+ */
+exports.aggregateRemisiones = functions.firestore
+    .document("remisiones/{remisionId}")
+    .onWrite(async (change, context) => {
+        const before = change.before.exists ? change.before.data() : {};
+        const after = change.after.exists ? change.after.data() : {};
+
+        // 1. Calcular Venta (Valor Total si no está anulada)
+        const ventaBefore = (before.estado && before.estado !== 'Anulada') ? (before.valorTotal || 0) : 0;
+        const ventaAfter = (after.estado && after.estado !== 'Anulada') ? (after.valorTotal || 0) : 0;
+
+        // 2. Calcular Ingreso (Solo pagos confirmados)
+        // NOTA: Para el ingreso usamos la fecha del PAGO, no de la remisión. 
+        // Pero para mantener simpleza en este dashboard, seguiremos usando fecha de remisión por ahora 
+        // o la fecha de la remisión para agrupar.
+        const ingresoBefore = (before.payments || []).filter(p => p.status === 'confirmado').reduce((acc, p) => acc + p.amount, 0);
+        const ingresoAfter = (after.payments || []).filter(p => p.status === 'confirmado').reduce((acc, p) => acc + p.amount, 0);
+
+        // 3. Detectar Fechas (Meses)
+        const dateBefore = before.fechaRecibido;
+        const dateAfter = after.fechaRecibido;
+
+        // Si no hay cambios en valores ni fechas, salir
+        if (ventaBefore === ventaAfter && ingresoBefore === ingresoAfter && dateBefore === dateAfter) return null;
+
+        const batch = admin.firestore().batch();
+
+        // CASO A: La fecha cambió (Movemos los valores del mes viejo al mes nuevo)
+        if (dateBefore && dateAfter && dateBefore.substring(0, 7) !== dateAfter.substring(0, 7)) {
+            // Restar del mes viejo
+            const oldId = `${new Date(dateBefore).getFullYear()}_${(new Date(dateBefore).getMonth() + 1).toString().padStart(2, '0')}`;
+            const oldRef = admin.firestore().collection("estadisticas_mensuales").doc(oldId);
+            batch.set(oldRef, {
+                totalVentas: admin.firestore.FieldValue.increment(-ventaBefore),
+                totalIngresos: admin.firestore.FieldValue.increment(-ingresoBefore)
+            }, { merge: true });
+
+            // Sumar al mes nuevo
+            const newId = `${new Date(dateAfter).getFullYear()}_${(new Date(dateAfter).getMonth() + 1).toString().padStart(2, '0')}`;
+            const newRef = admin.firestore().collection("estadisticas_mensuales").doc(newId);
+            batch.set(newRef, {
+                totalVentas: admin.firestore.FieldValue.increment(ventaAfter),
+                totalIngresos: admin.firestore.FieldValue.increment(ingresoAfter),
+                ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        } 
+        // CASO B: La fecha es la misma o es creación/borrado (Actualización simple)
+        else {
+            const date = dateAfter || dateBefore;
+            if (!date) return null; // Seguridad
+
+            const docId = `${new Date(date).getFullYear()}_${(new Date(date).getMonth() + 1).toString().padStart(2, '0')}`;
+            const ref = admin.firestore().collection("estadisticas_mensuales").doc(docId);
+
+            batch.set(ref, {
+                totalVentas: admin.firestore.FieldValue.increment(ventaAfter - ventaBefore),
+                totalIngresos: admin.firestore.FieldValue.increment(ingresoAfter - ingresoBefore),
+                ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+
+        return batch.commit();
+    });
+
+/**
+ * Trigger: Escucha cambios en GASTOS para actualizar egresos
+ */
+exports.aggregateGastos = functions.firestore
+    .document("gastos/{gastoId}")
+    .onWrite(async (change, context) => {
+        const before = change.before.exists ? change.before.data() : null;
+        const after = change.after.exists ? change.after.data() : null;
+
+        const expenseBefore = before ? (before.valorTotal || 0) : 0;
+        const expenseAfter = after ? (after.valorTotal || 0) : 0;
+
+        const deltaExpense = expenseAfter - expenseBefore;
+
+        if (deltaExpense === 0) return null;
+
+        const dateStr = after ? after.fecha : before.fecha;
+        return updateMonthlyStats(dateStr, 0, 0, deltaExpense);
+    });
+
+/**
+ * Callable: REGENERAR HISTORIAL (Versión Corregida)
+ */
+exports.rebuildMonthlyStats = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida");
+    
+    // 1. Leer TODAS las colecciones necesarias
+    const remSnap = await admin.firestore().collection("remisiones").get();
+    const gastoSnap = await admin.firestore().collection("gastos").get();
+    
+    const stats = {}; 
+
+    // Helper para inicializar objeto
+    const initMonth = (key) => {
+        if (!stats[key]) stats[key] = { ventas: 0, ingresos: 0, gastos: 0 };
+    };
+
+    // Procesar Remisiones
+    remSnap.forEach(doc => {
+        const r = doc.data();
+        if (!r.fechaRecibido) return;
+        
+        // Obtener KEY del mes (YYYY_MM) basado en fechaRecibido
+        // IMPORTANTE: Usamos UTC o local consistente para evitar desfases de día
+        // Simple string split es más seguro para fechas YYYY-MM-DD
+        const [year, month] = r.fechaRecibido.split('-'); 
+        const key = `${year}_${month}`; 
+        
+        initMonth(key);
+        
+        // LOGICA DE VENTAS: Sumar Valor Total si no es anulada
+        if (r.estado !== 'Anulada') {
+            stats[key].ventas += (r.valorTotal || 0);
+        }
+        
+        // LOGICA DE INGRESOS: Sumar pagos confirmados
+        const pagado = (r.payments || []).filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+        stats[key].ingresos += pagado;
+    });
+
+    // Procesar Gastos
+    gastoSnap.forEach(doc => {
+        const g = doc.data();
+        if (!g.fecha) return;
+        const [year, month] = g.fecha.split('-');
+        const key = `${year}_${month}`;
+        
+        initMonth(key);
+        stats[key].gastos += (g.valorTotal || 0);
+    });
+
+    // Guardar en Firestore (Sobreescribimos para limpiar errores previos)
+    const batch = admin.firestore().batch();
+    Object.keys(stats).forEach(key => {
+        const ref = admin.firestore().collection("estadisticas_mensuales").doc(key);
+        batch.set(ref, {
+            totalVentas: stats[key].ventas,
+            totalIngresos: stats[key].ingresos,
+            totalGastos: stats[key].gastos,
+            ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    await batch.commit();
+    return { success: true, processedMonths: Object.keys(stats).length };
+});
+
+/**
+ * Callable: RECALCULAR SALDOS GLOBALES (Caja y Bancos)
+ * VERSIÓN BLINDADA: Asegura tipos numéricos y consistencia.
+ */
+exports.recalcularSaldosGlobales = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida");
+
+    // 1. Obtener Saldos Iniciales (Configuración base)
+    const configDoc = await admin.firestore().collection('configuracion').doc('saldos_globales').get();
+    const saldosBase = configDoc.exists ? configDoc.data() : { Efectivo: 0, Nequi: 0, Davivienda: 0 };
+
+    // Inicializamos asegurando que sean números
+    let saldos = {
+        saldoEfectivo: Number(saldosBase.Efectivo || 0),
+        saldoNequi: Number(saldosBase.Nequi || 0),
+        saldoDavivienda: Number(saldosBase.Davivienda || 0)
+    };
+
+    // 2. Sumar INGRESOS (Pagos Confirmados en Remisiones)
+    const remSnap = await admin.firestore().collection("remisiones")
+        .select('payments', 'estado') // Solo traemos lo necesario
+        .get();
+    
+    remSnap.forEach(doc => {
+        const r = doc.data();
+        
+        // Solo sumamos si NO está anulada y TIENE pagos
+        if (r.estado !== 'Anulada' && Array.isArray(r.payments)) {
+            r.payments.forEach(p => {
+                if (p.status === 'confirmado') {
+                    const monto = Number(p.amount || 0); // Forzar número
+                    const metodo = (p.method || "").trim(); // Quitar espacios
+
+                    // Comparación flexible
+                    if (metodo === 'Efectivo') saldos.saldoEfectivo += monto;
+                    else if (metodo === 'Nequi') saldos.saldoNequi += monto;
+                    else if (metodo === 'Davivienda') saldos.saldoDavivienda += monto;
+                }
+            });
+        }
+    });
+
+    // 3. Restar EGRESOS (Gastos)
+    const gasSnap = await admin.firestore().collection("gastos")
+        .select('fuentePago', 'valorTotal')
+        .get();
+    
+    gasSnap.forEach(doc => {
+        const g = doc.data();
+        const monto = Number(g.valorTotal || 0); // Forzar número
+        const metodo = (g.fuentePago || "").trim();
+
+        if (metodo === 'Efectivo') saldos.saldoEfectivo -= monto;
+        else if (metodo === 'Nequi') saldos.saldoNequi -= monto;
+        else if (metodo === 'Davivienda') saldos.saldoDavivienda -= monto;
+    });
+
+    // 4. Redondear para evitar decimales extraños (ej: 100.00000001)
+    saldos.saldoEfectivo = Math.round(saldos.saldoEfectivo);
+    saldos.saldoNequi = Math.round(saldos.saldoNequi);
+    saldos.saldoDavivienda = Math.round(saldos.saldoDavivienda);
+
+    // 5. Guardar Resultado Final
+    await admin.firestore().collection("estadisticas").doc("globales").set(saldos);
+
+    return { success: true, saldosCalculados: saldos };
+});
+
+/**
+ * Callable: EXPORTAR DATOS (Optimizado)
+ */
+exports.getDataForExport = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida");
+
+    const { type, startDate, endDate } = data;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // VALIDACIÓN DE SEGURIDAD: Aumentado a 1 año (366 días)
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    
+    // --- CAMBIO AQUÍ ---
+    if (diffDays > 366) {
+        throw new functions.https.HttpsError("invalid-argument", "Por seguridad, el rango máximo es de 1 año.");
+    }
+    // -------------------
+
+    const results = [];
+
+    if (type === 'gastos') {
+        // Solo traemos lo necesario para el Excel, ahorrando transferencia
+        const q = await admin.firestore().collection("gastos")
+            .where("fecha", ">=", startDate)
+            .where("fecha", "<=", endDate)
+            .select("fecha", "proveedorNombre", "numeroFactura", "valorTotal", "fuentePago", "descripcion", "categoria") 
+            .get();
+
+        q.forEach(doc => results.push(doc.data()));
+    } 
+    
+    else if (type === 'remisiones') {
+        // No traemos 'items' ni 'historial', solo totales y encabezados
+        const q = await admin.firestore().collection("remisiones")
+            .where("fechaRecibido", ">=", startDate)
+            .where("fechaRecibido", "<=", endDate)
+            .where("estado", "!=", "Anulada")
+            .select("numeroRemision", "fechaRecibido", "clienteNombre", "estado", "subtotal", "valorIVA", "valorTotal", "formaPago", "facturado", "numeroFactura")
+            .get();
+
+        q.forEach(doc => results.push(doc.data()));
+    }
+
+    else if (type === 'pagos') {
+        // Para pagos, necesitamos leer las remisiones, pero solo traemos el array de pagos y cliente
+        const q = await admin.firestore().collection("remisiones")
+            .where("fechaRecibido", ">=", startDate) // Aprox, luego filtramos exacto en memoria
+            .where("fechaRecibido", "<=", endDate) // Aprox
+            .select("numeroRemision", "clienteNombre", "payments")
+            .get();
+
+        q.forEach(doc => {
+            const r = doc.data();
+            if (r.payments && Array.isArray(r.payments)) {
+                r.payments.forEach(p => {
+                    // Doble verificación de fecha del pago específico
+                    if (p.date >= startDate && p.date <= endDate) {
+                        results.push({
+                            fecha: p.date,
+                            remision: r.numeroRemision,
+                            cliente: r.clienteNombre,
+                            metodo: p.method,
+                            monto: p.amount,
+                            estado: p.status,
+                            registradoPor: p.registeredBy // ID del usuario (habría que mapear nombre en cliente si se desea)
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    return { data: results, count: results.length };
+});
+
+// ==========================================
+//              EXPORTS FINALES (CORREGIDO)
+// ==========================================
+
+// Usamos el objeto importado al inicio
 exports.whatsappWebhook = waWebhook.whatsappWebhook;
 exports.sendWhatsAppMessage = waWebhook.sendWhatsAppMessage;
-

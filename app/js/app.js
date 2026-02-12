@@ -241,7 +241,86 @@ function loadViewTemplates() {
     document.getElementById('view-colores').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Añadir Color</h2><form id="add-color-form" class="space-y-4"><input type="text" id="nuevo-color-nombre" placeholder="Nombre del Color (ej. RAL 7016)" class="w-full p-3 border border-gray-300 rounded-lg" required><button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Catálogo de Colores</h2><input type="search" id="search-colores" placeholder="Buscar..." class="p-2 border rounded-lg"></div><div id="colores-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-gastos').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto"><div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4">Nuevo Gasto</h2><form id="add-gasto-form" class="space-y-4"><div><label for="gasto-fecha">Fecha</label><input type="date" id="gasto-fecha" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div><div class="relative"><label for="proveedor-search-input">Proveedor</label><input type="text" id="proveedor-search-input" autocomplete="off" placeholder="Buscar..." class="w-full p-3 border border-gray-300 rounded-lg mt-1" required><input type="hidden" id="proveedor-id-hidden" name="proveedorId"><div id="proveedor-search-results" class="search-results hidden"></div></div><input type="text" id="gasto-factura" placeholder="N° de Factura (Opcional)" class="w-full p-3 border border-gray-300 rounded-lg"><input type="text" id="gasto-valor-total" inputmode="numeric" placeholder="Valor Total" class="w-full p-3 border border-gray-300 rounded-lg" required><label class="flex items-center space-x-2"><input type="checkbox" id="gasto-iva" class="h-4 w-4 rounded border-gray-300"><span>IVA del 19% incluido</span></label><div><label for="gasto-fuente">Fuente del Pago</label><select id="gasto-fuente" class="w-full p-3 border border-gray-300 rounded-lg mt-1 bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div><button type="submit" class="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-orange-700">Registrar</button></form></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md"><div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4"><h2 class="text-xl font-semibold flex-shrink-0">Historial de Gastos</h2><div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end"><select id="filter-gastos-month" class="p-2 border rounded-lg bg-white"></select><select id="filter-gastos-year" class="p-2 border rounded-lg bg-white"></select><input type="search" id="search-gastos" placeholder="Buscar..." class="p-2 border rounded-lg flex-grow sm:flex-grow-0 sm:w-40"></div></div><div id="gastos-list" class="space-y-3"></div></div></div>`;
     document.getElementById('view-empleados').innerHTML = `<div class="bg-white p-6 rounded-xl shadow-md max-w-4xl mx-auto"><h2 class="text-xl font-semibold mb-4">Gestión de Empleados</h2><div id="empleados-list" class="space-y-3"></div></div>`;
+    document.getElementById('view-mensajes').innerHTML = `
+    <div class="flex h-[calc(100vh-140px)] bg-white rounded-xl shadow-lg overflow-hidden max-w-7xl mx-auto">
+        <div id="wa-contacts-container" class="w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 flex flex-col bg-gray-50">
+            <div class="p-4 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="font-bold text-gray-700">Chats Activos</h2>
+            </div>
+            <div id="wa-contacts-list" class="flex-grow overflow-y-auto custom-scrollbar">
+                <p class="text-center text-gray-400 text-xs py-4">Cargando chats...</p>
+            </div>
+        </div>
 
+        <div id="wa-chat-area" class="hidden md:flex flex-col w-full md:w-2/3 lg:w-2/4 bg-[#e5ddd5]">
+            <div id="wa-chat-active" class="hidden flex-col h-full">
+                <div class="p-3 bg-gray-100 border-b flex justify-between items-center shadow-sm z-10">
+                    <div class="flex items-center gap-3">
+                        <button id="wa-back-btn" class="md:hidden text-gray-600"><i class="fas fa-arrow-left"></i></button>
+                        <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-white font-bold" id="active-chat-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div>
+                            <h3 id="active-chat-name" class="font-bold text-gray-800 text-sm">Selecciona un chat</h3>
+                            <div id="wa-window-timer" class="text-xs"></div>
+                        </div>
+                    </div>
+                    <button id="wa-header-info-trigger" class="lg:hidden text-gray-600 p-2"><i class="fas fa-info-circle"></i></button>
+                </div>
+
+                <div id="whatsapp-messages-list" class="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat"></div>
+
+                <div class="p-3 bg-gray-100 flex gap-2 items-center">
+                    <input type="text" id="wa-reply-input" placeholder="Escribe un mensaje..." class="flex-grow p-3 rounded-full border border-gray-300 focus:outline-none focus:border-green-500 shadow-sm">
+                    <button id="wa-send-btn" class="bg-green-600 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-green-700 shadow-md">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="wa-no-chat-selected" class="flex flex-col items-center justify-center h-full text-gray-500">
+                <div class="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-comments text-4xl text-gray-400"></i>
+                </div>
+                <p>Selecciona una conversación para comenzar</p>
+            </div>
+        </div>
+
+        <div id="wa-client-sidebar" class="hidden lg:block w-1/4 bg-white border-l border-gray-200 p-4 overflow-y-auto relative transition-transform transform translate-x-full lg:translate-x-0 fixed lg:static top-0 right-0 h-full z-20 shadow-xl lg:shadow-none">
+            <button id="close-info-mobile" class="absolute top-4 right-4 text-gray-500 lg:hidden"><i class="fas fa-times"></i></button>
+            
+            <h3 class="font-bold text-gray-800 mb-6 border-b pb-2">Información del Cliente</h3>
+            
+            <div class="space-y-6">
+                <div class="bg-indigo-50 p-4 rounded-xl text-center">
+                    <p class="text-xs text-indigo-500 font-bold uppercase tracking-wider mb-1">Compras (Mes Actual)</p>
+                    <p id="wa-side-total-compras" class="text-2xl font-black text-indigo-700">$ 0</p>
+                </div>
+
+                <div class="bg-red-50 p-4 rounded-xl text-center">
+                    <p class="text-xs text-red-500 font-bold uppercase tracking-wider mb-1">Deuda Total Vencida</p>
+                    <p id="wa-side-total-deuda" class="text-2xl font-black text-red-600">$ 0</p>
+                </div>
+
+                <div>
+                    <p class="text-xs font-bold text-gray-400 uppercase mb-3">Deudas Pendientes</p>
+                    <div id="wa-side-remisiones-list" class="space-y-2 max-h-60 overflow-y-auto">
+                        <p class="text-center text-xs text-gray-400 italic">Selecciona un cliente</p>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t space-y-3">
+                    <button id="wa-side-report-payment" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl text-sm shadow-md hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                        <i class="fas fa-money-bill-wave"></i> Registrar Abono
+                    </button>
+                    <button id="wa-side-send-statement" class="w-full bg-white border-2 border-green-500 text-green-600 font-bold py-3 rounded-xl text-sm hover:bg-green-50 transition flex items-center justify-center gap-2">
+                        <i class="fab fa-whatsapp"></i> Enviar Estado de Cuenta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+`;
     // NOTA: Se eliminó el bloque de 'activeListeners.push' que causaba la doble lectura de Firestore.
 }
 
@@ -471,7 +550,34 @@ function setupEventListeners() {
     document.getElementById('search-remisiones').addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         const term = e.target.value.trim();
-        searchTimeout = setTimeout(() => searchRemisionesGlobal(term), 500);
+        
+        // Si borra todo, recarga inmediato
+        if(term === "") {
+             searchRemisionesGlobal("");
+             return;
+        }
+
+        // Espera un poco antes de buscar en el servidor
+        searchTimeout = setTimeout(() => {
+            searchRemisionesGlobal(term);
+        }, 800); // <--- Aumentado a 800ms para mejor rendimiento
+    });
+
+    // --- BUSCADOR GASTOS (CORREGIDO) ---
+    let searchGastosTimeout;
+    document.getElementById('search-gastos').addEventListener('input', (e) => {
+        clearTimeout(searchGastosTimeout);
+        const term = e.target.value.trim();
+
+        if (term === "") {
+            searchGastosGlobal(""); // Restaurar lista
+            return;
+        }
+
+        // Esperar 800ms antes de ir al servidor
+        searchGastosTimeout = setTimeout(() => {
+            searchGastosGlobal(term);
+        }, 800);
     });
 
     document.getElementById('search-clientes').addEventListener('input', renderClientes);
@@ -651,9 +757,42 @@ function renderColores() {
 }
 function loadItems() {
     const q = query(collection(db, "items"), orderBy("referencia", "asc"));
-    return onSnapshot(q, (snapshot) => {
-        allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderItems();
+    
+    return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+        let huboCambios = false;
+
+        if (allItems.length === 0 && snapshot.docs.length > 0) {
+            allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            huboCambios = true;
+        } else {
+            snapshot.docChanges().forEach((change) => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+
+                if (change.type === "added") {
+                    if (!allItems.find(i => i.id === data.id)) {
+                        allItems.push(data);
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "modified") {
+                    const index = allItems.findIndex(i => i.id === data.id);
+                    if (index !== -1) {
+                        allItems[index] = data;
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "removed") {
+                    allItems = allItems.filter(i => i.id !== data.id);
+                    huboCambios = true;
+                }
+            });
+        }
+
+        if (huboCambios) {
+            // Ordenamos por referencia
+            allItems.sort((a, b) => (a.referencia || "").localeCompare(b.referencia || ""));
+            renderItems();
+        }
     });
 }
 function renderItems() {
@@ -674,9 +813,45 @@ function renderItems() {
 // --- FUNCIONES DE CARGA DE DATOS (ACTUALIZADAS) ---
 function loadClientes() {
     const q = query(collection(db, "clientes"), orderBy("nombre", "asc"));
-    return onSnapshot(q, (snapshot) => {
-        allClientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderClientes();
+    
+    return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+        let huboCambios = false;
+
+        // Si es la primera carga y el array está vacío, llenamos masivamente (más rápido)
+        if (allClientes.length === 0 && snapshot.docs.length > 0) {
+            allClientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            huboCambios = true;
+        } else {
+            // Para actualizaciones posteriores, procesamos solo los cambios (ahorra CPU)
+            snapshot.docChanges().forEach((change) => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+
+                if (change.type === "added") {
+                    if (!allClientes.find(c => c.id === data.id)) {
+                        allClientes.push(data);
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "modified") {
+                    const index = allClientes.findIndex(c => c.id === data.id);
+                    if (index !== -1) {
+                        allClientes[index] = data;
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "removed") {
+                    allClientes = allClientes.filter(c => c.id !== data.id);
+                    huboCambios = true;
+                }
+            });
+        }
+
+        // Solo renderizamos si realmente hubo cambios en los datos
+        if (huboCambios) {
+            // Ordenamos alfabéticamente (JavaScript sort) para mantener la lista ordenada
+            allClientes.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+            renderClientes();
+        }
     });
 }
 
@@ -760,9 +935,42 @@ function renderClientes() {
 
 function loadProveedores() {
     const q = query(collection(db, "proveedores"), orderBy("nombre", "asc"));
-    return onSnapshot(q, (snapshot) => {
-        allProveedores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderProveedores();
+    
+    return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+        let huboCambios = false;
+
+        if (allProveedores.length === 0 && snapshot.docs.length > 0) {
+            allProveedores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            huboCambios = true;
+        } else {
+            snapshot.docChanges().forEach((change) => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+
+                if (change.type === "added") {
+                    if (!allProveedores.find(p => p.id === data.id)) {
+                        allProveedores.push(data);
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "modified") {
+                    const index = allProveedores.findIndex(p => p.id === data.id);
+                    if (index !== -1) {
+                        allProveedores[index] = data;
+                        huboCambios = true;
+                    }
+                }
+                if (change.type === "removed") {
+                    allProveedores = allProveedores.filter(p => p.id !== data.id);
+                    huboCambios = true;
+                }
+            });
+        }
+
+        if (huboCambios) {
+            // Ordenamos por nombre
+            allProveedores.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+            renderProveedores();
+        }
     });
 }
 
@@ -796,25 +1004,21 @@ function renderProveedores() {
 let remisionesSnapUnsubscribe = null;
 
 
+/**
+ * Carga las remisiones priorizando el caché local y escuchando cambios (deltas) del servidor.
+ */
 async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
     if (cargandoMasRemisiones) return;
 
     const remisionesRef = collection(db, "remisiones");
     let q;
 
-    // 1. Si NO es paginación ("Cargar más"), limpiamos todo y apagamos el escucha anterior
-    if (!isMore) {
-        if (remisionesSnapUnsubscribe) remisionesSnapUnsubscribe();
-        allRemisiones = [];
-        lastRemisionDoc = null;
-        const listEl = document.getElementById('remisiones-list');
-        if (listEl) listEl.innerHTML = '<p class="text-center py-4 text-xs text-gray-500">Sincronizando historial...</p>';
-    }
-
-    // 2. Construcción de la Query (Tu lógica de filtros se mantiene)
+    // 1. Configuración de la Query
     if (year !== 'all' && month !== 'all') {
+        // Ajuste de fechas para cubrir el mes completo
         const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
         const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
+        
         q = query(remisionesRef,
             where("fechaRecibido", ">=", start),
             where("fechaRecibido", "<=", end),
@@ -826,106 +1030,200 @@ async function loadRemisiones(month = 'all', year = 'all', isMore = false) {
         q = query(remisionesRef, orderBy("numeroRemision", "desc"), limit(50));
     }
 
-    // 3. Manejo de Paginación
+    // 2. Manejo de Paginación (Cargar más) - Esto sigue consumiendo lectura normal
     if (isMore && lastRemisionDoc) {
         cargandoMasRemisiones = true;
+        // Mostramos indicador visual temporal
+        const btnLoadMore = document.getElementById('load-more-btn');
+        if(btnLoadMore) btnLoadMore.textContent = "Cargando del servidor...";
+
         q = query(q, startAfter(lastRemisionDoc));
 
-        // Para "Cargar más" usamos getDocs (una sola vez) y lo añadimos al array
         try {
-            const snapshot = await getDocs(q);
+            const snapshot = await getDocs(q); // Paginación siempre va al servidor/caché bajo demanda
             if (snapshot.empty) {
                 showTemporaryMessage("No hay más registros");
                 cargandoMasRemisiones = false;
+                if(btnLoadMore) btnLoadMore.textContent = "No hay más datos";
                 return;
             }
+            
             lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
             const nuevas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Unimos evitando duplicados
+            // Merge inteligente: solo agregamos si no existe
             nuevas.forEach(n => {
                 if (!allRemisiones.find(r => r.id === n.id)) allRemisiones.push(n);
             });
 
             renderRemisiones();
             cargandoMasRemisiones = false;
-        } catch (e) { console.error(e); cargandoMasRemisiones = false; }
+        } catch (e) { 
+            console.error(e); 
+            cargandoMasRemisiones = false; 
+            showTemporaryMessage("Error al cargar más remisiones", "error");
+        }
 
     } else {
-        // 4. ESCUCHA EN TIEMPO REAL (Para la carga inicial y actualizaciones)
-        remisionesSnapUnsubscribe = onSnapshot(q, (snapshot) => {
+        // 3. CARGA INICIAL / FILTROS (OPTIMIZADA)
+        
+        // Si cambiamos de filtro, ahí sí limpiamos para evitar mezclar datos
+        // Pero si es la carga inicial, mantenemos lo que haya para evitar parpadeo
+        if (remisionesSnapUnsubscribe) {
+            remisionesSnapUnsubscribe();
+            allRemisiones = []; // Limpiamos solo si reiniciamos el listener (cambio de filtro)
+            lastRemisionDoc = null;
+            const listEl = document.getElementById('remisiones-list');
+            if (listEl) listEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                    <i class="fas fa-circle-notch animate-spin text-2xl mb-2"></i>
+                    <p class="text-xs">Cargando historial...</p>
+                </div>`;
+        }
+
+        // ACTIVAMOS includeMetadataChanges para saber si es Caché o Servidor
+        remisionesSnapUnsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+            
+            // Detectar origen de los datos
+            const source = snapshot.metadata.fromCache ? "local" : "server";
+            // console.log("Datos cargados desde:", source); // Para depuración
+
+            // Mostrar estado de sincronización en la UI (Opcional, pero útil)
+            const headerTitle = document.querySelector('#remisiones-list-container h2');
+            if (headerTitle) {
+                if (snapshot.metadata.fromCache) {
+                    headerTitle.innerHTML = `Historial de Remisiones <span class="text-xs font-normal text-orange-500 ml-2"><i class="fas fa-history"></i> (Offline/Caché)</span>`;
+                } else {
+                    headerTitle.innerHTML = `Historial de Remisiones <span class="text-xs font-normal text-green-600 ml-2"><i class="fas fa-check-circle"></i> (Sincronizado)</span>`;
+                }
+            }
+
+            // Procesar cambios (Deltas)
+            let huboCambios = false;
+
             snapshot.docChanges().forEach((change) => {
                 const data = { id: change.doc.id, ...change.doc.data() };
 
                 if (change.type === "added") {
-                    // Solo añadimos si no existe ya (por si la paginación se cruza)
-                    const index = allRemisiones.findIndex(r => r.id === data.id);
-                    if (index === -1) allRemisiones.push(data);
+                    // Solo añadir si no existe (protección contra duplicados)
+                    const exists = allRemisiones.some(r => r.id === data.id);
+                    if (!exists) {
+                        allRemisiones.push(data);
+                        huboCambios = true;
+                    }
                 }
                 if (change.type === "modified") {
-                    // AQUÍ ESTÁ LA MAGIA: Si el pago se aprueba, Firestore avisa, 
-                    // buscamos la remisión en el array y la reemplazamos.
                     const index = allRemisiones.findIndex(r => r.id === data.id);
-                    if (index !== -1) allRemisiones[index] = data;
+                    if (index !== -1) {
+                        allRemisiones[index] = data;
+                        huboCambios = true;
+                    }
                 }
                 if (change.type === "removed") {
                     allRemisiones = allRemisiones.filter(r => r.id !== data.id);
+                    huboCambios = true;
                 }
             });
 
-            // Guardamos el último para la siguiente página
+            // Guardamos el último doc para la paginación
             if (snapshot.docs.length > 0) {
                 lastRemisionDoc = snapshot.docs[snapshot.docs.length - 1];
             }
 
-            renderRemisiones();
+            // Renderizamos solo si hubo cambios reales o si es la primera carga del snapshot
+            // (snapshot.docChanges() puede estar vacío si solo cambió la metadata de 'cache' a 'server')
+            if (huboCambios || snapshot.docChanges().length === 0) {
+                renderRemisiones();
+            }
+
         }, (error) => {
             console.error("Error en el listener de remisiones:", error);
+            const listEl = document.getElementById('remisiones-list');
+            if(listEl) listEl.innerHTML = `<p class="text-red-500 text-center py-4">Error de conexión o permisos.</p>`;
         });
     }
 }
 
 async function searchRemisionesGlobal(searchTerm) {
     const term = (searchTerm || "").trim().toLowerCase();
+    const listEl = document.getElementById('remisiones-list');
 
+    // 1. Si el buscador está vacío, volvemos a la vista normal (paginada)
     if (!term) {
-        loadRemisiones();
+        // Restauramos la carga normal
+        lastRemisionDoc = null; 
+        loadRemisiones(); 
         return;
     }
 
-    const remisionesRef = collection(db, "remisiones");
-
-    // 1. Intentar búsqueda por número de remisión (si es numérico)
-    if (!isNaN(term) && !term.includes(" ")) {
-        const qNum = query(remisionesRef, where("numeroRemision", "==", parseInt(term)));
-        const snap = await getDocs(qNum);
-        if (!snap.empty) {
-            allRemisiones = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            renderRemisiones();
-            return;
-        }
+    // Mostrar indicador de carga mientras buscamos
+    if (listEl) {
+        listEl.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8 text-gray-500">
+                <i class="fas fa-search animate-pulse text-2xl mb-2"></i>
+                <p class="text-xs">Buscando en todo el historial...</p>
+            </div>`;
     }
 
-    // 2. Búsqueda por coincidencia de texto (Case-Insensitive local)
-    // Para que "Exito" funcione en "Vidrios Exito", necesitamos filtrar en el cliente
-    // Pero para no gastar lecturas, limitamos la búsqueda a los documentos ya cargados 
-    // o traemos los últimos 200 para buscar dentro de ellos.
+    const remisionesRef = collection(db, "remisiones");
+    let resultadosFinales = [];
 
-    const qText = query(remisionesRef, orderBy("numeroRemision", "desc"), limit(200));
     try {
-        const snapshot = await getDocs(qText);
-        const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // ESTRATEGIA A: Búsqueda por Número de Remisión (Exacta)
+        if (!isNaN(term) && term.length > 0) {
+            // Convertimos a número porque en tu DB 'numeroRemision' es numérico
+            const qNum = query(remisionesRef, where("numeroRemision", "==", parseInt(term)));
+            const snap = await getDocs(qNum);
+            resultadosFinales = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } 
+        // ESTRATEGIA B: Búsqueda por Nombre de Cliente (Inteligente)
+        else {
+            // 1. Buscamos coincidencias en tu array local de clientes (que ya está cargado)
+            const clientesCoincidentes = allClientes.filter(c => 
+                (c.nombre || "").toLowerCase().includes(term)
+            );
 
-        // Filtrado local por coincidencia en cualquier parte del nombre
-        allRemisiones = results.filter(rem => {
-            const nombreCliente = (rem.clienteNombre || "").toLowerCase();
-            const numRem = (rem.numeroRemision || "").toString();
-            return nombreCliente.includes(term) || numRem.includes(term);
-        });
+            if (clientesCoincidentes.length > 0) {
+                // 2. Extraemos los IDs de los clientes encontrados (Firestore limita 'in' a 10 valores, tomamos los 10 primeros)
+                const idsClientes = clientesCoincidentes.map(c => c.id).slice(0, 10);
 
-        renderRemisiones();
+                // 3. Consultamos al servidor TODAS las remisiones de esos clientes
+                // Esto trae el historial completo, no solo las últimas 17
+                const qCliente = query(
+                    remisionesRef,
+                    where("idCliente", "in", idsClientes),
+                    orderBy("numeroRemision", "desc") // Ordenamos de la más reciente a la más antigua
+                );
+
+                const snap = await getDocs(qCliente);
+                resultadosFinales = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            }
+        }
+
+        // 4. Renderizar Resultados
+        if (resultadosFinales.length > 0) {
+            // Sobreescribimos temporalmente el array global para que el renderizado funcione
+            allRemisiones = resultadosFinales;
+            renderRemisiones();
+            
+            // Añadimos un aviso visual de que son resultados de búsqueda
+            if (listEl) {
+                const infoDiv = document.createElement('div');
+                infoDiv.className = "bg-blue-50 text-blue-700 p-2 text-xs text-center rounded-lg mb-2";
+                infoDiv.innerHTML = `Resultados encontrados: <strong>${resultadosFinales.length}</strong>`;
+                listEl.prepend(infoDiv);
+            }
+        } else {
+            if (listEl) listEl.innerHTML = `
+                <div class="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed">
+                    <p class="text-gray-500 font-medium">No se encontraron remisiones.</p>
+                    <p class="text-xs text-gray-400 mt-1">Intenta con el número exacto o el nombre del cliente.</p>
+                </div>`;
+        }
+
     } catch (error) {
-        console.error("Error en búsqueda:", error);
+        console.error("Error en búsqueda profunda:", error);
+        if (listEl) listEl.innerHTML = `<p class="text-red-500 text-center py-4">Ocurrió un error al buscar.</p>`;
     }
 }
 
@@ -1136,16 +1434,7 @@ async function loadGastos(month = 'all', year = 'all', isMore = false) {
     const gastosRef = collection(db, "gastos");
     let q;
 
-    // 1. Limpiar escucha previo si no es paginación
-    if (!isMore) {
-        if (gastosSnapUnsubscribe) gastosSnapUnsubscribe();
-        allGastos = [];
-        lastGastoDoc = null;
-        const listEl = document.getElementById('gastos-list');
-        if (listEl) listEl.innerHTML = '<p class="text-center py-4 text-xs text-gray-500">Sincronizando gastos...</p>';
-    }
-
-    // 2. Construcción de Query con filtros
+    // 1. Configuración de la Query
     if (year !== 'all' && month !== 'all') {
         const start = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-01`;
         const end = `${year}-${(parseInt(month) + 1).toString().padStart(2, '0')}-31`;
@@ -1154,21 +1443,24 @@ async function loadGastos(month = 'all', year = 'all', isMore = false) {
         q = query(gastosRef, orderBy("fecha", "desc"), limit(50));
     }
 
-    // 3. Lógica para "Cargar más" (Paginación)
+    // 2. Lógica para "Cargar más" (Paginación - Servidor)
     if (isMore && lastGastoDoc) {
         cargandoMasGastos = true;
+        const btnLoad = document.querySelector('#gastos-list button');
+        if(btnLoad) btnLoad.textContent = "Cargando...";
+
         q = query(q, startAfter(lastGastoDoc));
         try {
             const snapshot = await getDocs(q);
             if (snapshot.empty) {
                 showTemporaryMessage("No hay más gastos");
                 cargandoMasGastos = false;
+                if(btnLoad) btnLoad.textContent = "Fin del historial";
                 return;
             }
             lastGastoDoc = snapshot.docs[snapshot.docs.length - 1];
             const nuevos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Unir evitando duplicados
             nuevas.forEach(n => {
                 if (!allGastos.find(g => g.id === n.id)) allGastos.push(n);
             });
@@ -1178,32 +1470,129 @@ async function loadGastos(month = 'all', year = 'all', isMore = false) {
         } catch (e) { console.error(e); cargandoMasGastos = false; }
 
     } else {
-        // 4. ESCUCHA EN TIEMPO REAL para la carga inicial y filtros
-        gastosSnapUnsubscribe = onSnapshot(q, (snapshot) => {
+        // 3. ESCUCHA EN TIEMPO REAL (Con Caché Inteligente)
+        
+        // Solo limpiamos si cambiamos filtros explícitamente, para evitar parpadeos en carga inicial
+        if (gastosSnapUnsubscribe) {
+            gastosSnapUnsubscribe();
+            allGastos = []; 
+            lastGastoDoc = null;
+            const listEl = document.getElementById('gastos-list');
+            if (listEl) listEl.innerHTML = `<div class="text-center py-8"><i class="fas fa-circle-notch animate-spin text-gray-400"></i></div>`;
+        }
+
+        gastosSnapUnsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+            
+            // Indicador de origen (Caché vs Servidor)
+            const headerTitle = document.querySelector('#view-gastos h2');
+            if (headerTitle) {
+                if (snapshot.metadata.fromCache) {
+                    headerTitle.innerHTML = `Historial de Gastos <span class="text-xs font-normal text-orange-500 ml-2"><i class="fas fa-history"></i> (Offline)</span>`;
+                } else {
+                    headerTitle.innerHTML = `Historial de Gastos <span class="text-xs font-normal text-green-600 ml-2"><i class="fas fa-check-circle"></i> (Al día)</span>`;
+                }
+            }
+
+            let huboCambios = false;
             snapshot.docChanges().forEach((change) => {
                 const data = { id: change.doc.id, ...change.doc.data() };
-
                 if (change.type === "added") {
-                    const index = allGastos.findIndex(g => g.id === data.id);
-                    if (index === -1) allGastos.push(data);
+                    const exists = allGastos.some(g => g.id === data.id);
+                    if (!exists) { allGastos.push(data); huboCambios = true; }
                 }
                 if (change.type === "modified") {
                     const index = allGastos.findIndex(g => g.id === data.id);
-                    if (index !== -1) allGastos[index] = data;
+                    if(index !== -1) { allGastos[index] = data; huboCambios = true; }
                 }
                 if (change.type === "removed") {
                     allGastos = allGastos.filter(g => g.id !== data.id);
+                    huboCambios = true;
                 }
             });
 
             if (snapshot.docs.length > 0) {
                 lastGastoDoc = snapshot.docs[snapshot.docs.length - 1];
             }
-            renderGastos();
+            
+            if (huboCambios || snapshot.docChanges().length === 0) {
+                renderGastos();
+            }
         });
     }
 }
 
+async function searchGastosGlobal(searchTerm) {
+    const term = (searchTerm || "").trim().toLowerCase();
+    const listEl = document.getElementById('gastos-list');
+
+    if (!term) {
+        lastGastoDoc = null;
+        loadGastos(); // Volver a carga normal
+        return;
+    }
+
+    if (listEl) listEl.innerHTML = `<div class="text-center py-8 text-gray-500"><i class="fas fa-search animate-pulse"></i> Buscando...</div>`;
+
+    const gastosRef = collection(db, "gastos");
+    let resultados = [];
+
+    try {
+        // ESTRATEGIA 1: Búsqueda por número de factura (Exacta)
+        // Nota: Asumimos que 'numeroFactura' se guarda como string en la DB
+        const qFactura = query(gastosRef, where("numeroFactura", "==", searchTerm)); // Sin toLowerCase porque suele ser exacto
+        const snapFactura = await getDocs(qFactura);
+        resultados = snapFactura.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // ESTRATEGIA 2: Si no hay factura exacta, buscar por Nombre de Proveedor
+        if (resultados.length === 0) {
+            // 1. Buscamos coincidencias en la lista local de proveedores
+            const proveedoresCoincidentes = allProveedores.filter(p => 
+                (p.nombre || "").toLowerCase().includes(term)
+            );
+
+            if (proveedoresCoincidentes.length > 0) {
+                // 2. Sacamos los IDs (máximo 10 para respetar límites de Firestore)
+                const idsProveedores = proveedoresCoincidentes.map(p => p.id).slice(0, 10);
+
+                // 3. Consulta profunda al servidor
+                const qProv = query(
+                    gastosRef,
+                    where("proveedorId", "in", idsProveedores),
+                    orderBy("fecha", "desc")
+                );
+                
+                const snapProv = await getDocs(qProv);
+                const gastosProv = snapProv.docs.map(d => ({ id: d.id, ...d.data() }));
+                
+                // Unimos resultados
+                resultados = [...resultados, ...gastosProv];
+            }
+        }
+
+        // Renderizado
+        if (resultados.length > 0) {
+            allGastos = resultados; // Sobreescribimos temporalmente para renderizar
+            renderGastos();
+            
+            if (listEl) {
+                const info = document.createElement('div');
+                info.className = "bg-orange-50 text-orange-800 p-2 text-xs text-center rounded-lg mb-2";
+                info.innerHTML = `Resultados de búsqueda: <strong>${resultados.length}</strong>`;
+                listEl.prepend(info);
+            }
+        } else {
+            if (listEl) listEl.innerHTML = `
+                <div class="text-center py-8 bg-gray-50 border-2 border-dashed rounded-lg">
+                    <p class="text-gray-500">No se encontraron gastos.</p>
+                    <p class="text-xs text-gray-400">Prueba con el número de factura exacto o el nombre del proveedor.</p>
+                </div>`;
+        }
+
+    } catch (error) {
+        console.error("Error buscando gastos:", error);
+        if (listEl) listEl.innerHTML = `<p class="text-center text-red-500">Error en la búsqueda.</p>`;
+    }
+}
 
 function renderGastos() {
     const gastosListEl = document.getElementById('gastos-list');
@@ -1528,6 +1917,7 @@ async function handleRemisionSubmit(e) {
             subtotal: subtotalGeneral,
             valorIVA: valorIVA,
             valorTotal: total,
+            saldoPendiente: (formaDePago !== 'Pendiente') ? 0 : total,
             creadoPor: currentUser.uid,
             timestamp: new Date(),
             pdfUrl: null,
@@ -1862,12 +2252,38 @@ function showPdfModal(pdfUrl, title) {
 }
 // REEMPLAZA ESTA FUNCIÓN COMPLETA EN app/js/app.js
 async function showPaymentModal(remisionOriginal) {
-    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    // 1. Lógica de "Modal sobre Modal"
+    const mainModal = document.getElementById('modal');
+    let targetModal, targetContent;
+    let isSecondary = false;
+
+    // Si el modal principal ya está abierto (ej. lista de pendientes), usamos un secundario
+    if (!mainModal.classList.contains('hidden')) {
+        isSecondary = true;
+        // Buscamos o creamos el modal nivel 2
+        targetModal = document.getElementById('modal-level-2');
+        if (!targetModal) {
+            targetModal = document.createElement('div');
+            targetModal.id = 'modal-level-2';
+            // Z-60 para estar encima, flex center para centrarlo
+            targetModal.className = "fixed inset-0 bg-black bg-opacity-60 z-[60] hidden flex items-center justify-center p-4"; 
+            targetModal.innerHTML = `<div id="modal-content-wrapper-2" class="w-full flex justify-center"></div>`;
+            document.body.appendChild(targetModal);
+        }
+        targetContent = document.getElementById('modal-content-wrapper-2');
+    } else {
+        // Comportamiento normal
+        targetModal = mainModal;
+        targetContent = document.getElementById('modal-content-wrapper');
+    }
+
     const remRef = doc(db, "remisiones", remisionOriginal.id);
 
-    if (paymentModalUnsubscribe) paymentModalUnsubscribe();
+    // Limpiamos listener previo si es el modal principal
+    if (!isSecondary && paymentModalUnsubscribe) paymentModalUnsubscribe();
 
-    paymentModalUnsubscribe = onSnapshot(remRef, (docSnap) => {
+    // Variable local para no afectar al modal de abajo
+    let localUnsubscribe = onSnapshot(remRef, (docSnap) => {
         if (!docSnap.exists()) return;
 
         const remision = { id: docSnap.id, ...docSnap.data() };
@@ -1878,11 +2294,9 @@ async function showPaymentModal(remisionOriginal) {
         const saldoPendiente = remision.valorTotal - totalConfirmado;
         const saldoRealPendiente = remision.valorTotal - totalConfirmado - totalPorConfirmar;
 
-        // --- GENERACIÓN DE HTML ---
+        // --- HTML DE PAGOS ---
         const paymentsHTML = (remision.payments || []).map((p, index) => {
-            let statusBadge = '';
-            let actionButtons = '';
-
+            let statusBadge = '', actionButtons = '';
             if (p.status === 'por confirmar') {
                 statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
                 if (currentUserData.role === 'admin') {
@@ -1901,105 +2315,104 @@ async function showPaymentModal(remisionOriginal) {
             } else {
                 statusBadge = `<span class="text-xs font-semibold bg-green-200 text-green-800 px-2 py-1 rounded-full">Confirmado</span>`;
             }
-
-            return `<tr class="border-b">
-                <td class="p-2">${p.date}</td>
-                <td class="p-2">${p.method}</td>
-                <td class="p-2 text-right">${formatCurrency(p.amount)}</td>
-                <td class="p-2">${statusBadge}</td>
-                <td class="p-2">${actionButtons}</td>
-            </tr>`;
+            return `<tr class="border-b"><td class="p-2">${p.date}</td><td class="p-2">${p.method}</td><td class="p-2 text-right">${formatCurrency(p.amount)}</td><td class="p-2">${statusBadge}</td><td class="p-2">${actionButtons}</td></tr>`;
         }).join('');
 
-        modalContentWrapper.innerHTML = `
-        <div class="bg-white rounded-lg p-6 shadow-xl max-w-3xl w-full mx-auto text-left flex flex-col max-h-[85vh]">
+        // --- CORRECCIÓN DE FORMATO AQUÍ ---
+        // Agregué 'max-w-3xl' y ajusté las clases del contenedor principal
+        targetContent.innerHTML = `
+        <div class="bg-white rounded-xl p-6 shadow-2xl w-full max-w-3xl mx-auto text-left flex flex-col max-h-[85vh] border border-gray-200">
             <div class="flex-shrink-0">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-semibold">Gestionar Pagos (Remisión N° ${remision.numeroRemision})</h2>
-                    <button id="close-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-xl font-bold text-gray-800">Gestionar Pagos <span class="text-indigo-600">(Remisión N° ${remision.numeroRemision})</span></h2>
+                    <button id="close-payment-modal-${isSecondary ? '2' : '1'}" class="text-gray-400 hover:text-red-500 text-3xl transition font-bold leading-none">&times;</button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 text-center">
-                    <div class="bg-blue-50 p-3 rounded-lg"><div class="text-sm text-blue-800 font-bold">TOTAL</div><div class="font-bold text-lg">${formatCurrency(remision.valorTotal)}</div></div>
-                    <div class="bg-green-50 p-3 rounded-lg"><div class="text-sm text-green-800 font-bold">PAGADO</div><div class="font-bold text-lg">${formatCurrency(totalConfirmado)}</div></div>
-                    <div class="bg-yellow-50 p-3 rounded-lg"><div class="text-sm text-yellow-800 font-bold">PENDIENTE</div><div class="font-bold text-lg">${formatCurrency(totalPorConfirmar)}</div></div>
-                    <div class="bg-red-50 p-3 rounded-lg"><div class="text-sm text-red-800 font-bold">SALDO</div><div class="font-bold text-lg">${formatCurrency(saldoPendiente)}</div></div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-center">
+                    <div class="bg-blue-50 p-2 rounded-lg border border-blue-100"><div class="text-[10px] uppercase text-blue-800 font-bold tracking-wider">Total</div><div class="font-bold text-lg text-blue-900">${formatCurrency(remision.valorTotal)}</div></div>
+                    <div class="bg-green-50 p-2 rounded-lg border border-green-100"><div class="text-[10px] uppercase text-green-800 font-bold tracking-wider">Pagado</div><div class="font-bold text-lg text-green-900">${formatCurrency(totalConfirmado)}</div></div>
+                    <div class="bg-yellow-50 p-2 rounded-lg border border-yellow-100"><div class="text-[10px] uppercase text-yellow-800 font-bold tracking-wider">Pendiente</div><div class="font-bold text-lg text-yellow-900">${formatCurrency(totalPorConfirmar)}</div></div>
+                    <div class="bg-red-50 p-2 rounded-lg border border-red-100"><div class="text-[10px] uppercase text-red-800 font-bold tracking-wider">Saldo</div><div class="font-bold text-lg text-red-900">${formatCurrency(saldoPendiente)}</div></div>
                 </div>
             </div>
-            <div class="flex-grow overflow-y-auto pr-2">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <h3 class="font-semibold mb-2">Historial</h3>
-                        <div class="border rounded-lg max-h-60 overflow-y-auto">
+            <div class="flex-grow overflow-y-auto pr-1 custom-scrollbar">
+                <div class="flex flex-col md:flex-row gap-6">
+                    <div class="w-full md:w-1/2">
+                        <h3 class="font-semibold mb-2 text-gray-700 flex items-center gap-2"><i class="fas fa-history"></i> Historial</h3>
+                        <div class="border rounded-lg max-h-60 overflow-y-auto bg-gray-50">
                             <table class="w-full text-sm">
-                                <thead class="bg-gray-50 sticky top-0"><tr><th class="p-2 text-left text-[10px]">Fecha</th><th class="p-2 text-left text-[10px]">Metodo</th><th class="p-2 text-right text-[10px]">Monto</th><th class="p-2 text-left text-[10px]">Estado</th><th></th></tr></thead>
-                                <tbody>${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center">No hay pagos</td></tr>'}</tbody>
+                                <thead class="bg-gray-100 sticky top-0 shadow-sm"><tr><th class="p-2 text-left text-[10px] font-bold text-gray-600">Fecha</th><th class="p-2 text-left text-[10px] font-bold text-gray-600">Método</th><th class="p-2 text-right text-[10px] font-bold text-gray-600">Monto</th><th class="p-2 text-left text-[10px] font-bold text-gray-600">Estado</th><th></th></tr></thead>
+                                <tbody class="bg-white divide-y divide-gray-100">${paymentsHTML || '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">No hay pagos registrados</td></tr>'}</tbody>
                             </table>
                         </div>
                     </div>
-                    <div>
-                        <h3 class="font-semibold mb-2 text-indigo-700">Nuevo Abono</h3>
+                    <div class="w-full md:w-1/2">
+                        <h3 class="font-semibold mb-2 text-indigo-700 flex items-center gap-2"><i class="fas fa-plus-circle"></i> Nuevo Abono</h3>
                         ${saldoRealPendiente > 0.01 ? `
-                            <form id="add-payment-form" class="space-y-3 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                                <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Monto</label><input type="text" id="new-payment-amount" class="w-full p-2 border rounded-md" required></div>
+                            <form id="add-payment-form-${isSecondary ? '2' : '1'}" class="space-y-3 bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-inner">
+                                <div><label class="text-[10px] font-bold text-indigo-500 uppercase">Monto a abonar</label><input type="text" id="new-payment-amount-${isSecondary ? '2' : '1'}" class="w-full p-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" required placeholder="$ 0"></div>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Fecha</label><input type="date" id="new-payment-date" class="w-full p-2 border rounded-md" value="${new Date().toISOString().split('T')[0]}" required></div>
-                                    <div><label class="text-[10px] font-bold text-indigo-400 uppercase">Método</label><select id="new-payment-method" class="w-full p-2 border rounded-md bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
+                                    <div><label class="text-[10px] font-bold text-indigo-500 uppercase">Fecha</label><input type="date" id="new-payment-date-${isSecondary ? '2' : '1'}" class="w-full p-2 border border-indigo-200 rounded-lg" value="${new Date().toISOString().split('T')[0]}" required></div>
+                                    <div><label class="text-[10px] font-bold text-indigo-500 uppercase">Método</label><select id="new-payment-method-${isSecondary ? '2' : '1'}" class="w-full p-2 border border-indigo-200 rounded-lg bg-white" required><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
                                 </div>
-                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition">Registrar Abono</button>
-                            </form>` : '<div class="bg-green-100 text-green-800 p-4 rounded-lg text-center font-bold">PAGADA</div>'}
+                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-lg hover:bg-indigo-700 transition shadow-md flex justify-center items-center gap-2">
+                                    <i class="fas fa-save"></i> Registrar Abono
+                                </button>
+                            </form>` : 
+                            `<div class="bg-green-100 text-green-800 p-6 rounded-xl text-center border border-green-200 flex flex-col items-center justify-center h-40">
+                                <i class="fas fa-check-circle text-4xl mb-2 text-green-500"></i>
+                                <span class="font-bold text-lg">¡CUENTA PAGADA!</span>
+                                <span class="text-xs">No hay saldo pendiente.</span>
+                             </div>`
+                        }
                     </div>
                 </div>
             </div>
         </div>`;
 
         // MOSTRAR MODAL
-        document.getElementById('modal').classList.remove('hidden');
+        targetModal.classList.remove('hidden');
 
         // CERRAR MODAL
-        document.getElementById('close-payment-modal').onclick = () => {
-            if (paymentModalUnsubscribe) paymentModalUnsubscribe();
-            hideModal();
+        const closeBtnId = `close-payment-modal-${isSecondary ? '2' : '1'}`;
+        document.getElementById(closeBtnId).onclick = () => {
+            if (isSecondary) {
+                localUnsubscribe(); 
+                targetModal.classList.add('hidden'); 
+            } else {
+                if (paymentModalUnsubscribe) paymentModalUnsubscribe();
+                hideModal();
+            }
         };
 
-        // ACCIÓN: CONFIRMAR (Sin loader que borre la pantalla)
-        document.querySelectorAll('.confirm-payment-btn').forEach(btn => {
+        // ACCIÓN: CONFIRMAR
+        targetContent.querySelectorAll('.confirm-payment-btn').forEach(btn => {
             btn.onclick = async (e) => {
                 const idx = parseInt(e.currentTarget.dataset.paymentIndex);
-                e.currentTarget.disabled = true;
+                e.currentTarget.disabled = true; e.currentTarget.textContent = "...";
                 try {
                     const freshSnap = await getDoc(remRef);
                     const freshData = freshSnap.data();
                     const p = freshData.payments[idx];
-
                     p.status = 'confirmado';
                     p.confirmedBy = currentUser.uid;
                     p.confirmedAt = new Date();
-
                     await updateDoc(remRef, { payments: freshData.payments });
                     await actualizarSaldoPorPago(p.method, p.amount);
-
-                    // ==========================================
-                    // ACTUALIZACIÓN MANUAL PARA EL HISTORIAL
-                    // ==========================================
-                    // Buscamos la remisión en el array de la lista principal
-                    const indexEnHistorial = allRemisiones.findIndex(r => r.id === remisionId);
+                    
+                    const indexEnHistorial = allRemisiones.findIndex(r => r.id === remisionOriginal.id);
                     if (indexEnHistorial !== -1) {
-                        // Actualizamos los datos en la memoria del navegador
                         allRemisiones[indexEnHistorial].payments = freshData.payments;
-                        // Mandamos a redibujar el historial de remisiones inmediatamente
                         renderRemisiones();
                     }
-                    // ==========================================
-
                     showTemporaryMessage("Pago confirmado", "success");
                 } catch (err) { console.error(err); }
             };
         });
 
         // ACCIÓN: RECHAZAR
-        document.querySelectorAll('.reject-payment-btn').forEach(btn => {
+        targetContent.querySelectorAll('.reject-payment-btn').forEach(btn => {
             btn.onclick = async (e) => {
-                const reason = prompt("Motivo:");
+                const reason = prompt("Motivo del rechazo:");
                 if (!reason) return;
                 const idx = parseInt(e.currentTarget.dataset.paymentIndex);
                 try {
@@ -2009,29 +2422,34 @@ async function showPaymentModal(remisionOriginal) {
                     freshData.payments[idx].rejectionReason = reason;
                     freshData.payments[idx].rejectedBy = currentUser.uid;
                     await updateDoc(remRef, { payments: freshData.payments });
-                    showTemporaryMessage("Rechazado", "info");
+                    showTemporaryMessage("Pago rechazado", "info");
                 } catch (err) { console.error(err); }
             };
         });
 
         // ACCIÓN: NUEVO PAGO
-        const addPayForm = document.getElementById('add-payment-form');
+        const formId = `add-payment-form-${isSecondary ? '2' : '1'}`;
+        const addPayForm = document.getElementById(formId);
         if (addPayForm) {
-            const amountInput = document.getElementById('new-payment-amount');
+            const amountId = `new-payment-amount-${isSecondary ? '2' : '1'}`;
+            const dateId = `new-payment-date-${isSecondary ? '2' : '1'}`;
+            const methodId = `new-payment-method-${isSecondary ? '2' : '1'}`;
+            
+            const amountInput = document.getElementById(amountId);
             amountInput.onfocus = (e) => unformatCurrencyInput(e.target);
             amountInput.onblur = (e) => formatCurrencyInput(e.target);
 
             addPayForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const amount = unformatCurrency(amountInput.value);
-                if (amount <= 0 || amount > saldoRealPendiente + 10) return alert("Monto inválido");
+                if (amount <= 0) return alert("Monto inválido");
 
                 try {
                     await updateDoc(remRef, {
                         payments: arrayUnion({
                             amount,
-                            date: document.getElementById('new-payment-date').value,
-                            method: document.getElementById('new-payment-method').value,
+                            date: document.getElementById(dateId).value,
+                            method: document.getElementById(methodId).value,
                             registeredAt: new Date(),
                             registeredBy: currentUser.uid,
                             status: 'por confirmar'
@@ -2042,6 +2460,10 @@ async function showPaymentModal(remisionOriginal) {
             };
         }
     });
+    
+    if (!isSecondary) {
+        paymentModalUnsubscribe = localUnsubscribe;
+    }
 }
 
 
@@ -2308,102 +2730,91 @@ function updateDashboardView() {
 }
 
 /**
- * Actualiza el Dashboard con precisión horaria para Colombia.
- * Filtra desde el primer hasta el último segundo del mes seleccionado.
+ * Actualiza el Dashboard leyendo un solo documento pre-calculado por mes.
+ * Ahorro de lecturas: 99.9%
  */
 async function updateDashboard(year, month) {
     const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    
+    // Identificador del mes seleccionado: "YYYY_MM"
+    const currentDocId = `${year}_${(month + 1).toString().padStart(2, '0')}`;
 
-    const startDate = new Date(year, month - 5, 1);
-    const endDate = new Date(year, month + 1, 0);
+    // --- 1. Obtener Datos del Mes Actual (Lectura Única) ---
+    const statsRef = doc(db, "estadisticas_mensuales", currentDocId);     
 
-    const startStr = startDate.toISOString().split('T')[0];
-    const endStr = endDate.toISOString().split('T')[0];
-    const currentPrefix = `${year}-${(month + 1).toString().padStart(2, '0')}`;
+    // Usamos onSnapshot para que el dashboard se mueva en vivo si alguien factura
+    const unsubscribe = onSnapshot(statsRef, (docSnap) => {
+        const data = docSnap.exists() ? docSnap.data() : { totalVentas: 0, totalIngresos: 0, totalGastos: 0 };
+        
+        // Ventas (Facturado)
+        animateValue("summary-sales", data.totalVentas || 0);
+        // Gastos (Egresos)
+        animateValue("summary-expenses", data.totalGastos || 0);
+        
+        // Utilidad = Ingresos Reales - Gastos
+        animateValue("summary-profit", (data.totalIngresos || 0) - (data.totalGastos || 0));
+        
+        // Cartera del Mes = Ventas (Facturado) - Ingresos (Recaudado)
+        const carteraMes = Math.max(0, (data.totalVentas || 0) - (data.totalIngresos || 0));
+        animateValue("summary-cartera", carteraMes);
+    });
 
-    try {
-        const qRem = query(collection(db, "remisiones"),
-            where("fechaRecibido", ">=", startStr),
-            where("fechaRecibido", "<=", endStr),
-            where("estado", "!=", "Anulada"));
+    // --- 2. Actualizar Saldos Globales (Bancos y Cartera Total) ---
+    
+    // Bancos (Vienen de la variable global 'globalesSaldos' sincronizada en tiempo real)
+    document.getElementById('summary-efectivo').textContent = formatCurrency(globalesSaldos.Efectivo);
+    document.getElementById('summary-nequi').textContent = formatCurrency(globalesSaldos.Nequi);
+    document.getElementById('summary-davivienda').textContent = formatCurrency(globalesSaldos.Davivienda);
 
-        const qGas = query(collection(db, "gastos"),
-            where("fecha", ">=", startStr),
-            where("fecha", "<=", endStr));
-
-        const [snapRem, snapGas] = await Promise.all([getDocs(qRem), getDocs(qGas)]);
-
-        const allDataRem = snapRem.docs.map(d => d.data());
-        const allDataGas = snapGas.docs.map(d => d.data());
-
-        const labels = [];
-        const chartSales = [];
-        const chartExpenses = [];
-
-        let salesForCard = 0;
-        let expensesForCard = 0;
-        let carteraForCard = 0;
-
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(year, month - i, 1);
-            const m = d.getMonth();
-            const y = d.getFullYear();
-            const prefix = `${y}-${(m + 1).toString().padStart(2, '0')}`;
-
-            labels.push(monthNamesShort[m]);
-
-            const monthlyExpenses = allDataGas
-                .filter(g => g.fecha.startsWith(prefix))
-                .reduce((sum, g) => sum + (g.valorTotal || 0), 0);
-
-            const monthlyRecaudos = [...allDataRem, ...remisionesCartera]
-                .flatMap(r => r.payments || [])
-                .filter(p => p.status === 'confirmado' && p.date.startsWith(prefix))
-                .reduce((sum, p) => sum + p.amount, 0);
-
-            chartSales.push(monthlyRecaudos);
-            chartExpenses.push(monthlyExpenses);
-
-            if (prefix === currentPrefix) {
-                expensesForCard = monthlyExpenses;
-                salesForCard = allDataRem
-                    .filter(r => r.fechaRecibido.startsWith(prefix))
-                    .reduce((sum, r) => sum + (r.valorTotal || 0), 0);
-
-                carteraForCard = allDataRem
-                    .filter(r => r.fechaRecibido.startsWith(prefix))
-                    .reduce((sum, r) => {
-                        const paid = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
-                        return sum + Math.max(0, r.valorTotal - paid);
-                    }, 0);
-            }
-        }
-
-        // --- ACTUALIZACIÓN DE LA UI (TARJETAS MENSUALES) ---
-        const salesEl = document.getElementById('summary-sales');
-        if (salesEl) {
-            salesEl.textContent = formatCurrency(salesForCard);
-            document.getElementById('summary-expenses').textContent = formatCurrency(expensesForCard);
-            document.getElementById('summary-profit').textContent = formatCurrency(salesForCard - expensesForCard);
-            document.getElementById('summary-cartera').textContent = formatCurrency(carteraForCard);
-
-            const totalCarteraGlobal = remisionesCartera.reduce((sum, r) => {
-                const paid = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
-                return sum + Math.max(0, r.valorTotal - paid);
-            }, 0);
-            document.getElementById('summary-cartera-total').textContent = formatCurrency(totalCarteraGlobal);
-
-            // --- ESTA ES LA PARTE QUE FALTABA: PINTAR LOS SALDOS GLOBALES ---
-            document.getElementById('summary-efectivo').textContent = formatCurrency(globalesSaldos.Efectivo);
-            document.getElementById('summary-nequi').textContent = formatCurrency(globalesSaldos.Nequi);
-            document.getElementById('summary-davivienda').textContent = formatCurrency(globalesSaldos.Davivienda);
-        }
-
-        renderProfitLossChart(labels, chartSales, chartExpenses);
-
-    } catch (error) {
-        console.error("Error en sincronización de datos:", error);
+    // --- CORRECCIÓN AQUÍ: Cartera Total ---
+    // Usamos el array 'remisionesCartera' que ya está cargado en memoria y filtrado (>100 pesos)
+    const totalCarteraGlobal = remisionesCartera.reduce((sum, r) => sum + (r.saldoPendiente || 0), 0);
+    const carteraTotalEl = document.getElementById('summary-cartera-total');
+    if (carteraTotalEl) {
+        carteraTotalEl.textContent = formatCurrency(totalCarteraGlobal);
     }
+
+    // --- 3. Gráfica de los últimos 6 meses ---
+    updateChartData(year, month, monthNamesShort);
+}
+
+// Helper para animar los números (Efecto visual profesional)
+function animateValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = formatCurrency(value);
+    // Aquí podrías agregar una animación de conteo si deseas
+}
+
+async function updateChartData(year, month, labelsRef) {
+    const labels = [];
+    const salesData = [];
+    const expensesData = [];
+    
+    const promises = [];
+
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(year, month - i, 1);
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        const docId = `${y}_${(m + 1).toString().padStart(2, '0')}`;
+        
+        labels.push(labelsRef[m]);
+        promises.push(getDoc(doc(db, "estadisticas_mensuales", docId)));
+    }
+
+    const snaps = await Promise.all(promises);
+    
+    snaps.forEach(snap => {
+        const d = snap.exists() ? snap.data() : { totalVentas: 0, totalIngresos: 0, totalGastos: 0 };
+        
+        // CAMBIO: Ahora graficamos Ventas (Lo facturado) vs Gastos
+        // Si prefieres ver dinero real, usa d.totalIngresos
+        salesData.push(d.totalVentas || 0); 
+        expensesData.push(d.totalGastos || 0);
+    });
+
+    renderProfitLossChart(labels, salesData, expensesData);
 }
 
 
@@ -2538,19 +2949,41 @@ async function renderTopClientes(startDate, endDate) {
     const container = document.getElementById('top-clientes-list');
     if (!container) return;
 
-    container.innerHTML = '<p class="text-center text-gray-500 py-8">Calculando ranking del periodo...</p>';
+    // --- OPTIMIZACIÓN: No cargar automáticamente ---
+    // Si no se han pasado fechas explícitas (es la carga inicial automática), mostramos un botón.
+    if (!startDate && !endDate) {
+        container.innerHTML = `
+            <div class="text-center py-10 bg-gray-50 rounded-xl border border-gray-200">
+                <i class="fas fa-trophy text-4xl text-yellow-500 mb-3"></i>
+                <h3 class="font-bold text-gray-700">Ranking de Clientes</h3>
+                <p class="text-sm text-gray-500 mb-4">Generar este reporte consume recursos. Haz clic para calcular.</p>
+                <button id="btn-calc-ranking" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 shadow transition">
+                    Calcular Ranking del Mes
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('btn-calc-ranking').addEventListener('click', () => {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            renderTopClientes(start, end); // Llamada recursiva con fechas
+        });
+        return;
+    }
 
-    // 1. Si no hay fechas, definimos el mes actual por defecto (Ahorro de recursos)
-    const now = new Date();
-    const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    // --- EJECUCIÓN (Si el usuario hizo clic) ---
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-10">
+            <i class="fas fa-circle-notch animate-spin text-indigo-600 text-3xl mb-3"></i>
+            <p class="text-gray-500">Analizando ventas...</p>
+        </div>`;
 
-    const startStr = start.toISOString().split('T')[0];
-    const endStr = end.toISOString().split('T')[0];
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
 
     try {
-        // 2. CONSULTA ÚNICA: Traemos solo las remisiones del rango solicitado
-        // Esto es mucho más barato que traer toda la historia
+        // Consulta optimizada: Traemos solo lo necesario
         const q = query(
             collection(db, "remisiones"),
             where("fechaRecibido", ">=", startStr),
@@ -2559,55 +2992,56 @@ async function renderTopClientes(startDate, endDate) {
         );
 
         const snap = await getDocs(q);
-        const remisionesRango = snap.docs.map(d => d.data());
+        
+        // Procesamiento en memoria (Cliente-side)
+        const ventasPorCliente = {};
+        
+        snap.forEach(doc => {
+            const r = doc.data();
+            if (!ventasPorCliente[r.idCliente]) {
+                ventasPorCliente[r.idCliente] = { total: 0, count: 0, nombre: r.clienteNombre };
+            }
+            ventasPorCliente[r.idCliente].total += (r.valorTotal || 0);
+            ventasPorCliente[r.idCliente].count += 1;
+        });
 
-        // 3. PROCESAMIENTO LOCAL
-        // Sumamos las ventas agrupándolas por el ID del cliente
-        const ventasPorCliente = remisionesRango.reduce((acc, r) => {
-            acc[r.idCliente] = (acc[r.idCliente] || 0) + (r.valorTotal || 0);
-            return acc;
-        }, {});
+        // Convertir a array y ordenar
+        const ranking = Object.values(ventasPorCliente)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 20); // Top 20 solamente
 
-        // Cruzamos con la lista global de clientes para tener los nombres
-        const ranking = allClientes
-            .map(cliente => ({
-                ...cliente,
-                totalComprado: ventasPorCliente[cliente.id] || 0,
-                numCompras: remisionesRango.filter(r => r.idCliente === cliente.id).length
-            }))
-            .filter(c => c.totalComprado > 0) // Solo mostramos los que compraron algo en este periodo
-            .sort((a, b) => b.totalComprado - a.totalComprado); // Ordenamos de mayor a menor
-
-        // 4. RENDERIZADO
+        // Renderizar
         container.innerHTML = '';
         if (ranking.length === 0) {
-            container.innerHTML = `
-                <div class="text-center py-8 bg-gray-50 rounded-lg">
-                    <p class="text-gray-500">No se encontraron ventas entre ${startStr} y ${endStr}.</p>
-                </div>`;
+            container.innerHTML = '<p class="text-center py-4 text-gray-500">No hay ventas en este periodo.</p>';
             return;
         }
 
-        ranking.forEach((cliente, index) => {
+        ranking.forEach((c, index) => {
+            let medal = '';
+            if(index === 0) medal = '🥇';
+            else if(index === 1) medal = '🥈';
+            else if(index === 2) medal = '🥉';
+            else medal = `<span class="font-bold text-gray-400">#${index + 1}</span>`;
+
             const el = document.createElement('div');
-            el.className = 'border p-4 rounded-lg flex justify-between items-center bg-white shadow-sm hover:border-indigo-300 transition-colors';
+            el.className = 'flex justify-between items-center p-3 border-b hover:bg-gray-50 transition';
             el.innerHTML = `
-                <div class="flex items-center gap-4">
-                    <span class="text-xl font-bold text-gray-300 w-8">#${index + 1}</span>
+                <div class="flex items-center gap-3">
+                    <div class="text-xl w-8 text-center">${medal}</div>
                     <div>
-                        <p class="font-semibold text-gray-800">${cliente.nombre}</p>
-                        <p class="text-xs text-gray-500">${cliente.numCompras} remisión(es) en este periodo</p>
+                        <p class="font-bold text-gray-800 text-sm">${c.nombre}</p>
+                        <p class="text-xs text-gray-500">${c.count} compras</p>
                     </div>
                 </div>
-                <div class="text-right">
-                    <p class="font-bold text-lg text-indigo-600">${formatCurrency(cliente.totalComprado)}</p>
-                </div>`;
+                <div class="font-bold text-indigo-600 text-sm">${formatCurrency(c.total)}</div>
+            `;
             container.appendChild(el);
         });
 
     } catch (error) {
-        console.error("Error al generar ranking:", error);
-        container.innerHTML = '<p class="text-center text-red-500">Error al conectar con la base de datos.</p>';
+        console.error("Error ranking:", error);
+        container.innerHTML = '<p class="text-center text-red-500">Error al calcular.</p>';
     }
 }
 
@@ -2653,7 +3087,16 @@ function showModalMessage(message, isLoader = false, duration = 0) {
         }
     }
 }
-function hideModal() { modal.classList.add('hidden'); }
+function hideModal() { 
+    modal.classList.add('hidden'); 
+    
+    // Limpieza de seguridad
+    if (paymentModalUnsubscribe) {
+        paymentModalUnsubscribe();
+        paymentModalUnsubscribe = null;
+    }
+    // Si tuvieras otros listeners de modales (ej. chat), límpialos aquí también
+}
 
 function formatCurrency(value) { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value); }
 
@@ -2755,106 +3198,54 @@ function showReportDateRangeModal() {
     });
 }
 
-function downloadPaymentsExcel(startDateStr, endDateStr) {
-    // 1. Validar librería
-    if (typeof XLSX === 'undefined') {
-        showModalMessage("Error: La librería de Excel no se ha cargado.");
-        return;
-    }
+async function downloadPaymentsExcel(startDateStr, endDateStr) {
+    if (typeof XLSX === 'undefined') return showModalMessage("Error librería Excel.");
 
-    const start = new Date(startDateStr + 'T00:00:00');
-    const end = new Date(endDateStr + 'T23:59:59');
+    showModalMessage("Buscando pagos en la nube...", true);
 
-    let dataParaExcel = [];
-
-    const getNombreUsuario = (uid) => {
-        if (!uid) return ""; // Si no hay ID, devolvemos vacío
-        const usuario = allUsers.find(u => u.id === uid);
-        return usuario ? usuario.nombre : "Usuario Desconocido";
-    };
-
-    const formatFecha = (timestamp) => {
-        if (!timestamp) return "";
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        return date.toLocaleString('es-CO');
-    };
-
-    allRemisiones.forEach(remision => {
-        if (remision.payments && remision.payments.length > 0) {
-            remision.payments.forEach(p => {
-
-                // --- FILTRO DE FECHAS ---
-                const paymentDate = new Date(p.date + 'T12:00:00');
-
-                if (paymentDate >= start && paymentDate <= end) {
-
-                    // Lógica para determinar quién revisó el pago
-                    let revisadoPor = "Pendiente";
-                    if (p.status === 'confirmado') {
-                        revisadoPor = getNombreUsuario(p.confirmedBy);
-                    } else if (p.status === 'rechazado') {
-                        revisadoPor = getNombreUsuario(p.rejectedBy) + " (Rechazó)";
-                    }
-
-                    // Formatear estado para que se vea bonito (Capitalizar)
-                    let estadoLegible = p.status;
-                    if (p.status === 'por confirmar') estadoLegible = 'Por Confirmar';
-                    else estadoLegible = p.status.charAt(0).toUpperCase() + p.status.slice(1);
-
-                    const fila = {
-                        "Fecha Pago": p.date,
-                        "N° Remisión": remision.numeroRemision,
-                        "Cliente": remision.clienteNombre,
-                        "Método": p.method,
-                        "Estado": estadoLegible, // Ahora muestra: Confirmado, Rechazado o Por Confirmar
-                        "Valor": p.amount,
-                        "Registrado Por": getNombreUsuario(p.registeredBy),
-                        "Confirmado Por": revisadoPor, // Muestra quién confirmó, quién rechazó o "Pendiente"
-                        "Fecha Registro": formatFecha(p.registeredAt)
-                    };
-
-                    dataParaExcel.push(fila);
-                }
-            });
-        }
-    });
-
-    // 3. Ordenar
-    dataParaExcel.sort((a, b) => new Date(b["Fecha Pago"]) - new Date(a["Fecha Pago"]));
-
-    if (dataParaExcel.length === 0) {
-        showModalMessage(`No se encontraron pagos (ni pendientes ni confirmados) entre ${startDateStr} y ${endDateStr}.`);
-        return;
-    }
-
-    // 4. Generar Excel
     try {
+        const exportFn = httpsCallable(functions, 'getDataForExport');
+        const result = await exportFn({ 
+            type: 'pagos', 
+            startDate: startDateStr, 
+            endDate: endDateStr 
+        });
+
+        const datos = result.data.data;
+
+        if (datos.length === 0) {
+            hideModal();
+            showModalMessage("No se encontraron pagos en ese rango.");
+            return;
+        }
+
+        // Mapeo simple (Ya viene limpio desde el servidor)
+        const dataParaExcel = datos.map(p => ({
+            "Fecha Pago": p.fecha,
+            "Remisión": p.remision,
+            "Cliente": p.cliente,
+            "Método": p.metodo,
+            "Monto": p.monto,
+            "Estado": p.estado
+        }));
+
+        dataParaExcel.sort((a, b) => new Date(b["Fecha Pago"]) - new Date(a["Fecha Pago"]));
+
         const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
-
-        const wscols = [
-            { wch: 12 }, // Fecha
-            { wch: 10 }, // Remision
-            { wch: 30 }, // Cliente
-            { wch: 12 }, // Metodo
-            { wch: 15 }, // Estado (Más ancho ahora)
-            { wch: 15 }, // Valor
-            { wch: 20 }, // Registrado
-            { wch: 25 }, // Confirmado (Más ancho por si dice "Rechazó")
-            { wch: 20 }  // Fecha Reg
-        ];
-        worksheet['!cols'] = wscols;
-
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Historial Pagos");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos");
+        XLSX.writeFile(workbook, `Pagos_${startDateStr}_${endDateStr}.xlsx`);
 
-        const fileName = `Pagos_Completo_${startDateStr}_a_${endDateStr}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
-
-        showModalMessage("Excel generado exitosamente.", false, 2000);
+        hideModal();
+        showModalMessage(`¡Exportación exitosa! (${datos.length} pagos)`, false, 3000);
 
     } catch (error) {
-        console.error("Error generando Excel:", error);
-        showModalMessage("Error al generar el archivo de Excel.");
+        console.error(error);
+        hideModal();
+        let msg = "Error al generar reporte.";
+        // Actualizamos el texto de coincidencia y el mensaje
+        if (error.message.includes("1 año")) msg = "El rango es muy amplio. Máximo 1 año.";
+        showModalMessage(msg, "error");
     }
 }
 
@@ -4620,24 +5011,146 @@ async function loadFacturadasHistorial(isMore = false) {
 function loadRemisionesCartera() {
     if (carteraUnsubscribe) carteraUnsubscribe();
 
-    // Incluimos 'Entregado' para no perder de vista las deudas de remisiones ya finalizadas
+    // Filtramos las remisiones que deben dinero (porque un pago sin confirmar cuenta como deuda)
     const q = query(
         collection(db, "remisiones"),
-        where("estado", "in", ["Recibido", "En Proceso", "Procesado", "Entregado"]),
-        orderBy("numeroRemision", "desc")
+        where("saldoPendiente", ">", 100), 
+        where("estado", "!=", "Anulada"),
+        orderBy("saldoPendiente", "desc")
     );
 
-    carteraUnsubscribe = onSnapshot(q, (snapshot) => {
-        // Guardamos solo las que realmente tienen saldo > 0
-        remisionesCartera = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(r => {
-                const pagado = (r.payments || []).filter(p => p.status === 'confirmado').reduce((s, p) => s + p.amount, 0);
-                return (r.valorTotal - pagado) > 0.01 && r.estado !== 'Anulada';
-            });
+    carteraUnsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+        remisionesCartera = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        if (snapshot.empty) remisionesCartera = [];
+
+        // 1. Renderizar la vista de cartera normal
         renderCartera();
+
+        // 2. LÓGICA NUEVA: Detectar pagos por confirmar
+        const pagosPendientes = [];
+        remisionesCartera.forEach(r => {
+            if (r.payments && Array.isArray(r.payments)) {
+                r.payments.forEach((p, index) => {
+                    if (p.status === 'por confirmar') {
+                        pagosPendientes.push({
+                            remision: r,
+                            paymentIndex: index,
+                            paymentData: p
+                        });
+                    }
+                });
+            }
+        });
+
+        // 3. Actualizar Botón de Notificaciones (Campana)
+        updatePendingPaymentsBadge(pagosPendientes);
+        
+    }, (error) => {
+        console.error("Error cargando cartera:", error);
     });
+    
     return carteraUnsubscribe;
+}
+
+// --- GESTIÓN DE PAGOS POR CONFIRMAR (CORREGIDA) ---
+
+function updatePendingPaymentsBadge(pagosPendientes) {
+    let badgeBtn = document.getElementById('btn-pagos-pendientes');
+    const logoutBtn = document.getElementById('logout-btn');
+    
+    if (!logoutBtn) return;
+
+    const parentContainer = logoutBtn.parentElement;
+
+    if (!badgeBtn) {
+        badgeBtn = document.createElement('button');
+        badgeBtn.id = 'btn-pagos-pendientes';
+        
+        // Mantenemos el estilo de círculo ambar/naranja que ya definimos
+        badgeBtn.className = "relative p-3 ml-2 bg-amber-500 text-white rounded-full shadow-lg hover:bg-amber-600 transition hidden items-center justify-center w-10 h-10";
+        
+        // --- CAMBIO DE ICONO AQUÍ ---
+        // Cambiamos fa-bell por fa-hand-holding-dollar
+        badgeBtn.innerHTML = `
+            <i class="fas fa-hand-holding-dollar text-lg"></i>
+            <span id="badge-count" class="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white shadow-sm">0</span>
+        `;
+        
+        parentContainer.appendChild(badgeBtn);
+    }
+
+    const countSpan = badgeBtn.querySelector('#badge-count');
+    const count = pagosPendientes.length;
+
+    if (count > 0 && currentUserData && currentUserData.role === 'admin') {
+        badgeBtn.classList.remove('hidden');
+        badgeBtn.classList.add('flex'); 
+        countSpan.textContent = count;
+        
+        const icon = badgeBtn.querySelector('i');
+        // Cambiamos la animación a 'pulse' para que parezca que la mano pide atención
+        icon.classList.add('animate-pulse'); 
+        
+        badgeBtn.onclick = (e) => {
+            e.preventDefault();
+            showPendingPaymentsListModal(pagosPendientes);
+        };
+    } else {
+        badgeBtn.classList.add('hidden');
+        badgeBtn.classList.remove('flex');
+    }
+}
+
+function showPendingPaymentsListModal(listaPagos) {
+    const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    
+    const itemsHTML = listaPagos.map(item => {
+        const p = item.paymentData;
+        const r = item.remision;
+        
+        return `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border rounded-lg hover:bg-yellow-50 transition gap-4 bg-white shadow-sm">
+                <div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">Remisión #${r.numeroRemision}</span>
+                        <span class="text-sm font-bold text-gray-700">${r.clienteNombre}</span>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        <span class="font-semibold text-green-700">${formatCurrency(p.amount)}</span> 
+                        vía ${p.method} (${p.date})
+                    </p>
+                    <p class="text-[10px] text-gray-400">Registrado el: ${p.registeredAt ? new Date(p.registeredAt.seconds * 1000).toLocaleString() : 'N/A'}</p>
+                </div>
+                <button onclick="prepararAbonoDesdeCRM('${r.id}')" class="bg-indigo-600 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 shadow transition w-full sm:w-auto">
+                    Revisar y Confirmar
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    modalContentWrapper.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-auto flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center p-5 border-b bg-yellow-50 rounded-t-xl">
+                <div class="flex items-center gap-3">
+                    <div class="bg-yellow-500 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-sm">
+                        <i class="fas fa-bell text-xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">Pagos por Confirmar</h2>
+                        <p class="text-xs text-yellow-700 font-semibold">${listaPagos.length} pagos requieren tu atención</p>
+                    </div>
+                </div>
+                <button onclick="hideModal()" class="text-gray-400 hover:text-gray-600 text-2xl transition">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto custom-scrollbar space-y-3 bg-gray-50 flex-grow">
+                ${itemsHTML}
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modal').classList.remove('hidden');
 }
 
 function showExportRemisionesModal() {
@@ -4679,62 +5192,57 @@ function showExportRemisionesModal() {
     });
 }
 
-function downloadRemisionesExcel(startDateStr, endDateStr) {
-    if (typeof XLSX === 'undefined') {
-        showModalMessage("Error: La librería de Excel no está cargada.");
-        return;
-    }
+async function downloadRemisionesExcel(startDateStr, endDateStr) {
+    if (typeof XLSX === 'undefined') return showModalMessage("Error librería Excel.");
 
-    const start = startDateStr;
-    const end = endDateStr;
-
-    // Filtramos las remisiones por fecha y que no estén anuladas
-    const remisionesFiltradas = allRemisiones.filter(r =>
-        r.fechaRecibido >= start &&
-        r.fechaRecibido <= end &&
-        r.estado !== 'Anulada'
-    );
-
-    if (remisionesFiltradas.length === 0) {
-        showModalMessage(`No hay remisiones (no anuladas) entre ${startDateStr} y ${endDateStr}.`);
-        return;
-    }
-
-    // Mapeamos los datos para el Excel
-    const dataParaExcel = remisionesFiltradas.map(r => ({
-        "N° Remisión": r.numeroRemision,
-        "Fecha": r.fechaRecibido,
-        "Cliente": r.clienteNombre,
-        "Estado": r.estado,
-        "Subtotal": r.subtotal || 0,
-        "IVA": r.valorIVA || 0,
-        "Total": r.valorTotal || 0,
-        "Forma de Pago": r.formaPago,
-        "Facturado": r.facturado ? "Sí" : "No"
-    }));
-
-    // Ordenar por número de remisión descendente
-    dataParaExcel.sort((a, b) => b["N° Remisión"] - a["N° Remisión"]);
+    showModalMessage("Generando reporte en la nube...", true);
 
     try {
+        const exportFn = httpsCallable(functions, 'getDataForExport');
+        const result = await exportFn({ 
+            type: 'remisiones', 
+            startDate: startDateStr, 
+            endDate: endDateStr 
+        });
+
+        const datos = result.data.data;
+
+        if (datos.length === 0) {
+            hideModal();
+            showModalMessage("No se encontraron remisiones en ese rango.");
+            return;
+        }
+
+        const dataParaExcel = datos.map(r => ({
+            "N° Remisión": r.numeroRemision,
+            "Fecha Recibido": r.fechaRecibido,
+            "Cliente": r.clienteNombre,
+            "Estado": r.estado,
+            "Subtotal": r.subtotal || 0,
+            "IVA": r.valorIVA || 0,
+            "Total": r.valorTotal || 0,
+            "Forma Pago": r.formaPago,
+            "Facturado": r.facturado ? "SÍ" : "NO",
+            "N° Factura": r.numeroFactura || ''
+        }));
+
+        dataParaExcel.sort((a, b) => b["N° Remisión"] - a["N° Remisión"]);
+
         const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
-
-        // Ajustar anchos de columna
-        worksheet['!cols'] = [
-            { wch: 12 }, { wch: 12 }, { wch: 35 }, { wch: 15 },
-            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }
-        ];
-
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Remisiones");
+        XLSX.writeFile(workbook, `Remisiones_${startDateStr}_${endDateStr}.xlsx`);
 
-        const fileName = `Remisiones_Valores_${startDateStr}_a_${endDateStr}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
+        hideModal();
+        showModalMessage(`¡Exportación exitosa! (${datos.length} registros)`, false, 3000);
 
-        showModalMessage("Excel de remisiones generado.", false, 2000);
     } catch (error) {
-        console.error("Error al exportar remisiones:", error);
-        showModalMessage("Error al generar el archivo Excel.");
+        console.error(error);
+        hideModal();
+        let msg = "Error al generar reporte.";
+        // Actualizamos el texto de coincidencia y el mensaje
+        if (error.message.includes("1 año")) msg = "El rango es muy amplio. Máximo 1 año.";
+        showModalMessage(msg, "error");
     }
 }
 
@@ -4777,54 +5285,62 @@ function showExportGastosModal() {
     });
 }
 
-function downloadGastosExcel(startDateStr, endDateStr) {
+async function downloadGastosExcel(startDateStr, endDateStr) {
     if (typeof XLSX === 'undefined') {
-        showModalMessage("Error: La librería de Excel no está cargada.");
+        showModalMessage("Error: Librería Excel no cargada.", "error");
         return;
     }
 
-    // Filtramos del array global de gastos (allGastos)
-    const gastosFiltrados = allGastos.filter(g =>
-        g.fecha >= startDateStr &&
-        g.fecha <= endDateStr
-    );
-
-    if (gastosFiltrados.length === 0) {
-        showModalMessage(`No se encontraron gastos entre ${startDateStr} y ${endDateStr}.`);
-        return;
-    }
-
-    // Mapeamos los campos para el archivo Excel
-    const dataParaExcel = gastosFiltrados.map(g => ({
-        "Fecha": g.fecha,
-        "Descripción / Concepto": g.descripcion,
-        "Categoría": g.categoria || "General",
-        "Fuente de Pago": g.fuentePago,
-        "Valor Total": g.valorTotal || 0,
-        "Registrado por": g.createdBy || "Sistema"
-    }));
-
-    // Ordenamos por fecha (más reciente primero)
-    dataParaExcel.sort((a, b) => b.Fecha.localeCompare(a.Fecha));
+    showModalMessage("Generando reporte en la nube...", true);
 
     try {
+        // Llamada a la Cloud Function
+        const exportFn = httpsCallable(functions, 'getDataForExport');
+        const result = await exportFn({ 
+            type: 'gastos', 
+            startDate: startDateStr, 
+            endDate: endDateStr 
+        });
+
+        const datos = result.data.data;
+
+        if (datos.length === 0) {
+            hideModal();
+            showModalMessage("No se encontraron datos en ese rango.", "info");
+            return;
+        }
+
+        // Mapeo para Excel
+        const dataParaExcel = datos.map(g => ({
+            "Fecha": g.fecha,
+            "Proveedor": g.proveedorNombre,
+            "Factura": g.numeroFactura || '',
+            "Descripción": g.descripcion || '',
+            "Categoría": g.categoria || 'General',
+            "Fuente de Pago": g.fuentePago,
+            "Valor Total": g.valorTotal || 0
+        }));
+
+        dataParaExcel.sort((a, b) => a.Fecha.localeCompare(b.Fecha));
+
+        // Generar Archivo
         const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
-
-        // Ajustar anchos de columna para que se vea profesional
-        worksheet['!cols'] = [
-            { wch: 12 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
-        ];
-
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Gastos");
-
-        const fileName = `Reporte_Gastos_${startDateStr}_a_${endDateStr}.xlsx`;
+        const fileName = `Gastos_${startDateStr}_a_${endDateStr}.xlsx`;
+        
         XLSX.writeFile(workbook, fileName);
+        
+        hideModal();
+        showModalMessage(`¡Exportación exitosa! (${datos.length} registros)`, false, 3000);
 
-        showModalMessage("Excel de gastos generado correctamente.", false, 2000);
     } catch (error) {
-        console.error("Error al exportar gastos:", error);
-        showModalMessage("Hubo un error al generar el archivo de Gastos.");
+        console.error("Error exportando gastos:", error);
+        hideModal();
+        let msg = "Error al generar reporte.";
+        // Actualizamos el texto de coincidencia y el mensaje
+        if (error.message.includes("1 año")) msg = "El rango es muy amplio. Máximo 1 año.";
+        showModalMessage(msg, "error");
     }
 }
 
@@ -4863,49 +5379,25 @@ function listenGlobalSaldos() {
     });
 }
 async function migrarSaldosAGlobales() {
-    showModalMessage("Iniciando migración de saldos históricos...", true);
-
-    // 1. Saldo inicial configurado por ti
-    let saldos = {
-        saldoEfectivo: globalSaldosBase.Efectivo || 0,
-        saldoNequi: globalSaldosBase.Nequi || 0,
-        saldoDavivienda: globalSaldosBase.Davivienda || 0
-    };
+    showModalMessage("Recalculando saldos en la nube...", true);
 
     try {
-        // 2. Sumar todos los pagos confirmados de la historia
-        const snapRem = await getDocs(collection(db, "remisiones"));
-        snapRem.forEach(doc => {
-            const r = doc.data();
-            if (r.estado !== 'Anulada' && r.payments) {
-                r.payments.forEach(p => {
-                    if (p.status === 'confirmado') {
-                        if (p.method === 'Efectivo') saldos.saldoEfectivo += p.amount;
-                        if (p.method === 'Nequi') saldos.saldoNequi += p.amount;
-                        if (p.method === 'Davivienda') saldos.saldoDavivienda += p.amount;
-                    }
-                });
-            }
-        });
-
-        // 3. Restar todos los gastos de la historia
-        const snapGas = await getDocs(collection(db, "gastos"));
-        snapGas.forEach(doc => {
-            const g = doc.data();
-            if (g.fuentePago === 'Efectivo') saldos.saldoEfectivo -= g.valorTotal;
-            if (g.fuentePago === 'Nequi') saldos.saldoNequi -= g.valorTotal;
-            if (g.fuentePago === 'Davivienda') saldos.saldoDavivienda -= g.valorTotal;
-        });
-
-        // 4. Guardar el resultado en el nuevo documento "Bolsa de Totales"
-        await setDoc(doc(db, "estadisticas", "globales"), saldos);
-
+        // Llamamos a la Cloud Function (Proceso en servidor)
+        const recalculateFn = httpsCallable(functions, 'recalcularSaldosGlobales');
+        const result = await recalculateFn();
+        
+        const s = result.data.saldosCalculados;
+        
         hideModal();
-        showModalMessage("¡Migración completada! Saldos sincronizados.");
-        console.log("Saldos migrados:", saldos);
+        showModalMessage(`¡Sincronización Completada!\nEfec: ${formatCurrency(s.saldoEfectivo)}\nNequi: ${formatCurrency(s.saldoNequi)}\nDavi: ${formatCurrency(s.saldoDavivienda)}`, false, 4000);
+        
+        // No necesitamos actualizar el DOM manualmente porque
+        // listenGlobalSaldos() detectará el cambio en Firestore automáticamente.
+
     } catch (error) {
-        console.error("Error en migración:", error);
-        showModalMessage("Error en la migración. Revisa la consola.");
+        console.error("Error en sincronización:", error);
+        hideModal();
+        showModalMessage("Error al sincronizar saldos. Revisa tu conexión.", "error");
     }
 }
 
@@ -5125,7 +5617,7 @@ function listenChatList() {
     const globalBadge = document.getElementById('global-unread-badge');
 
     // Escuchamos la colección de chats ordenados por la fecha del último mensaje
-    const q = query(collection(db, "chats"), orderBy("fechaUltimo", "desc"));
+    const q = query(collection(db, "chats"), orderBy("fechaUltimo", "desc"), limit(50));
 
     return onSnapshot(q, (snapshot) => {
         if (!listEl) return;
@@ -5557,3 +6049,94 @@ function setupMobileInfoToggle() {
     }
 }
 
+
+
+// --- HERRAMIENTA TEMPORAL DE MIGRACIÓN ---
+/*setTimeout(() => {
+    const btn = document.createElement('button');
+    btn.innerText = "⚠️ REGENERAR HISTORIAL";
+    btn.style.position = "fixed";
+    btn.style.bottom = "20px";
+    btn.style.left = "20px";
+    btn.style.zIndex = "9999";
+    btn.style.padding = "15px";
+    btn.style.background = "red";
+    btn.style.color = "white";
+    btn.style.fontWeight = "bold";
+    btn.style.borderRadius = "10px";
+    btn.style.boxShadow = "0 4px 10px rgba(0,0,0,0.3)";
+    btn.onclick = async () => {
+        if(!confirm("¿Seguro que quieres recalcular todo el historial de ventas? Esto puede tardar unos segundos.")) return;
+        
+        btn.innerText = "⏳ Procesando...";
+        btn.disabled = true;
+        
+        try {
+            const rebuildFn = httpsCallable(functions, 'rebuildMonthlyStats');
+            const result = await rebuildFn();
+            console.log("Resultado:", result.data);
+            alert(`✅ ÉXITO: Se procesaron ${result.data.processedMonths} meses históricos.`);
+            btn.remove(); // El botón se autodestruye al terminar
+            window.location.reload(); // Recarga para ver los cambios
+        } catch (error) {
+            console.error(error);
+            alert("❌ ERROR: Revisa la consola.");
+            btn.innerText = "Error (Reintentar)";
+            btn.disabled = false;
+        }
+    };
+    document.body.appendChild(btn);
+}, 2000);*/
+
+// --- HERRAMIENTA TEMPORAL DE MIGRACIÓN DE SALDOS ---
+// Borrar este bloque después de usarlo
+/*setTimeout(() => {
+    const btn = document.createElement('button');
+    btn.innerHTML = "⚠️ MIGRAR SALDOS CARTERA";
+    
+    // Estilos para que sea bien visible
+    Object.assign(btn.style, {
+        position: "fixed",
+        bottom: "20px",
+        right: "20px", // Lo pongo a la derecha para que no estorbe
+        zIndex: "10000",
+        padding: "15px 25px",
+        background: "#dc2626", // Rojo fuerte
+        color: "white",
+        fontWeight: "bold",
+        borderRadius: "50px",
+        boxShadow: "0 4px 15px rgba(0,0,0,0.3)",
+        border: "2px solid white",
+        cursor: "pointer",
+        fontFamily: "system-ui, sans-serif"
+    });
+
+    btn.onclick = async () => {
+        if(!confirm("¿Estás seguro de iniciar la migración de saldos de cartera? Esto actualizará todas las remisiones históricas.")) return;
+        
+        btn.innerText = "⏳ Procesando...";
+        btn.disabled = true;
+        btn.style.opacity = "0.7";
+        
+        try {
+            // Aquí sí tenemos acceso a httpsCallable porque estamos DENTRO de app.js
+            const migrarFn = httpsCallable(functions, 'migrarSaldosCartera');
+            const result = await migrarFn();
+            
+            console.log("Resultado Migración:", result.data);
+            alert(`✅ ÉXITO: Se actualizaron ${result.data.actualizados} remisiones.`);
+            
+            btn.remove(); // Se borra solo al terminar
+            window.location.reload(); // Recarga para ver los cambios en la cartera
+            
+        } catch (error) {
+            console.error("Error en migración:", error);
+            alert("❌ ERROR: Revisa la consola para más detalles.");
+            btn.innerText = "Reintentar";
+            btn.disabled = false;
+            btn.style.opacity = "1";
+        }
+    };
+    
+    document.body.appendChild(btn);
+}, 3000);*/ // Espera 3 seg para asegurar que todo cargó
