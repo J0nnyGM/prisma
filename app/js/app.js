@@ -3758,8 +3758,17 @@ function renderDocumentList(empleado, year) {
 }
 
 function renderPagosTab(empleado, container) {
-    const salario = empleado.contratacion?.salario || 0;
+    // --- CONFIGURACIÓN LEGAL 2026 ---
+    const AUX_TRANSPORTE = 249095; // Nuevo valor auxilio transporte
+    const PORCENTAJE_DEDUCCIONES = 0.08; // 4% Salud + 4% Pensión
+    // --------------------------------
+
+    const salarioTotal = empleado.contratacion?.salario || 0;
     const pagos = empleado.pagos || [];
+
+    // Cálculo del Salario Base (Sin auxilio de transporte) para liquidación
+    // Asumimos que si el salario es mayor al auxilio, el usuario guardó el TOTAL (Base + Auxilio)
+    const salarioBase = salarioTotal > AUX_TRANSPORTE ? (salarioTotal - AUX_TRANSPORTE) : salarioTotal;
 
     const pagosHTML = pagos.length > 0 ? pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(p => `
             <tr class="border-b">
@@ -3809,7 +3818,10 @@ function renderPagosTab(empleado, container) {
                      <div class="bg-gray-50 p-4 rounded-lg">
                         <h3 class="text-lg font-semibold mb-2">Liquidador Horas Extra</h3>
                         <div class="space-y-2">
-                            <div><label class="text-sm">Salario Base (sin auxilio)</label><input type="text" id="salario-base-he" class="w-full p-2 border bg-gray-200 rounded-lg mt-1" value="${formatCurrency(salario > 200000 ? salario - 200000 : 0)}" readonly></div>
+                            <div>
+                                <label class="text-sm">Salario Base (sin auxilio)</label>
+                                <input type="text" id="salario-base-he" class="w-full p-2 border bg-gray-200 rounded-lg mt-1" value="${formatCurrency(salarioBase)}" readonly>
+                            </div>
                             <div><label for="horas-extra-input" class="text-sm">Cantidad de Horas Extra</label><input type="number" id="horas-extra-input" class="w-full p-2 border rounded-lg mt-1" min="0"></div>
                             <button id="calcular-horas-btn" class="w-full bg-blue-500 text-white font-semibold py-2 rounded-lg hover:bg-blue-600">Calcular</button>
                             <div id="horas-extra-resultado" class="text-center font-bold text-xl mt-2 p-2 bg-blue-100 rounded-lg"></div>
@@ -3823,7 +3835,7 @@ function renderPagosTab(empleado, container) {
                             <div>
                                 <label class="text-sm">Valor</label>
                                 <input type="text" id="rrhh-pago-valor" class="w-full p-2 border rounded-lg mt-1" required>
-                                <p id="pago-sugerido-info" class="text-xs text-gray-500 mt-1 hidden">Valor quincenal sugerido (salario/2 - aportes).</p>
+                                <p id="pago-sugerido-info" class="text-xs text-gray-500 mt-1 hidden">Valor quincenal sugerido (Sueldo - 8% Salud/Pensión).</p>
                             </div>
                             <div><label class="text-sm">Fecha</label><input type="date" id="rrhh-pago-fecha" class="w-full p-2 border rounded-lg mt-1" value="${new Date().toISOString().split('T')[0]}" required></div>
                             <div><label class="text-sm">Fuente de Pago</label><select id="rrhh-pago-fuente" class="w-full p-2 border rounded-lg mt-1 bg-white"><option>Efectivo</option><option>Nequi</option><option>Davivienda</option></select></div>
@@ -3851,13 +3863,22 @@ function renderPagosTab(empleado, container) {
     valorPagoInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
     valorPagoInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
 
+    // LÓGICA DE CÁLCULO DE SUGERENCIA DE PAGO ACTUALIZADA
     motivoPagoSelect.addEventListener('change', (e) => {
         if (e.target.value === 'Sueldo') {
-            if (salario > 0) {
-                const pagoQuincenal = (salario / 2) - 56940;
-                valorPagoInput.value = pagoQuincenal > 0 ? pagoQuincenal : 0;
+            if (salarioTotal > 0) {
+                // Cálculo: (SalarioTotal - (Base * 0.08)) / 2
+                // Deducciones de ley se calculan sobre el Salario Base (Sin auxilio)
+                const deduccionesMensuales = salarioBase * PORCENTAJE_DEDUCCIONES;
+                const salarioNetoMensual = salarioTotal - deduccionesMensuales;
+                const pagoQuincenal = salarioNetoMensual / 2;
+
+                valorPagoInput.value = pagoQuincenal > 0 ? Math.round(pagoQuincenal) : 0;
                 formatCurrencyInput(valorPagoInput);
                 pagoSugeridoInfo.classList.remove('hidden');
+                
+                // Actualizamos el texto de ayuda con los valores reales
+                pagoSugeridoInfo.textContent = `Sugerido: (Base ${formatCurrency(salarioBase)} - 8%) + Aux. / 2`;
             } else {
                 valorPagoInput.value = '';
                 valorPagoInput.placeholder = 'Definir salario primero';
@@ -3874,8 +3895,8 @@ function renderPagosTab(empleado, container) {
 
     document.getElementById('calcular-horas-btn').addEventListener('click', () => {
         const horas = parseFloat(document.getElementById('horas-extra-input').value) || 0;
-        if (salario > 0) {
-            const salarioBase = salario > 200000 ? salario - 200000 : salario;
+        if (salarioBase > 0) {
+            // Usamos el salarioBase calculado dinámicamente arriba
             const valorHoraNormal = salarioBase / 240;
             const valorHoraExtra = valorHoraNormal * 1.25;
             const totalPagar = valorHoraExtra * horas;
