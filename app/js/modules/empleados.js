@@ -48,7 +48,15 @@ let _db = db;
 let _getUsersMap;
 let _getCurrentUserRole;
 let _showView;
-let _openConfirmModal;
+let _openConfirmModal = function(message, onConfirm) {
+    if (window.openConfirmModal) {
+        window.openConfirmModal(message, onConfirm);
+    } else {
+        if (confirm(message)) {
+            onConfirm();
+        }
+    }
+};
 let _getPayrollConfig;
 let _getCurrentUserId;
 let _setupCurrencyInput;
@@ -5136,7 +5144,10 @@ function showAllLoansModal(requests) {
         if (u.status === 'active') activeUsers.push(u);
     });
     activeUsers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
-    const activeUsersOptionsHTML = activeUsers.map(u => `<option value="${u.id}">${u.firstName} ${u.lastName} (${u.role || 'Operario'})</option>`).join('');
+    const activeUsersOptionsHTML = activeUsers.map(u => {
+        const displayName = (u.firstName && u.lastName) ? `${u.firstName} ${u.lastName}` : (u.nombre || 'Colaborador Sin Nombre');
+        return `<option value="${u.id}">${displayName} (${u.role || 'Operario'})</option>`;
+    }).join('');
 
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     modalContentWrapper.innerHTML = `
@@ -5190,7 +5201,6 @@ function showAllLoansModal(requests) {
     `;
 
     document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('modal').style.display = 'flex';
 
     // Cancel / Close Buttons
     document.getElementById('close-all-loans-modal').onclick = hideModal;
@@ -5431,7 +5441,6 @@ function showApproveLoanModal(loan, fromListModal = false) {
     `;
 
     document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('modal').style.display = 'flex';
 
     // Format final amount input
     const finalAmountInput = document.getElementById('approve-loan-final-amount');

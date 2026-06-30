@@ -811,6 +811,10 @@ function updateUIVisibility(userData) {
         remisionListContainer.classList.toggle('lg:col-span-3', isPlanta);
         remisionListContainer.classList.toggle('lg:col-span-2', !isPlanta);
     }
+    const mobileAddRemisionBtn = document.getElementById('mobile-add-remision-btn');
+    if (mobileAddRemisionBtn) {
+        mobileAddRemisionBtn.style.display = isPlanta ? 'none' : '';
+    }
 
     const isContabilidad = userData.role?.toLowerCase() === 'contabilidad';
     const gastosView = document.getElementById('view-gastos');
@@ -1107,6 +1111,7 @@ export function hideModal() {
     const primaryModal = document.getElementById('modal');
     if (primaryModal) {
         primaryModal.classList.add('hidden');
+        primaryModal.style.display = '';
         primaryModal.querySelector('#modal-content-wrapper').innerHTML = '';
         cleanupDashboardListeners();
     }

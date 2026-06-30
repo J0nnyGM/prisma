@@ -2144,7 +2144,6 @@ function showApproveLoanModal(loan, fromListModal = false) {
     `;
 
     document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('modal').style.display = 'flex';
 
     // Format final amount input
     const finalAmountInput = document.getElementById('approve-loan-final-amount');
