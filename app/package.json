@@ -1,0 +1,12 @@
+{
+  "name": "prisma-app",
+  "version": "1.0.0",
+  "description": "Compilador de Tailwind CSS para la app de Prisma",
+  "scripts": {
+    "build-css": "tailwindcss -i ./css/styles.css -o ./css/output.css --minify",
+    "watch-css": "tailwindcss -i ./css/styles.css -o ./css/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.4"
+  }
+}

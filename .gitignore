@@ -2,3 +2,10 @@
 /app/functions/subirjs/
 /app/functions/serviceAccountKey.json
 *.local
+
+
+node_modules/
+*.local
+subirjs/
+config_backup.json
+.env

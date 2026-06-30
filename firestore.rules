@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- FUNCIONES DE AYUDA ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getRequestingUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return userExists() && getRequestingUserData().role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasPermission(permissionName) {
+      return userExists() && 
+             (getRequestingUserData().role == 'admin' || 
+              (getRequestingUserData().permissions != null && 
+               getRequestingUserData().permissions[permissionName] == true));
+    }
+
+    // --- REGLAS NUEVAS (SOLUCIÓN DEL ERROR) ---
+
+    // 1. Estadísticas Mensuales (Dashboard Optimizado)
+    match /estadisticas_mensuales/{document} {
+      allow read: if isSignedIn();
+      allow write: if false; 
+    }
+
+    // 2. Estadísticas Globales (Saldos en tiempo real)
+    match /estadisticas/{document} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 3. Transferencias (Historial y Pendientes)
+    match /transferencias/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false; 
+    }
+
+    // --- REGLAS EXISTENTES AJUSTADAS ---
+
+    // Colección de Usuarios
+    match /users/{userId} {
+      allow create: if isOwner(userId);
+      allow get: if isOwner(userId) || hasPermission('empleados') || hasPermission('nomina');
+      allow list: if hasPermission('empleados') || hasPermission('nomina');
+      allow update: if isOwner(userId) || hasPermission('empleados') || hasPermission('nomina');
+      allow delete: if false;
+
+      // Acceso directo por ruta a préstamos individuales
+      match /loans/{loanId} {
+        allow read: if hasPermission('nomina') || isOwner(userId);
+        allow create: if hasPermission('nomina');
+        allow update: if hasPermission('nomina');
+        allow delete: if hasPermission('nomina');
+      }
+
+      // Acceso directo por ruta al historial de pagos individual
+      match /paymentHistory/{payId} {
+        allow read: if hasPermission('nomina') || isOwner(userId);
+        allow create: if hasPermission('nomina');
+        allow update: if hasPermission('nomina');
+        allow delete: if false;
+      }
+    }
+
+    // COLLECTIONGROUP: Permite collectionGroup('loans') desde nomina.js
+    // Firestore requiere esta regla con ruta comodín para que collectionGroup funcione
+    match /{path=**}/loans/{loanId} {
+      allow read: if hasPermission('nomina') || isOwner(path[1]);
+      allow create: if hasPermission('nomina');
+      allow update: if hasPermission('nomina');
+      allow delete: if hasPermission('nomina');
+    }
+
+    // COLLECTIONGROUP: Permite collectionGroup('paymentHistory') desde nomina.js
+    match /{path=**}/paymentHistory/{payId} {
+      allow read: if hasPermission('nomina') || isOwner(path[1]);
+      allow create: if hasPermission('nomina');
+      allow update: if hasPermission('nomina');
+      allow delete: if false;
+    }
+
+    // Estadísticas de productividad por empleado (bonificaciones, asistencia, etc.)
+    match /employeeStats/{userId} {
+      allow read: if hasPermission('nomina') || hasPermission('empleados') || isOwner(userId);
+      allow write: if hasPermission('nomina') || hasPermission('empleados');
+
+      match /monthlyStats/{monthId} {
+        allow read: if hasPermission('nomina') || hasPermission('empleados') || isOwner(userId);
+        allow write: if hasPermission('nomina') || hasPermission('empleados');
+      }
+    }
+    
+    // Colección de Préstamos
+    match /prestamos/{prestamoId} {
+      allow read: if hasPermission('prestamos') || isOwner(resource.data.employeeId);
+      allow create: if isSignedIn() && request.resource.data.employeeId == request.auth.uid;
+      allow update, delete: if hasPermission('prestamos');
+    }
+    
+    // Contadores
+    match /counters/{counterId} {
+        allow read, write: if isSignedIn(); 
+    }
+
+    // --- DATOS DE NEGOCIO ---
+    
+    match /clientes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('clientes');
+    }
+    
+    match /proveedores/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('proveedores');
+    }
+
+    match /items/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('items');
+    }
+
+    match /colores/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('colores');
+    }
+    
+    match /gastos/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('gastos');
+    }
+    
+    match /configuracion/{document} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Remisiones (AJUSTE CRÍTICO)
+    match /remisiones/{remisionId} {
+      allow read: if isSignedIn();
+      allow create: if hasPermission('remisiones'); 
+      
+      // Actualización condicional para planta vs otros roles con permisos
+      allow update: if hasPermission('remisiones') && 
+                    (getRequestingUserData().role != 'planta' || 
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', '_lastUpdated']) ||
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'fechaEntrega', '_lastUpdated'])
+                    );
+
+      allow delete: if false;
+    }
+
+    match /config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // CHATS CRM
+    match /chats/{telefono} {
+      allow read, write: if isSignedIn();
+      
+      match /mensajes/{mensajeId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+    
+    // MENSAJES WHATSAPP
+    match /mensajes_whatsapp/{docId} {
+       allow read, write: if isSignedIn();
+    }
+  }
+}

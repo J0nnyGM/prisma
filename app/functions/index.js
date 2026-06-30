@@ -3,7 +3,7 @@ require('dotenv').config();
 const functions = require("firebase-functions");
 const cors = require("cors")({ origin: true });
 const admin = require("firebase-admin");
-const sgMail = require("@sendgrid/mail");
+const nodemailer = require("nodemailer");
 const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios");
@@ -15,19 +15,48 @@ admin.initializeApp();
 
 // --- CONFIGURACIÓN CON VARIABLES DE ENTORNO (.ENV) ---
 
-// Configurar SendGrid
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL;
+// Configurar Correo SMTP (cPanel)
+const SMTP_HOST = process.env.SMTP_HOST || 'mail.pinturasprismacolor.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465');
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465;
+const SMTP_USER = process.env.SMTP_USER || 'remisiones@pinturasprismacolor.com';
+const SMTP_PASS = process.env.SMTP_PASS;
 
-if (SENDGRID_API_KEY) {
-    const cleanKey = SENDGRID_API_KEY.replace(/['"\s]/g, '');
-    try {
-        sgMail.setApiKey(cleanKey);
-    } catch (error) {
-        console.error("Error configurando API Key de SendGrid:", error.message);
+const FROM_EMAIL = SMTP_USER;
+
+const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS
+    },
+    tls: {
+        rejectUnauthorized: false
     }
-} else {
-    console.warn("ADVERTENCIA: No se encontró SENDGRID_API_KEY en el archivo .env");
+});
+
+// Helper para enviar correo usando nodemailer
+async function sendEmail(msg) {
+    const nodemailerAttachments = msg.attachments ? msg.attachments.map(att => {
+        return {
+            filename: att.filename,
+            content: Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content, 'base64'),
+            contentType: att.type || 'application/pdf'
+        };
+    }) : [];
+
+    const mailOptions = {
+        to: msg.to,
+        from: msg.from || FROM_EMAIL,
+        subject: msg.subject,
+        text: msg.text,
+        html: msg.html,
+        attachments: nodemailerAttachments
+    };
+
+    return transporter.sendMail(mailOptions);
 }
 
 // Configuración de WhatsApp
@@ -130,53 +159,84 @@ function generarPDF(remisionData, esPlanta) {
     const isForPlanta = esPlanta;
     const doc = new jsPDF();
 
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("REMISION DE SERVICIO", 105, 20, { align: "center" });
-
+    // 1. DIBUJAR MARCA DE AGUA "ANULADA"
     if (remision.estado === "Anulada") {
         doc.setFontSize(60);
-        doc.setTextColor(255, 0, 0);
-        doc.text("ANULADA", 105, 140, null, 45);
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(255, 200, 200); // Light red for watermark so it doesn't block text readability
+        doc.text("ANULADA", 105, 140, { align: "center", angle: 45 });
     }
 
+    // 2. ENCABEZADO IZQUIERDO (DATOS DE LA EMPRESA)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(33, 37, 41); // Dark charcoal grey
+    doc.text("PRISMACOLOR", 15, 22);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(108, 117, 125); // Slate/grey info text
+    doc.text("Tels: 313 2522810 – 310 2557543", 15, 28);
+    doc.text("Cra 27A No. 68-80", 15, 33);
+
+    // 3. ENCABEZADO DERECHO (DATOS DE LA REMISIÓN)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(33, 37, 41);
+    doc.text("REMISIÓN", 195, 22, { align: "right" });
+
+    doc.setFontSize(20);
+    doc.setTextColor(230, 120, 23); // Orange brand color
+    doc.text(`#${remision.numeroRemision}`, 195, 29, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(108, 117, 125);
+    doc.text(remision.fechaRecibido || "", 195, 35, { align: "right" });
+    doc.text(`ID: ${remision.id || 'N/A'}`, 195, 40, { align: "right" });
+
+    // 4. LÍNEA SEPARADORA PRINCIPAL
+    doc.setDrawColor(33, 37, 41);
+    doc.setLineWidth(0.8);
+    doc.line(15, 45, 195, 45);
+
+    // 5. INFORMACIÓN DEL CLIENTE
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("PRISMACOLOR", 105, 28, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    const contactInfo = "Tels: 310 2557543 – 313 2522810";
-    const address = "Cra 27A No. 68-80";
-    doc.text(contactInfo, 105, 33, { align: "center" });
-    doc.text(address, 105, 38, { align: "center" });
+    doc.setTextColor(108, 117, 125);
+    doc.text("INFORMACIÓN DEL CLIENTE", 15, 52);
 
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    const remisionNum = `Remisión N°: ${remision.numeroRemision}`;
-    doc.text(remisionNum, 190, 45, { align: "right" });
+    // Línea delgada abajo del título de sección
+    doc.setDrawColor(220, 224, 230);
+    doc.setLineWidth(0.2);
+    doc.line(15, 54, 195, 54);
 
-    doc.setFontSize(11);
+    // Fila 1 de Datos de Cliente
     doc.setFont("helvetica", "bold");
-    doc.text("Cliente:", 20, 55);
-    doc.setFont("helvetica", "normal");
-    doc.text(remision.clienteNombre, 40, 55);
-    if (!isForPlanta) {
-        doc.setFont("helvetica", "bold");
-        doc.text("Correo:", 20, 61);
-        doc.setFont("helvetica", "normal");
-        doc.text(remision.clienteEmail, 40, 61);
-    }
+    doc.setFontSize(8);
+    doc.setTextColor(108, 117, 125);
+    doc.text("CLIENTE", 15, 62);
+    doc.text("TELÉFONO", 110, 62);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Fecha Recibido:", 130, 55);
-    doc.setFont("helvetica", "normal");
-    doc.text(remision.fechaRecibido, 165, 55);
+    doc.setFontSize(10);
+    doc.setTextColor(33, 37, 41);
+    doc.text(remision.clienteNombre || "N/A", 15, 67);
+    doc.text(remision.clienteTelefono || "N/A", 110, 67);
+
+    // Fila 2 de Datos de Cliente
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(108, 117, 125);
+    doc.text("IDENTIFICACIÓN", 15, 75);
+    doc.text("CORREO", 110, 75);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Fecha Entrega:", 130, 61);
-    doc.setFont("helvetica", "normal");
-    doc.text(remision.fechaEntrega || "Pendiente", 165, 61);
+    doc.setFontSize(10);
+    doc.setTextColor(33, 37, 41);
+    doc.text(remision.clienteNit || "N/A", 15, 80);
+    doc.text(remision.clienteEmail || "N/A", 110, 80);
 
+    // 6. TABLA DE ÍTEMS
     let tableColumn = ["Referencia", "Descripción", "Color", "Cant."];
     if (!isForPlanta) {
         tableColumn.push("Vlr. Unit.", "Subtotal");
@@ -193,74 +253,141 @@ function generarPDF(remisionData, esPlanta) {
     doc.autoTable({
         head: [tableColumn],
         body: tableRows,
-        startY: 75,
-        theme: "grid",
-        headStyles: { fillColor: [22, 160, 133] },
+        startY: 88,
+        theme: "striped",
+        headStyles: { fillColor: [230, 120, 23], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { textColor: [33, 37, 41], fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 249, 250] },
+        styles: { cellPadding: 3 },
+        columnStyles: isForPlanta ? {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 85 },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 20, halign: "center" }
+        } : {
+            0: { cellWidth: 25 },
+            1: { cellWidth: 65 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 15, halign: "center" },
+            4: { cellWidth: 22, halign: "right" },
+            5: { cellWidth: 23, halign: "right" }
+        }
     });
 
+    // 7. TOTALES Y CONDICIONES (DEBAJO DE LA TABLA)
     const finalY = doc.lastAutoTable.finalY;
     let yPos = finalY + 10;
 
-    if (remision.observaciones && remision.observaciones.trim() !== "") {
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text("Observaciones:", 20, yPos);
-        doc.setFont("helvetica", "normal");
-        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 170);
-        doc.text(textoObservaciones, 20, yPos + 5);
-        yPos += (textoObservaciones.length * 5) + 5;
+    // Si nos queda muy poco espacio, creamos una nueva página
+    if (yPos > 215) {
+        doc.addPage();
+        yPos = 25;
     }
 
     if (!isForPlanta) {
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "bold");
-        doc.text("Subtotal:", 130, yPos);
+        // Cuadro de Totales (Alineado a la derecha)
+        doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text(formatCurrency(remision.subtotal), 190, yPos, { align: "right" });
-        yPos += 7;
+        doc.setTextColor(108, 117, 125);
+        
+        let rightLabelsX = 135;
+        let rightValuesX = 195;
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Subtotal:", rightLabelsX, yPos);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(33, 37, 41);
+        doc.text(formatCurrency(remision.subtotal), rightValuesX, yPos, { align: "right" });
+        yPos += 6;
 
         if (remision.discount && remision.discount.amount > 0) {
             doc.setFont("helvetica", "bold");
-            doc.text("Descuento:", 130, yPos);
+            doc.setTextColor(108, 117, 125);
+            doc.text("Descuento:", rightLabelsX, yPos);
             doc.setFont("helvetica", "normal");
-            doc.text(`-${formatCurrency(remision.discount.amount)}`, 190, yPos, { align: "right" });
-            yPos += 7;
+            doc.setTextColor(33, 37, 41);
+            doc.text(`-${formatCurrency(remision.discount.amount)}`, rightValuesX, yPos, { align: "right" });
+            yPos += 6;
         }
 
         if (remision.incluyeIVA) {
             doc.setFont("helvetica", "bold");
-            doc.text("IVA (19%):", 130, yPos);
+            doc.setTextColor(108, 117, 125);
+            doc.text("IVA (19%):", rightLabelsX, yPos);
             doc.setFont("helvetica", "normal");
-            doc.text(formatCurrency(remision.valorIVA), 190, yPos, { align: "right" });
-            yPos += 7;
+            doc.setTextColor(33, 37, 41);
+            doc.text(formatCurrency(remision.valorIVA), rightValuesX, yPos, { align: "right" });
+            yPos += 6;
         }
 
         doc.setFont("helvetica", "bold");
-        doc.text("TOTAL:", 130, yPos);
-        doc.text(formatCurrency(remision.valorTotal), 190, yPos, { align: "right" });
-        yPos += 11;
-
+        doc.setFontSize(12);
+        doc.setTextColor(33, 37, 41);
+        doc.text("TOTAL:", rightLabelsX, yPos);
+        doc.text(formatCurrency(remision.valorTotal), rightValuesX, yPos, { align: "right" });
+        
+        // Reset font size
         doc.setFontSize(10);
-        doc.text(`Forma de Pago: ${remision.formaPago}`, 20, yPos);
-        yPos += 7;
-        doc.text(`Estado: ${remision.estado}`, 20, yPos);
+        yPos += 10;
     }
 
-    yPos = Math.max(yPos, finalY + 20);
-    yPos = 250;
-    doc.line(40, yPos, 120, yPos);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Firma y Sello de Recibido", 75, yPos + 5, { align: "center" });
+    // Información de pago y observaciones (Alineado a la izquierda)
+    let leftInfoY = finalY + 10;
+    if (leftInfoY > 215) leftInfoY = 25; // Si se añadió página
 
-    doc.setLineCap(2);
-    doc.line(20, 270, 190, 270);
-    const footerText1 = "NO SE ENTREGA TRABAJO SINO HA SIDO CANCELADO.";
-    const footerText2 = "DESPUES DE 8 DIAS NO SE RESPONDE POR MERCANCIA.";
+    if (remision.observaciones && remision.observaciones.trim() !== "") {
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(108, 117, 125);
+        doc.text("Observaciones:", 15, leftInfoY);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(33, 37, 41);
+        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 110);
+        doc.text(textoObservaciones, 15, leftInfoY + 4);
+        leftInfoY += (textoObservaciones.length * 4.5) + 6;
+    }
+
+    if (!isForPlanta) {
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(108, 117, 125);
+        doc.text("Detalles de Pago:", 15, leftInfoY);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(33, 37, 41);
+        doc.text(`Forma de Pago: ${remision.formaPago}`, 15, leftInfoY + 4);
+        doc.text(`Estado: ${remision.estado}`, 15, leftInfoY + 8);
+    }
+
+    // Asegurarse de que yPos esté después de toda la info de la izquierda
+    yPos = Math.max(yPos, leftInfoY + 15);
+
+    // 8. SECCIÓN DE FIRMA Y PIE DE PÁGINA (Al final del documento)
+    if (yPos > 240) {
+        doc.addPage();
+        yPos = 30;
+    }
+
+    yPos = 250;
+    doc.setDrawColor(220, 224, 230);
+    doc.setLineWidth(0.3);
+    doc.line(40, yPos, 120, yPos);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(108, 117, 125);
+    doc.text("Firma y Sello de Recibido", 80, yPos + 4, { align: "center" });
+
+    // Footer de la empresa
+    doc.setDrawColor(33, 37, 41);
+    doc.setLineWidth(0.8);
+    doc.line(15, 268, 195, 268);
+
+    const footerText1 = "NO SE ENTREGA TRABAJO SI NO HA SIDO CANCELADO.";
+    const footerText2 = "DESPUÉS DE 8 DÍAS NO SE RESPONDE POR MERCANCIA.";
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.text(footerText1, 105, 275, { align: "center" });
-    doc.text(footerText2, 105, 279, { align: "center" });
+    doc.setTextColor(33, 37, 41);
+    doc.text(footerText1, 105, 273, { align: "center" });
+    doc.text(footerText2, 105, 277, { align: "center" });
 
     return Buffer.from(doc.output("arraybuffer"));
 }
@@ -283,6 +410,7 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
             "permissions.gastos": true,
             "permissions.proveedores": true,
             "permissions.empleados": true,
+            _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         });
     }
     return null;
@@ -314,7 +442,8 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
 
             await snap.ref.update({
                 pdfPath: filePath,
-                pdfPlantaPath: filePathPlanta
+                pdfPlantaPath: filePathPlanta,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
             });
 
             const [url] = await file.getSignedUrl({
@@ -337,7 +466,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                         disposition: "attachment",
                     }],
                 };
-                await sgMail.send(msg);
+                await sendEmail(msg);
                 emailStatus = "sent";
             } catch (emailError) {
                 log("Error correo cliente: " + emailError.message);
@@ -358,7 +487,7 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
                         disposition: "attachment",
                     }],
                 };
-                await sgMail.send(printerMsg);
+                await sendEmail(printerMsg);
                 log(`Copia impresora enviada.`);
             } catch (printerError) {
                 log("Error impresora: " + printerError.message);
@@ -398,11 +527,12 @@ exports.onRemisionCreate = functions.region("us-central1").firestore
             return snap.ref.update({
                 emailStatus: emailStatus,
                 whatsappStatus: whatsappStatus,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
             });
 
         } catch (error) {
             functions.logger.error(`[${remisionId}] Error General Create:`, error);
-            return snap.ref.update({ emailStatus: "error", whatsappStatus: "error" });
+            return snap.ref.update({ emailStatus: "error", whatsappStatus: "error", _lastUpdated: admin.firestore.FieldValue.serverTimestamp() });
         }
     });
 
@@ -446,7 +576,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                         disposition: "attachment",
                     }],
                 };
-                await sgMail.send(msg);
+                await sendEmail(msg);
             } catch (error) { log(`Error correo ${motivo}: ${error.message}`); }
 
             // WhatsApp
@@ -509,7 +639,7 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
                         disposition: "attachment",
                     }],
                 };
-                await sgMail.send(msg);
+                await sendEmail(msg);
             } catch (e) { log(`Error notif pago final: ${e}`); }
         }
 
@@ -529,8 +659,12 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
         
         // Calcular la nueva forma de pago correcta basada en el saldo
         if (nuevoSaldo <= 0) {
-            nuevaFormaPago = "Cancelado";
-        } else if (formaPagoActual === "Cancelado" && nuevoSaldo > 0) {
+            if (formaPagoActual === "Pendiente" || formaPagoActual === "Cancelado" || !formaPagoActual) {
+                nuevaFormaPago = "Cancelado";
+            } else {
+                nuevaFormaPago = formaPagoActual; // Preservar Efectivo, Nequi, Davivienda
+            }
+        } else if (formaPagoActual !== "Pendiente" && nuevoSaldo > 0) {
             // Si estaba cancelado pero ahora debe (ej: anularon un pago), vuelve a pendiente
             nuevaFormaPago = "Pendiente";
         }
@@ -544,7 +678,8 @@ exports.onRemisionUpdate = functions.region("us-central1").firestore
             log(`Actualizando saldo: ${nuevoSaldo} (Antes: ${saldoAnterior}) | Estado: ${nuevaFormaPago}`);
             return change.after.ref.update({
                 saldoPendiente: nuevoSaldo,
-                formaPago: nuevaFormaPago
+                formaPago: nuevaFormaPago,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
             });
         }
 
@@ -580,7 +715,10 @@ exports.migrarSaldosCartera = functions.https.onCall(async (data, context) => {
 
         // Solo actualizamos si no tiene el campo o está mal
         if (r.saldoPendiente === undefined || Math.abs(r.saldoPendiente - saldo) > 1) {
-            batch.update(doc.ref, { saldoPendiente: saldo });
+            batch.update(doc.ref, { 
+                saldoPendiente: saldo,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
             count++;
             totalUpdated++;
         }
@@ -620,7 +758,7 @@ exports.onResendEmailRequest = functions.region("us-central1").firestore
                     disposition: "attachment",
                 }],
             };
-            await sgMail.send(msg);
+            await sendEmail(msg);
             return snap.ref.delete();
         } catch (error) {
             return snap.ref.update({ status: "error", error: error.message });
@@ -645,7 +783,7 @@ exports.getFirebaseConfig = functions.https.onCall((data, context) => {
 exports.applyDiscount = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
     const { remisionId, discountPercentage } = data;
-    if (discountPercentage < 0 || discountPercentage > 5.0001) throw new functions.https.HttpsError("out-of-range", "Descuento máximo 5%.");
+    if (discountPercentage < 0 || discountPercentage > 100.0001) throw new functions.https.HttpsError("out-of-range", "Descuento máximo 100%.");
     const remisionRef = admin.firestore().collection("remisiones").doc(remisionId);
     try {
         const remSnap = await remisionRef.get();
@@ -664,6 +802,7 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
                 appliedBy: context.auth.uid,
                 appliedAt: new Date(),
             },
+            _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         };
         await remisionRef.update(updatedData);
         const finalData = { ...rData, ...updatedData };
@@ -674,9 +813,13 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
         await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
         const filePlanta = bucket.file(`remisiones/planta-${finalData.numeroRemision}.pdf`);
         await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
-        const [url] = await file.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
-        const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
-        await remisionRef.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+        const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+        const [urlPlanta] = await filePlanta.getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+        await remisionRef.update({ 
+            pdfUrl: url, 
+            pdfPlantaUrl: urlPlanta,
+            _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
         const msg = {
             to: finalData.clienteEmail,
             from: FROM_EMAIL,
@@ -689,7 +832,7 @@ exports.applyDiscount = functions.https.onCall(async (data, context) => {
                 disposition: "attachment",
             }],
         };
-        await sgMail.send(msg);
+        await sendEmail(msg);
         return { success: true };
     } catch (e) {
         throw new functions.https.HttpsError("internal", e.message);
@@ -741,10 +884,14 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
                 } catch (_) { }
             }
             const [url] = await bucket.file(`remisiones/${r.numeroRemision}.pdf`)
-                .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
+                .getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
             const [urlPlanta] = await bucket.file(`remisiones/planta-${r.numeroRemision}.pdf`)
-                .getSignedUrl({ action: "read", expires: "03-09-2491", version: 'v4' });
-            await doc.ref.update({ pdfUrl: url, pdfPlantaUrl: urlPlanta });
+                .getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+            await doc.ref.update({ 
+                pdfUrl: url, 
+                pdfPlantaUrl: urlPlanta,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
             fixed++;
         } catch (e) {
             errors++;
@@ -782,7 +929,10 @@ exports.applyRetention = functions.https.onCall(async (data, context) => {
                 isRetention: true
             };
             const newPayments = [...(rData.payments || []), retentionPayment];
-            t.update(remRef, { payments: newPayments });
+            t.update(remRef, { 
+                payments: newPayments,
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
         });
         return { success: true };
     } catch (error) {
@@ -1112,6 +1262,94 @@ exports.getDataForExport = functions.https.onCall(async (data, context) => {
     return { data: results, count: results.length };
 });
 
+exports.toggleFacturacionIVA = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    }
+    
+    const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    if (!userSnap.exists || userSnap.data().role !== "admin") {
+        throw new functions.https.HttpsError("permission-denied", "Solo los administradores pueden modificar el IVA.");
+    }
+
+    const { remisionId, action } = data;
+    if (!remisionId || !action) {
+        throw new functions.https.HttpsError("invalid-argument", "Datos inválidos.");
+    }
+
+    const db = admin.firestore();
+    const remisionRef = db.collection("remisiones").doc(remisionId);
+
+    try {
+        const remisionDoc = await remisionRef.get();
+        if (!remisionDoc.exists) {
+            throw new functions.https.HttpsError("not-found", "Remisión no encontrada.");
+        }
+        
+        const remisionData = remisionDoc.data();
+        let updatedData = {};
+
+        const discountAmount = remisionData.discount ? (remisionData.discount.amount || 0) : 0;
+        const subtotalConDescuento = remisionData.subtotal - discountAmount;
+
+        if (action === 'extract') {
+            if (remisionData.incluyeIVA) return { success: true, message: "Ya incluye IVA" };
+            
+            const nuevoValorIVA = Math.round(subtotalConDescuento * 0.19);
+            const nuevoValorTotal = subtotalConDescuento + nuevoValorIVA;
+
+            updatedData = {
+                incluyeIVA: true,
+                valorIVA: nuevoValorIVA,
+                valorTotal: nuevoValorTotal
+            };
+
+        } else if (action === 'revert') {
+            if (!remisionData.incluyeIVA) return { success: true, message: "Ya no incluye IVA" };
+
+            const nuevoValorTotal = subtotalConDescuento;
+
+            updatedData = {
+                incluyeIVA: false,
+                valorIVA: 0,
+                valorTotal: nuevoValorTotal
+            };
+        } else {
+            throw new functions.https.HttpsError("invalid-argument", "Acción no permitida.");
+        }
+
+        const finalRemisionData = { ...remisionData, ...updatedData };
+        
+        const pdfBuffer = generarPDF(finalRemisionData, false);
+        const pdfPlantaBuffer = generarPDF(finalRemisionData, true);
+
+        const bucket = admin.storage().bucket(BUCKET_NAME);
+        const filePath = `remisiones/${finalRemisionData.numeroRemision}.pdf`;
+        await bucket.file(filePath).save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+        const filePathPlanta = `remisiones/planta-${finalRemisionData.numeroRemision}.pdf`;
+        await bucket.file(filePathPlanta).save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+
+        const [url] = await bucket.file(filePath).getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+        const [urlPlanta] = await bucket.file(filePathPlanta).getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+
+        await remisionRef.update({
+            ...updatedData,
+            pdfPath: filePath,
+            pdfPlantaPath: filePathPlanta,
+            pdfUrl: url,
+            pdfPlantaUrl: urlPlanta,
+            _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return { success: true, message: "IVA actualizado y PDFs regenerados con éxito." };
+
+    } catch (error) {
+        functions.logger.error(`Error en toggleFacturacionIVA para ${remisionId}:`, error);
+        throw new functions.https.HttpsError("internal", error.message || "Error interno al modificar IVA.");
+    }
+});
+
 // ==========================================
 //              EXPORTS FINALES (CORREGIDO)
 // ==========================================
@@ -1119,3 +1357,226 @@ exports.getDataForExport = functions.https.onCall(async (data, context) => {
 // Usamos el objeto importado al inicio
 exports.whatsappWebhook = waWebhook.whatsappWebhook;
 exports.sendWhatsAppMessage = waWebhook.sendWhatsAppMessage;
+
+
+
+// ==========================================
+//      SCRIPT: REGENERAR PDFs FALTANTES
+// ==========================================
+
+exports.regenerarPDFsFaltantes = functions.region("us-central1").https.onRequest(async (req, res) => {
+    // Protección simple por token en la URL para evitar ejecuciones accidentales o maliciosas
+    const token = req.query.token;
+    if (token !== "prisma2026") {
+        return res.status(403).send("<h1 style='color:red;'>Acceso Denegado</h1><p>Debes enviar el token correcto en la URL.</p>");
+    }
+
+    try {
+        const db = admin.firestore();
+        const bucket = admin.storage().bucket(BUCKET_NAME);
+        
+        // Traemos las últimas 300 remisiones (puedes aumentar el límite si el error es más antiguo)
+        const snapshot = await db.collection("remisiones")
+                                 .orderBy("numeroRemision", "desc")
+                                 .limit(300)
+                                 .get();
+                                 
+        let procesadas = 0;
+        let regeneradas = 0;
+        let errores = [];
+
+        for (const doc of snapshot.docs) {
+            procesadas++;
+            const data = doc.data();
+
+            // Condición: Verificamos si NO tiene guardado el pdfPath
+            if (!data.pdfPath || !data.pdfPlantaPath) {
+                try {
+                    // 1. Generar los PDFs usando tu función existente
+                    const pdfBuffer = generarPDF(data, false);
+                    const pdfPlantaBuffer = generarPDF(data, true);
+
+                    // 2. Guardar en Storage
+                    const filePath = `remisiones/${data.numeroRemision}.pdf`;
+                    const file = bucket.file(filePath);
+                    await file.save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+                    const filePathPlanta = `remisiones/planta-${data.numeroRemision}.pdf`;
+                    const filePlanta = bucket.file(filePathPlanta);
+                    await filePlanta.save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+
+                    // 3. Obtener URLs firmadas
+                    const [url] = await file.getSignedUrl({
+                        action: "read",
+                        expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+                        version: 'v4'
+                    });
+                    
+                    const [urlPlanta] = await filePlanta.getSignedUrl({
+                        action: "read",
+                        expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+                        version: 'v4'
+                    });
+
+                    // 4. Actualizar el documento en Firestore
+                    await doc.ref.update({
+                        pdfPath: filePath,
+                        pdfPlantaPath: filePathPlanta,
+                        pdfUrl: url,
+                        pdfPlantaUrl: urlPlanta,
+                        _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    regeneradas++;
+                    functions.logger.log(`Regenerada con éxito la remisión N° ${data.numeroRemision}`);
+                } catch (err) {
+                    errores.push(`Error en Remisión N° ${data.numeroRemision}: ${err.message}`);
+                }
+            }
+        }
+
+        // Devolver un reporte en pantalla
+        res.status(200).send(`
+            <div style="font-family: Arial, sans-serif; padding: 30px; line-height: 1.6;">
+                <h1 style="color: #4f46e5;">Reporte de Regeneración</h1>
+                <p><strong>Remisiones revisadas:</strong> ${procesadas}</p>
+                <p><strong>PDFs regenerados y guardados:</strong> <span style="color: green; font-size: 1.2em; font-weight: bold;">${regeneradas}</span></p>
+                ${errores.length > 0 
+                    ? `<h3 style="color: red;">Errores encontrados:</h3><ul>${errores.map(e => `<li>${e}</li>`).join('')}</ul>` 
+                    : '<p style="color: gray;"><i>No hubo errores durante el proceso.</i></p>'}
+            </div>
+        `);
+
+    } catch (error) {
+        console.error("Error crítico en el script:", error);
+        res.status(500).send(`<h1>Error General</h1><p>${error.message}</p>`);
+    }
+});
+
+// ==========================================
+//   AUTO-RESOLVER CHATS INACTIVOS (> 3 DÍAS)
+// ==========================================
+
+exports.resolverChatsInactivos = functions.region("us-central1").pubsub.schedule("0 0 * * *").timeZone("America/Bogota").onRun(async (context) => {
+    const db = admin.firestore();
+    const tresDiasMs = 3 * 24 * 60 * 60 * 1000;
+    const limite = new Date(Date.now() - tresDiasMs);
+    const limiteTimestamp = admin.firestore.Timestamp.fromDate(limite);
+
+    try {
+        const snapshot = await db.collection("chats")
+            .where("fechaUltimo", "<", limiteTimestamp)
+            .get();
+
+        if (snapshot.empty) {
+            functions.logger.log("No hay chats inactivos por resolver.");
+            return null;
+        }
+
+        const batch = db.batch();
+        let count = 0;
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.estadoChat !== 'resuelto') {
+                batch.update(doc.ref, {
+                    estadoChat: 'resuelto',
+                    _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                });
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            await batch.commit();
+            functions.logger.log(`Se resolvieron automáticamente ${count} chats inactivos.`);
+        } else {
+            functions.logger.log("Todos los chats inactivos ya se encontraban resueltos.");
+        }
+
+        return null;
+    } catch (error) {
+        functions.logger.error("Error al resolver chats inactivos de forma automática:", error);
+        return null;
+    }
+});
+
+exports.resolverChatsInactivosManual = functions.region("us-central1").https.onRequest(async (req, res) => {
+    const token = req.query.token;
+    if (token !== "prisma2026") {
+        return res.status(403).send("<h1 style='color:red;'>Acceso Denegado</h1>");
+    }
+
+    const db = admin.firestore();
+    const tresDiasMs = 3 * 24 * 60 * 60 * 1000;
+    const limite = new Date(Date.now() - tresDiasMs);
+    const limiteTimestamp = admin.firestore.Timestamp.fromDate(limite);
+
+    try {
+        const snapshot = await db.collection("chats")
+            .where("fechaUltimo", "<", limiteTimestamp)
+            .get();
+
+        if (snapshot.empty) {
+            return res.status(200).send("No hay chats inactivos por resolver.");
+        }
+
+        const batch = db.batch();
+        let count = 0;
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.estadoChat !== 'resuelto') {
+                batch.update(doc.ref, {
+                    estadoChat: 'resuelto',
+                    _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                });
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            await batch.commit();
+        }
+
+        res.status(200).send(`Proceso completado. Se marcaron ${count} chats como resueltos (inactivos por más de 3 días).`);
+    } catch (error) {
+        functions.logger.error("Error manual al resolver chats inactivos:", error);
+        res.status(500).send(`Error: ${error.message}`);
+    }
+});
+
+//https://us-central1-prismacolorsas.cloudfunctions.net/regenerarPDFsFaltantes?token=prisma2026
+//https://us-central1-prismacolorsas.cloudfunctions.net/resolverChatsInactivosManual?token=prisma2026
+
+// ==========================================
+//    ESTABLECER SALDOS INICIALES (ADMIN)
+// ==========================================
+
+exports.setInitialBalances = functions.region("us-central1").https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe iniciar sesión para realizar esta operación.");
+    }
+    
+    // Verificar rol del usuario en Firestore
+    const userDoc = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Solo los administradores pueden establecer los saldos iniciales.");
+    }
+
+    const balances = data;
+    for (const key in balances) {
+        if (typeof balances[key] !== 'number') {
+            throw new functions.https.HttpsError("invalid-argument", `El valor para "${key}" no es un número.`);
+        }
+    }
+
+    try {
+        const balanceDocRef = admin.firestore().collection("configuracion").doc("saldos_globales");
+        await balanceDocRef.set(balances, { merge: true });
+        return { success: true, message: "Saldos iniciales guardados correctamente." };
+    } catch (error) {
+        functions.logger.error("Error al guardar saldos iniciales:", error);
+        throw new functions.https.HttpsError("internal", "No se pudo guardar la información en la base de datos.");
+    }
+});

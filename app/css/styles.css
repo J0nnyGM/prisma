@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
     font-family: 'Inter', sans-serif;
     background-color: #f3f4f6;
@@ -30,15 +34,15 @@ body {
 }
 
 .tab-btn.active {
-    border-bottom-color: #4f46e5;
+    border-bottom-color: #de7518;
     color: #111827;
     background-color: #f3f4f6;
     /* Añade esta línea */
 }
 
 .dashboard-tab-btn.active {
-    border-color: #4f46e5;
-    color: #4f46e5;
+    border-color: #de7518;
+    color: #de7518;
 }
 
 .btn-disabled {
@@ -150,8 +154,8 @@ body {
   a la pestaña que esté actualmente seleccionada dentro del modal de Cartera.
 */
 .cartera-tab-btn.active {
-    color: #2563EB; /* Corresponde a text-blue-600 en Tailwind */
-    border-bottom-color: #2563EB; /* Corresponde a border-blue-600 */
+    color: #de7518; /* Corresponde a text-blue-600 en Tailwind */
+    border-bottom-color: #de7518; /* Corresponde a border-blue-600 */
     border-bottom-width: 2px;
 }
 
@@ -269,5 +273,427 @@ body {
         height: 100%;
         z-index: 40;
         background-color: white;
+    }
+}
+
+/* --- SIDEBAR Y MENÚ RESPONSIVO (ESTILO IMPORTACIÓN) --- */
+
+/* Sidebar Escritorio - Estilo Mediline Premium */
+#desktop-sidebar {
+    background-color: #de7518 !important; /* Indigo de la marca Prisma */
+    color: #ffffff !important;
+    border-right: none !important;
+    box-shadow: 4px 0 24px rgba(222, 117, 24, 0.15) !important;
+}
+
+#desktop-sidebar .border-b {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+#desktop-sidebar h2 {
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #user-info {
+    color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Nav del Sidebar */
+#desktop-sidebar #main-nav {
+    padding: 1.5rem 1.25rem !important; /* Espaciado uniforme a ambos lados */
+}
+
+#desktop-sidebar .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    padding: 0.85rem 1.25rem !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    background: transparent !important;
+    border: none !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-radius: 2rem !important; /* Totalmente redondeado por todos los lados */
+    position: relative !important;
+    outline: none !important;
+    text-align: left;
+}
+
+#desktop-sidebar .tab-btn.hidden {
+    display: none !important;
+}
+
+#desktop-sidebar .tab-btn:hover {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Tab Activo - Estilo de Píldora Premium Autocontenida */
+#desktop-sidebar .tab-btn.active {
+    color: #de7518 !important; /* Texto indigo de marca */
+    background-color: #ffffff !important; /* Fondo blanco limpio */
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    z-index: 10 !important;
+}
+
+/* Badges en Sidebar */
+#desktop-sidebar .tab-btn span.badge {
+    margin-left: auto;
+}
+
+/* Footer del Sidebar */
+#desktop-sidebar div.p-4.border-t {
+    border-top-color: rgba(255, 255, 255, 0.15) !important;
+    padding-top: 1.25rem !important;
+    padding-bottom: 1.25rem !important;
+}
+
+#desktop-sidebar #view-all-loans-btn {
+    background-color: #1e40af !important;
+    border: 1px solid #1d4ed8 !important;
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #view-all-loans-btn:hover {
+    background-color: #1e3a8a !important;
+}
+
+#desktop-sidebar #loan-request-btn {
+    background-color: #b45309 !important;
+    border: 1px solid #d97706 !important;
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #loan-request-btn:hover {
+    background-color: #78350f !important;
+}
+
+#desktop-sidebar #summary-btn {
+    background-color: #15803d !important;
+    border: 1px solid #166534 !important;
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #summary-btn:hover {
+    background-color: #14532d !important;
+}
+
+#desktop-sidebar #edit-profile-btn {
+    background-color: #334155 !important;
+    border: 1px solid #475569 !important;
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #edit-profile-btn:hover {
+    background-color: #1e293b !important;
+}
+
+#desktop-sidebar #logout-btn {
+    background-color: #b91c1c !important;
+    border: 1px solid #dc2626 !important;
+    color: #ffffff !important;
+}
+
+#desktop-sidebar #logout-btn:hover {
+    background-color: #991b1b !important;
+}
+
+/* Header Móvil */
+#mobile-header {
+    background-color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Barra inferior móvil glassmorphic */
+@media (max-width: 767px) {
+    #mobile-bottom-nav {
+        background-color: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03);
+        height: 64px !important;
+        padding-bottom: env(safe-area-inset-bottom) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-around !important;
+    }
+}
+
+/* Efecto hover/click en botones móviles */
+#mobile-bottom-nav button {
+    transition: transform 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+#mobile-bottom-nav button:active {
+    transform: scale(0.92);
+}
+
+/* Estilo cajón desplegable móvil */
+#mobile-menu-content {
+    border-top-left-radius: 1.75rem;
+    border-top-right-radius: 1.75rem;
+    background-color: #ffffff;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* Modales y Formularios en Móvil (Bottom Drawers) */
+.mobile-form-modal {
+    display: none !important; /* Oculto por defecto */
+    position: fixed !important;
+    inset: 0 !important;
+    background-color: rgba(15, 23, 42, 0.5) !important; /* Fondo oscuro semi-transparente */
+    backdrop-filter: blur(8px) !important; /* Desenfoque premium */
+    z-index: 100 !important; /* Por encima de todo */
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1.25rem !important;
+}
+.mobile-form-modal.show-modal {
+    display: flex !important;
+}
+.modal-card {
+    background-color: #ffffff !important;
+    border-radius: 1.5rem !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15) !important;
+    animation: modalSlideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+    width: 100% !important;
+    max-height: 90vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+.modal-header-fixed {
+    padding: 1.75rem 2rem 1rem 2rem !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+}
+.modal-body-scroll {
+    overflow-y: auto !important;
+    padding: 1.5rem 2rem 2rem 2rem !important;
+    flex-grow: 1 !important;
+}
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(30px) scale(0.96);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Adaptación responsiva del contenido principal */
+@media (min-width: 768px) {
+    #main-content-layout {
+        margin-left: 16rem; /* Deja espacio exacto para el Sidebar (w-64) */
+        min-height: 100vh;
+    }
+}
+
+/* Premium Card, Avatar and Pagination Styles */
+.premium-card {
+    background: #ffffff !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    padding-left: 1.5rem !important; /* Deja espacio para la barra de color */
+}
+
+.premium-card:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 12px 24px -10px rgba(222, 117, 24, 0.12), 0 4px 8px -2px rgba(222, 117, 24, 0.04) !important;
+    border-color: #cbd5e1 !important;
+}
+
+.premium-card::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100% !important;
+    width: 5px !important;
+}
+
+.premium-card-indigo::before { background-color: #de7518 !important; }
+.premium-card-blue::before { background-color: #3b82f6 !important; }
+.premium-card-teal::before { background-color: #0d9488 !important; }
+.premium-card-orange::before { background-color: #de7518 !important; }
+.premium-card-emerald::before { background-color: #10b981 !important; }
+.premium-card-red::before { background-color: #ef4444 !important; }
+
+.premium-avatar {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    border-radius: 9999px !important;
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    font-weight: 700 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 1.1rem !important;
+    border: 2px solid #e2e8f0 !important;
+}
+
+.premium-avatar-indigo { background-color: #ffedd5 !important; color: #c2410c !important; border-color: #fed7aa !important; }
+.premium-avatar-blue { background-color: #dbeafe !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; }
+.premium-avatar-teal { background-color: #ccfbf1 !important; color: #0f766e !important; border-color: #99f6e4 !important; }
+.premium-avatar-orange { background-color: #ffedd5 !important; color: #c2410c !important; border-color: #fed7aa !important; }
+.premium-avatar-emerald { background-color: #dcfce7 !important; color: #15803d !important; border-color: #bbf7d0 !important; }
+
+.premium-metrics-grid {
+    display: grid !important;
+    grid-template-cols: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 0.75rem !important;
+    padding: 0.75rem !important;
+    margin-top: 0.75rem !important;
+}
+
+.btn-premium-outline {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    transition: all 0.2s !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+}
+
+.btn-premium-outline:hover {
+    background-color: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+.premium-pagination-container {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 0.75rem !important;
+    padding: 0.75rem 1rem !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+.premium-pagination-btn {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 9999px !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.premium-pagination-btn:hover:not(:disabled) {
+    background-color: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+.premium-pagination-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
+/* --- PREMIUM MODERN PILL BUTTON BACKGROUND COLORS --- */
+.bg-indigo-650 { background-color: #de7518 !important; }
+.hover\:bg-indigo-755:hover { background-color: #c55f12 !important; }
+
+.bg-blue-650 { background-color: #2563eb !important; }
+.hover\:bg-blue-755:hover { background-color: #1d4ed8 !important; }
+
+.bg-teal-650 { background-color: #0d9488 !important; }
+.hover\:bg-teal-755:hover { background-color: #0f766e !important; }
+
+.bg-orange-650 { background-color: #de7518 !important; }
+.hover\:bg-orange-755:hover { background-color: #c55f12 !important; }
+
+.text-red-650 { color: #dc2626 !important; }
+.bg-slate-50 { background-color: #f8fafc !important; }
+.border-slate-200 { border-color: #e2e8f0 !important; }
+
+/* Contenedor principal de WhatsApp / Mensajes para ocupar todo el alto */
+.wa-main-container {
+    height: calc(100vh - 120px) !important; /* Ajuste por defecto para móvil */
+    min-height: 450px;
+}
+
+@media (min-width: 768px) {
+    .wa-main-container {
+        height: calc(100vh - 1rem) !important; /* Ajuste para desktop, dejando el padding de 0.5rem (8px) arriba y abajo */
+        min-height: 550px;
+    }
+}
+
+@media print {
+    /* 1. Ocultar TODO por defecto */
+    body * {
+        visibility: hidden;
+    }
+    
+    /* 2. Hacer visible SOLO el modal de voucher y sus hijos */
+    #payment-voucher-modal, #payment-voucher-modal * {
+        visibility: visible;
+    }
+
+    /* 3. Posicionar el modal como el contenido único de la página */
+    #payment-voucher-modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+        background: white !important; /* Ahorrar tinta */
+        box-shadow: none !important;
+        border: none !important;
+        z-index: 9999; /* Asegurar que esté encima */
+    }
+    
+    /* 4. Ocultar botones de acción del modal (Cerrar, Imprimir, Aceptar) */
+    #voucher-close-btn, 
+    #voucher-close-footer-btn, 
+    #payment-voucher-modal button {
+        display: none !important;
+    }
+
+    /* 5. Ajustes de diseño para papel */
+    .modal-content {
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    /* 6. Ajuste de colores para impresión (Alto Contraste / Ahorro Tinta) */
+    .bg-slate-50, .bg-gray-50 { 
+        background-color: white !important; 
+        border: 1px solid #ddd !important; /* Agregar borde suave para mantener estructura */
+    }
+    .text-blue-600, .text-blue-800, .text-indigo-600, .text-indigo-700 { 
+        color: black !important; 
+    }
+    /* Forzar texto negro en general para mejor lectura */
+    p, span, h3, h4, td, th {
+        color: black !important;
     }
 }
