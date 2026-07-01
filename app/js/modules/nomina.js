@@ -3529,28 +3529,32 @@ async function renderPrimaForm(container, user) {
             ? `${currentRange.start.toLocaleDateString('es-CO')} al ${currentRange.end.toLocaleDateString('es-CO')}` 
             : 'N/A';
 
-        _openConfirmModal(`¿Pagar Prima (${periodoTexto}) por ${currencyFormatter.format(totalNeto)}?`, async () => {
-             submitButton.disabled = true;
-             try {
-                 await saveSpecialPayment(user.id, {
-                    tipo: 'Prima de Servicios',
-                    periodo: periodoTexto,
-                    monto: totalNeto,
-                    detalles: { 
-                        baseCalculo: base, 
-                        diasSemestre: dias, 
-                        semestre: selectPeriodo.value,
-                        rangoFechas: rangoTexto,
-                        descuentoPrestamos: loanDeduction,
-                        detallesPrestamos: loanPayments
-                    }
-                 }, loanPayments);
-             } catch(error) {
-                 console.error("Error al registrar prima:", error);
-             } finally {
-                 submitButton.disabled = false;
-             }
-        });
+        const paymentMethod = await openPaymentMethodConfirmModal(
+            `Confirmar Pago de Prima`,
+            `¿Pagar Prima (${periodoTexto}) por ${currencyFormatter.format(totalNeto)} a ${user.nombre || 'Colaborador'}?`
+        );
+        if (!paymentMethod) return;
+
+        submitButton.disabled = true;
+        try {
+            await saveSpecialPayment(user.id, {
+               tipo: 'Prima de Servicios',
+               periodo: periodoTexto,
+               monto: totalNeto,
+               detalles: { 
+                   baseCalculo: base, 
+                   diasSemestre: dias, 
+                   semestre: selectPeriodo.value,
+                   rangoFechas: rangoTexto,
+                   descuentoPrestamos: loanDeduction,
+                   detallesPrestamos: loanPayments
+               }
+            }, loanPayments, paymentMethod);
+        } catch(error) {
+            console.error("Error al registrar prima:", error);
+        } finally {
+            submitButton.disabled = false;
+        }
     };
 }
 
@@ -3691,7 +3695,7 @@ async function renderCesantiasForm(container, user) {
     inputFin.addEventListener('change', calc);
     calc();
 
-    document.getElementById('cesantias-form').onsubmit = (e) => {
+    document.getElementById('cesantias-form').onsubmit = async (e) => {
         e.preventDefault();
         const data = calc();
         if(!data || data.valorCesantias <= 0) {
@@ -3699,20 +3703,24 @@ async function renderCesantiasForm(container, user) {
             return;
         }
 
-        _openConfirmModal(`Confirmar consignación ANUAL (${currentYear}):\n\nValor Fondo: ${currencyFormatter.format(data.valorCesantias)}\nIntereses a Pagar: ${currencyFormatter.format(data.valorIntereses)}`, async () => {
-             await saveSpecialPayment(user.id, {
-                tipo: `Consignación Cesantías ${currentYear}`,
-                periodo: `${inputInicio.value} al ${inputFin.value}`,
-                monto: data.valorCesantias, 
-                detalles: { 
-                    base: data.base, 
-                    dias: data.days, 
-                    interesesCalculados: data.valorIntereses, 
-                    nota: "Intereses pagados aparte al empleado",
-                    anioLiquidado: currentYear
-                }
-            });
-        });
+        const paymentMethod = await openPaymentMethodConfirmModal(
+            `Consignación de Cesantías ${currentYear}`,
+            `Confirmar consignación ANUAL:\n\nValor Fondo: ${currencyFormatter.format(data.valorCesantias)}\nIntereses a Pagar: ${currencyFormatter.format(data.valorIntereses)}`
+        );
+        if (!paymentMethod) return;
+
+        await saveSpecialPayment(user.id, {
+            tipo: `Consignación Cesantías ${currentYear}`,
+            periodo: `${inputInicio.value} al ${inputFin.value}`,
+            monto: data.valorCesantias, 
+            detalles: { 
+                base: data.base, 
+                dias: data.days, 
+                interesesCalculados: data.valorIntereses, 
+                nota: "Intereses pagados aparte al empleado",
+                anioLiquidado: currentYear
+            }
+        }, [], paymentMethod);
     };
 }
 
@@ -4069,7 +4077,7 @@ async function renderLiquidacionForm(container, user) {
         inputs.fechaPactada.addEventListener('change', calculateValues);
         calculateValues();
 
-        document.getElementById('liq-form').onsubmit = (e) => {
+        document.getElementById('liq-form').onsubmit = async (e) => {
             e.preventDefault();
             const totalText = inputs.total.textContent;
             const monto = parseFloat(totalText.replace(/[$. \u00A0]/g, '').replace(',', '.')) || 0;
@@ -4081,46 +4089,50 @@ async function renderLiquidacionForm(container, user) {
                 if (parts.length === 3) fechaRetiroFmt = `${parts[2]}/${parts[1]}/${parts[0]}`;
             }
 
-            _openConfirmModal(`CONFIRMAR LIQUIDACIÓN:\n\nTotal: ${totalText}\n\nEl usuario será ARCHIVADO.`, async () => {
-                 await saveSpecialPayment(user.id, {
-                    tipo: 'Liquidación Final de Contrato',
-                    monto: monto,
-                    detalles: { 
-                        motivo: inputs.motivo.value,
-                        fechaIngreso: realStartDate.toLocaleDateString('es-CO'), 
-                        fechaRetiro: fechaRetiroFmt,
-                        
-                        diasLiquidados: liquidacionData.diasCesantias, 
-                        
-                        cesantias: inputs.cesantias.value,
-                        cesantiasDescontadas: anticiposCesantias,
-                        intereses: inputs.intereses.value,
-                        prima: inputs.prima.value,
-                        primaDescontada: primaPagadaSemestre,
-                        vacaciones: inputs.vacaciones.value,
-                        vacacionesTomadas: diasVacacionesTomados,
-                        indemnizacion: inputs.indem.value,
-                        deducciones: inputs.deducciones.value,
-                        
-                        basePrestacional: baseBenefits.value,
-                        baseSalarial: vacationBase 
-                    }
-                });
-                
-                if (totalLoans > 0) {
-                   const batch = writeBatch(db);
-                   loansSnap.forEach(doc => batch.update(doc.ref, { status: 'paid', paidAt: serverTimestamp(), note: 'Cancelado Liquidación' }));
-                   await batch.commit();
-                }
+            const paymentMethod = await openPaymentMethodConfirmModal(
+                `Confirmar Liquidación Final`,
+                `CONFIRMAR LIQUIDACIÓN:\n\nTotal: ${totalText}\n\nEl colaborador será ARCHIVADO.`
+            );
+            if (!paymentMethod) return;
 
-                await updateDoc(doc(db, "users", user.id), { 
-                    status: 'archived', 
-                    contractEndDate: new Date(inputs.fecha.value)
-                });
-                
-                window.showToast("Liquidación registrada.", "success");
-                loadEmpleadosView(); 
+            await saveSpecialPayment(user.id, {
+                tipo: 'Liquidación Final de Contrato',
+                monto: monto,
+                detalles: { 
+                    motivo: inputs.motivo.value,
+                    fechaIngreso: realStartDate.toLocaleDateString('es-CO'), 
+                    fechaRetiro: fechaRetiroFmt,
+                    
+                    diasLiquidados: liquidacionData.diasCesantias, 
+                    
+                    cesantias: inputs.cesantias.value,
+                    cesantiasDescontadas: anticiposCesantias,
+                    intereses: inputs.intereses.value,
+                    prima: inputs.prima.value,
+                    primaDescontada: primaPagadaSemestre,
+                    vacaciones: inputs.vacaciones.value,
+                    vacacionesTomadas: diasVacacionesTomados,
+                    indemnizacion: inputs.indem.value,
+                    deducciones: inputs.deducciones.value,
+                    
+                    basePrestacional: baseBenefits.value,
+                    baseSalarial: vacationBase 
+                }
+            }, [], paymentMethod);
+            
+            if (totalLoans > 0) {
+               const batch = writeBatch(db);
+               loansSnap.forEach(doc => batch.update(doc.ref, { status: 'paid', paidAt: serverTimestamp(), note: 'Cancelado Liquidación' }));
+               await batch.commit();
+            }
+
+            await updateDoc(doc(db, "users", user.id), { 
+                status: 'archived', 
+                contractEndDate: new Date(inputs.fecha.value)
             });
+            
+            window.showToast("Liquidación registrada.", "success");
+            loadEmpleadosView(); 
         };
 
     } catch (error) {
@@ -4302,7 +4314,7 @@ async function renderVacacionesForm(container, user) {
         };
 
         // Guardar
-        document.getElementById('vacaciones-form').onsubmit = (e) => {
+        document.getElementById('vacaciones-form').onsubmit = async (e) => {
             e.preventDefault();
             const diasAPagar = parseFloat(inputDias.value) || 0;
             const valorTotal = parseFloat(inputValor.value.replace(/[$. ]/g, '')) || 0;
@@ -4313,19 +4325,23 @@ async function renderVacacionesForm(container, user) {
 
             const tituloConcepto = tipo === 'disfrute' ? 'Pago de Vacaciones (Disfrute)' : 'Vacaciones Compensadas (Dinero)';
 
-            _openConfirmModal(`¿Registrar pago de ${diasAPagar} días de vacaciones por ${currencyFormatter.format(valorTotal)}?`, async () => {
-                await saveSpecialPayment(user.id, {
-                    tipo: tituloConcepto,
-                    monto: valorTotal,
-                    detalles: {
-                        diasPagados: diasAPagar, // CLAVE: Este dato se leerá en la liquidación para descontar
-                        baseCalculo: vacationBase,
-                        tipoVacaciones: tipo,
-                        periodoNota: nota,
-                        saldoAnteriorDias: diasPendientes
-                    }
-                });
-            });
+            const paymentMethod = await openPaymentMethodConfirmModal(
+                `Confirmar Pago de Vacaciones`,
+                `¿Registrar pago de ${diasAPagar} días de vacaciones por ${currencyFormatter.format(valorTotal)}?`
+            );
+            if (!paymentMethod) return;
+
+            await saveSpecialPayment(user.id, {
+                tipo: tituloConcepto,
+                monto: valorTotal,
+                detalles: {
+                    diasPagados: diasAPagar, // CLAVE: Este dato se leerá en la liquidación para descontar
+                    baseCalculo: vacationBase,
+                    tipoVacaciones: tipo,
+                    periodoNota: nota,
+                    saldoAnteriorDias: diasPendientes
+                }
+            }, [], paymentMethod);
         };
 
     } catch (e) {
@@ -4346,7 +4362,80 @@ async function renderVacacionesForm(container, user) {
 // ==========================================
 // EXTRACTED: saveSpecialPayment
 // ==========================================
-async function saveSpecialPayment(userId, data, loanPayments = []) {
+function openPaymentMethodConfirmModal(title, message) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = "fixed inset-0 bg-gray-900 bg-opacity-50 z-[9999] flex items-center justify-center transition-opacity duration-200 opacity-0";
+
+        const modal = document.createElement('div');
+        modal.className = "bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform scale-95 transition-transform duration-200";
+
+        const optionsHTML = METODOS_DE_PAGO.map(m => `<option value="${m}">${m}</option>`).join('');
+
+        modal.innerHTML = `
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 mb-4">
+                    <i class="fa-solid fa-wallet text-indigo-600 text-lg"></i>
+                </div>
+                <h3 class="text-lg font-extrabold text-slate-900 mb-2">${title}</h3>
+                <p class="text-xs text-slate-500 mb-4 font-semibold leading-relaxed whitespace-pre-line">${message}</p>
+                <div class="text-left mb-6">
+                    <label class="block text-[10px] font-black text-slate-450 uppercase tracking-wider mb-2">Cuenta / Método de Pago</label>
+                    <select id="confirm-payment-method-select" 
+                        class="w-full border border-slate-200 rounded-xl p-3 bg-white text-slate-700 font-bold text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-xs">
+                        ${optionsHTML}
+                    </select>
+                </div>
+                <div class="flex gap-3">
+                    <button id="btn-cancel-confirm-payment" class="flex-1 px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-colors border border-slate-200 uppercase tracking-wider">
+                        Cancelar
+                    </button>
+                    <button id="btn-confirm-payment" class="flex-1 px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-transform transform active:scale-95 uppercase tracking-wider">
+                        Confirmar Pago
+                    </button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        requestAnimationFrame(() => {
+            overlay.classList.remove('opacity-0');
+            modal.classList.remove('scale-95');
+            modal.classList.add('scale-100');
+        });
+
+        const close = (val) => {
+            overlay.classList.add('opacity-0');
+            modal.classList.remove('scale-100');
+            modal.classList.add('scale-95');
+            setTimeout(() => { if (document.body.contains(overlay)) document.body.removeChild(overlay); }, 200);
+            resolve(val);
+        };
+
+        document.getElementById('btn-cancel-confirm-payment').onclick = () => close(null);
+
+        const confirmBtn = document.getElementById('btn-confirm-payment');
+        confirmBtn.onclick = () => {
+            const val = document.getElementById('confirm-payment-method-select').value;
+            close(val);
+        };
+    });
+}
+
+async function saveSpecialPayment(userId, data, loanPayments = [], paymentMethod = '') {
+    let employeeName = 'Colaborador';
+    try {
+        const userSnap = await getDoc(doc(db, "users", userId));
+        if (userSnap.exists()) {
+            const userData = userSnap.data();
+            employeeName = userData.nombre || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 'Colaborador';
+        }
+    } catch (e) {
+        console.error("Error fetching user for gasto:", e);
+    }
+
     const paymentData = {
         userId: userId,
         paymentDate: new Date().toISOString().split('T')[0],
@@ -4354,15 +4443,34 @@ async function saveSpecialPayment(userId, data, loanPayments = []) {
         monto: data.monto,
         details: data.detalles || {},
         createdAt: serverTimestamp(),
-        registeredBy: currentUser.uid(),
-        isSpecial: true // Flag para diferenciar en reportes
+        registeredBy: currentUser.uid,
+        isSpecial: true
     };
+
+    if (paymentMethod) {
+        paymentData.fuentePago = paymentMethod;
+    }
 
     const batch = writeBatch(db);
     const paymentHistoryRef = doc(collection(db, "users", userId, "paymentHistory"));
     batch.set(paymentHistoryRef, paymentData);
 
-    // Amortizar préstamos si existen en la transacción
+    if (paymentMethod) {
+        const dateString = new Date().toISOString().split('T')[0];
+        const gastoRef = doc(collection(db, "gastos"));
+        batch.set(gastoRef, {
+            fecha: dateString,
+            proveedorId: userId,
+            proveedorNombre: `Nómina especial (${data.tipo}): ${employeeName}`,
+            numeroFactura: `Nómina Especial`,
+            valorTotal: data.monto,
+            fuentePago: paymentMethod,
+            registradoPor: currentUser.uid,
+            timestamp: Date.now(),
+            _lastUpdated: serverTimestamp()
+        });
+    }
+
     loanPayments.forEach(pago => {
         const loanRef = doc(db, "users", userId, "loans", pago.loanId);
         const newBalance = pago.previousBalance - pago.amount;
@@ -4375,8 +4483,12 @@ async function saveSpecialPayment(userId, data, loanPayments = []) {
     });
 
     await batch.commit();
-    window.showToast("Pago registrado correctamente.", "success");
-    loadPaymentHistoryView(userId); // Recargar
+    if (window.showToast) {
+        window.showToast("Pago registrado correctamente.", "success");
+    } else {
+        showTemporaryMessage("Pago registrado correctamente.", "success");
+    }
+    loadIndividualDashboard(userId, currentDrillDownSubTab || 'nomina'); // Recargar
 }
 
 /**
@@ -4604,10 +4716,19 @@ function loadPaymentHistoryList(userId, tableBody, user) {
                  _openConfirmModal("¿Eliminar este registro de pago de forma permanente?", async() => {
                     try {
                         await deleteDoc(doc(db, "users", userId, "paymentHistory", payment.id));
-                        window.showToast("Registro eliminado", "success");
+                        if (window.showToast) {
+                            window.showToast("Registro eliminado", "success");
+                        } else {
+                            showTemporaryMessage("Registro eliminado", "success");
+                        }
+                        loadIndividualDashboard(userId, currentDrillDownSubTab || 'nomina');
                     } catch(e) {
                         console.error(e);
-                        window.showToast("Error al eliminar", "error");
+                        if (window.showToast) {
+                            window.showToast("Error al eliminar", "error");
+                        } else {
+                            showTemporaryMessage("Error al eliminar", "error");
+                        }
                     }
                  });
              };
@@ -4869,10 +4990,23 @@ async function handleRegisterPayment(e, userId) {
         }
 
         // 7. Guardar
-        const currentUserId = currentUser.uid();
+        const currentUserId = currentUser.uid;
         const usersMap = getUsersMap();
-        const currentUser = usersMap.get(currentUserId);
-        const registeredByName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Sistema';
+        const registeredUser = usersMap.get(currentUserId);
+        const registeredByName = registeredUser ? `${registeredUser.firstName} ${registeredUser.lastName}` : 'Sistema';
+
+        const employee = usersMap.get(userId);
+        const employeeName = employee ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.nombre : 'Operario';
+
+        const paymentMethod = await openPaymentMethodConfirmModal(
+            `Confirmar Pago de Nómina`,
+            `¿Registrar pago de nómina por ${currencyFormatter.format(totalPagar)} para ${employeeName}?`
+        );
+        if (!paymentMethod) {
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i>Registrar Pago';
+            return;
+        }
 
         const paymentData = {
             userId: userId,
@@ -4881,6 +5015,7 @@ async function handleRegisterPayment(e, userId) {
             monto: totalPagar,
             diasPagados: diasPagar,
             diasAuxTransporte: diasAuxTransporte,
+            fuentePago: paymentMethod,
             desglose: {
                 salarioProrrateado: salarioProrrateado,
                 auxilioTransporteProrrateado: auxTransporteProrrateado,
@@ -4905,6 +5040,20 @@ async function handleRegisterPayment(e, userId) {
         const paymentHistoryRef = doc(collection(db, "users", userId, "paymentHistory"));
         batch.set(paymentHistoryRef, paymentData);
 
+        const dateString = new Date().toISOString().split('T')[0];
+        const gastoRef = doc(collection(db, "gastos"));
+        batch.set(gastoRef, {
+            fecha: dateString,
+            proveedorId: userId,
+            proveedorNombre: `Pago de Nómina: ${employeeName}`,
+            numeroFactura: `Nómina ${concepto}`,
+            valorTotal: totalPagar,
+            fuentePago: paymentMethod,
+            registradoPor: currentUserId,
+            timestamp: Date.now(),
+            _lastUpdated: serverTimestamp()
+        });
+
         if (liquidarBonificacion) {
             const today = new Date();
             const currentStatDocId = `${today.getFullYear()}_${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -4927,7 +5076,7 @@ async function handleRegisterPayment(e, userId) {
         // Reset
         document.getElementById('payment-horas-diurnas').value = '0';
         document.getElementById('payment-otros').value = '$ 0';
-        loadPaymentHistoryView(userId);
+        loadIndividualDashboard(userId, currentDrillDownSubTab || 'nomina');
 
     } catch (error) {
         console.error(error);

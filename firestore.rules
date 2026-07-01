@@ -73,7 +73,7 @@ service cloud.firestore {
         allow read: if hasPermission('nomina') || isOwner(userId);
         allow create: if hasPermission('nomina');
         allow update: if hasPermission('nomina');
-        allow delete: if false;
+        allow delete: if hasPermission('nomina');
       }
     }
 
@@ -91,7 +91,7 @@ service cloud.firestore {
       allow read: if hasPermission('nomina') || isOwner(path[1]);
       allow create: if hasPermission('nomina');
       allow update: if hasPermission('nomina');
-      allow delete: if false;
+      allow delete: if hasPermission('nomina');
     }
 
     // Estadísticas de productividad por empleado (bonificaciones, asistencia, etc.)
