@@ -15,6 +15,7 @@ import { loadNomina, setupNominaEvents, cleanupNominaListeners } from './modules
 import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js';
 import { setupFacturacionEvents } from './modules/facturacion.js';
 import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js';
+import { setupFuncionesEvents } from './modules/funciones.js';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -144,21 +145,21 @@ function startApp() {
         colores: document.getElementById('tab-colores'), clientes: document.getElementById('tab-clientes'),
         gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'),
         empleados: document.getElementById('tab-empleados'), items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
-        nomina: document.getElementById('tab-nomina')
+        nomina: document.getElementById('tab-nomina'), funciones: document.getElementById('tab-funciones')
     };
     const views = {
         remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'),
         colores: document.getElementById('view-colores'), clientes: document.getElementById('view-clientes'),
         gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'),
         empleados: document.getElementById('view-empleados'), items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
-        nomina: document.getElementById('view-nomina')
+        nomina: document.getElementById('view-nomina'), funciones: document.getElementById('view-funciones')
     };
     const mobileTabs = {
         remisiones: document.getElementById('mobile-tab-remisiones'), facturacion: document.getElementById('mobile-tab-facturacion'),
         colores: document.getElementById('mobile-tab-colores'), clientes: document.getElementById('mobile-tab-clientes'),
         gastos: document.getElementById('mobile-tab-gastos'), proveedores: document.getElementById('mobile-tab-proveedores'),
         empleados: document.getElementById('mobile-tab-empleados'), items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
-        nomina: document.getElementById('mobile-tab-nomina')
+        nomina: document.getElementById('mobile-tab-nomina'), funciones: document.getElementById('mobile-tab-funciones')
     };
 
     let initialView = localStorage.getItem('activeView');
@@ -766,7 +767,29 @@ function loadViewTemplates() {
             </div>
         </div>`;
     }
-    
+
+    const viewFunciones = document.getElementById('view-funciones');
+    if (viewFunciones) {
+        viewFunciones.innerHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-md max-w-4xl mx-auto border-t-4 border-indigo-600">
+                <h2 class="text-xl font-bold mb-6 text-slate-800">Funciones y Reportes del Sistema</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="border border-slate-200 p-5 rounded-lg text-center bg-slate-50/50 hover:bg-slate-50 hover:shadow-md transition">
+                        <div class="text-4xl mb-3">📊</div>
+                        <h3 class="font-bold text-lg mb-2 text-slate-800">Exportar Gastos</h3>
+                        <p class="text-sm text-slate-500 mb-4">Descarga un archivo Excel detallado de todos los gastos registrados en el sistema.</p>
+                        <button id="btn-func-export-gastos" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-full hover:bg-indigo-700 transition shadow-sm">Exportar Gastos</button>
+                    </div>
+                    <div class="border border-slate-200 p-5 rounded-lg text-center bg-slate-50/50 hover:bg-slate-50 hover:shadow-md transition">
+                        <div class="text-4xl mb-3">💰</div>
+                        <h3 class="font-bold text-lg mb-2 text-slate-800">Exportar Pagos</h3>
+                        <p class="text-sm text-slate-500 mb-4">Descarga un archivo Excel con el historial de abonos y pagos de remisiones.</p>
+                        <button id="btn-func-export-pagos" class="bg-green-600 text-white font-bold py-2 px-6 rounded-full hover:bg-green-700 transition shadow-sm">Exportar Pagos</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 }
 
 function updateUIVisibility(userData) {
@@ -835,7 +858,7 @@ function updateUIVisibility(userData) {
 function getInitialViewForUser(userData) {
     if (!userData) return 'remisiones';
     if (userData.role === 'admin') return 'remisiones';
-    const modulePriority = ['remisiones', 'mensajes', 'facturacion', 'colores', 'items', 'clientes', 'gastos', 'proveedores', 'empleados', 'nomina'];
+    const modulePriority = ['remisiones', 'mensajes', 'facturacion', 'colores', 'items', 'clientes', 'gastos', 'proveedores', 'empleados', 'nomina', 'funciones'];
     if (userData.permissions) {
         for (const module of modulePriority) {
             if (userData.permissions[module]) return module;
@@ -945,7 +968,7 @@ function setupEventListeners() {
         colores: document.getElementById('tab-colores'), clientes: document.getElementById('tab-clientes'),
         gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'),
         empleados: document.getElementById('tab-empleados'), items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
-        nomina: document.getElementById('tab-nomina')
+        nomina: document.getElementById('tab-nomina'), funciones: document.getElementById('tab-funciones')
     };
 
     const mobileTabs = {
@@ -953,7 +976,7 @@ function setupEventListeners() {
         colores: document.getElementById('mobile-tab-colores'), clientes: document.getElementById('mobile-tab-clientes'),
         gastos: document.getElementById('mobile-tab-gastos'), proveedores: document.getElementById('mobile-tab-proveedores'),
         empleados: document.getElementById('mobile-tab-empleados'), items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
-        nomina: document.getElementById('mobile-tab-nomina')
+        nomina: document.getElementById('mobile-tab-nomina'), funciones: document.getElementById('mobile-tab-funciones')
     };
 
     const views = {
@@ -961,7 +984,7 @@ function setupEventListeners() {
         colores: document.getElementById('view-colores'), clientes: document.getElementById('view-clientes'),
         gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'),
         empleados: document.getElementById('view-empleados'), items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
-        nomina: document.getElementById('view-nomina')
+        nomina: document.getElementById('view-nomina'), funciones: document.getElementById('view-funciones')
     };
 
     // Navegación Desktop
@@ -1067,6 +1090,7 @@ function setupEventListeners() {
     setupRemisionesEvents();
     setupFacturacionEvents();
     setupMensajesEvents();
+    setupFuncionesEvents();
 }
 
 function switchView(viewName, tabs, views, mobileTabs = null) {

@@ -7,6 +7,7 @@ const nodemailer = require("nodemailer");
 const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios");
+const ExcelJS = require('exceljs');
 
 // Importamos webhook una sola vez
 const waWebhook = require("./webhook"); // <--- LIMPIEZA: Importación única
@@ -903,40 +904,67 @@ exports.repairSignedUrls = functions.https.onCall(async (data, context) => {
 
 exports.applyRetention = functions.https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
-    const { remisionId, amount } = data;
-    if (!remisionId || !amount || amount <= 0) {
+    const { remisionId, amount, retentionAmount } = data;
+    const finalAmount = amount !== undefined ? amount : retentionAmount;
+    if (!remisionId || !finalAmount || finalAmount <= 0) {
         throw new functions.https.HttpsError("invalid-argument", "Datos inválidos.");
     }
+
     const db = admin.firestore();
-    const remRef = db.collection("remisiones").doc(remisionId);
+    const remisionRef = db.collection("remisiones").doc(remisionId);
+
     try {
-        await db.runTransaction(async (t) => {
-            const doc = await t.get(remRef);
-            if (!doc.exists) throw "No existe la remisión";
-            const rData = doc.data();
-            const totalPagado = (rData.payments || [])
-                .filter(p => p.status === 'confirmado')
-                .reduce((sum, p) => sum + p.amount, 0);
-            const saldo = rData.valorTotal - totalPagado;
-            if (amount > saldo) throw new functions.https.HttpsError("failed-precondition", "La retención excede el saldo.");
-            const retentionPayment = {
-                amount: amount,
-                date: new Date().toISOString().split('T')[0],
-                method: "Retención",
-                registeredAt: new Date(),
-                registeredBy: context.auth.uid,
-                status: 'confirmado',
-                isRetention: true
-            };
-            const newPayments = [...(rData.payments || []), retentionPayment];
-            t.update(remRef, { 
-                payments: newPayments,
-                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-            });
+        const remisionDoc = await remisionRef.get();
+        if (!remisionDoc.exists) throw new functions.https.HttpsError("not-found", "Remisión no encontrada.");
+
+        const remisionData = remisionDoc.data();
+        const totalPagado = (remisionData.payments || [])
+            .filter(p => p.status === 'confirmado')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const saldo = remisionData.valorTotal - totalPagado;
+
+        if (finalAmount > saldo) {
+            throw new functions.https.HttpsError("failed-precondition", "La retención no puede ser mayor al saldo pendiente de la remisión.");
+        }
+
+        const subtotal = remisionData.subtotal || 0;
+        const discountAmount = remisionData.discount ? (remisionData.discount.amount || 0) : 0;
+        const ivaAmount = remisionData.valorIVA || 0; 
+        const totalAntesDeRetencion = subtotal - discountAmount + ivaAmount;
+
+        const newTotal = totalAntesDeRetencion - finalAmount;
+        const updatedData = {
+            valorTotal: newTotal,
+            retention: { amount: finalAmount, appliedBy: context.auth.uid, appliedAt: new Date() }
+        };
+
+        const finalRemisionData = { ...remisionData, ...updatedData };
+        
+        const pdfBuffer = generarPDF(finalRemisionData, false);
+        const pdfPlantaBuffer = generarPDF(finalRemisionData, true);
+
+        const bucket = admin.storage().bucket(BUCKET_NAME);
+        const filePath = `remisiones/${finalRemisionData.numeroRemision}.pdf`;
+        await bucket.file(filePath).save(pdfBuffer, { metadata: { contentType: "application/pdf" } });
+
+        const filePathPlanta = `remisiones/planta-${finalRemisionData.numeroRemision}.pdf`;
+        await bucket.file(filePathPlanta).save(pdfPlantaBuffer, { metadata: { contentType: "application/pdf" } });
+
+        const [url] = await bucket.file(filePath).getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+        const [urlPlanta] = await bucket.file(filePathPlanta).getSignedUrl({ action: "read", expires: Date.now() + 6 * 24 * 60 * 60 * 1000, version: 'v4' });
+
+        await remisionRef.update({
+            ...updatedData,
+            pdfPath: filePath,
+            pdfPlantaPath: filePathPlanta,
+            pdfUrl: url,
+            pdfPlantaUrl: urlPlanta,
+            _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         });
+
         return { success: true };
     } catch (error) {
-        throw new functions.https.HttpsError("internal", error.message || "Error interno.");
+        throw new functions.https.HttpsError("internal", error.message || "Error interno al aplicar retención.");
     }
 });
 
@@ -1579,4 +1607,116 @@ exports.setInitialBalances = functions.region("us-central1").https.onCall(async 
         functions.logger.error("Error al guardar saldos iniciales:", error);
         throw new functions.https.HttpsError("internal", "No se pudo guardar la información en la base de datos.");
     }
+});
+
+exports.exportGastosToExcel = functions.https.onCall(async (data, context) => {
+    const userRole = context.auth.token.role;
+    const allowedRoles = ['admin', 'contabilidad'];
+
+    if (!context.auth || !allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar datos.');
+
+    const { startDate, endDate } = data;
+    if (!startDate || !endDate) throw new functions.https.HttpsError('invalid-argument', 'Se requieren fechas de inicio y fin.');
+
+    try {
+        const db = admin.firestore();
+        const gastosRef = db.collection('gastos');
+        const snapshot = await gastosRef.where('fecha', '>=', startDate).where('fecha', '<=', endDate).get();
+
+        if (snapshot.empty) return { success: false, message: 'No se encontraron gastos en el rango de fechas seleccionado.' };
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Gastos');
+
+        worksheet.columns = [
+            { header: 'Fecha', key: 'fecha', width: 15 },
+            { header: 'Proveedor', key: 'proveedorNombre', width: 30 },
+            { header: 'N° Factura', key: 'numeroFactura', width: 20 },
+            { header: 'Fuente de Pago', key: 'fuentePago', width: 20 },
+            { header: 'Valor Total', key: 'valorTotal', width: 20, style: { numFmt: '"$"#,##0' } }
+        ];
+
+        snapshot.forEach(doc => worksheet.addRow(doc.data()));
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const fileContent = Buffer.from(buffer).toString('base64');
+        return { success: true, fileContent: fileContent };
+
+    } catch (error) { throw new functions.https.HttpsError('internal', 'No se pudo generar el archivo Excel: ' + error.message); }
+});
+
+exports.exportPagosRemisionesToExcel = functions.https.onCall(async (data, context) => {
+    const userRole = context.auth.token.role;
+    const allowedRoles = ['admin', 'contabilidad'];
+
+    if (!context.auth || !allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar estos datos.');
+
+    const { startDate, endDate } = data;
+    if (!startDate || !endDate) throw new functions.https.HttpsError('invalid-argument', 'Se requieren fechas de inicio y fin.');
+
+    try {
+        const db = admin.firestore();
+        const usersRef = db.collection('users');
+        const usersSnapshot = await usersRef.get();
+        const userNames = {}; 
+        
+        usersSnapshot.forEach(doc => { userNames[doc.id] = doc.data().nombre || 'Usuario Desconocido'; });
+
+        const remisionesRef = db.collection('remisiones');
+        const snapshot = await remisionesRef.get();
+
+        if (snapshot.empty) return { success: false, message: 'No se encontraron remisiones.' };
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Historial Pagos');
+
+        worksheet.columns = [
+            { header: 'Fecha Pago', key: 'fecha', width: 15 },
+            { header: 'N° Remisión', key: 'numeroRemision', width: 15 },
+            { header: 'Cliente', key: 'cliente', width: 30 },
+            { header: 'Método', key: 'metodo', width: 15 },
+            { header: 'Estado', key: 'estado', width: 15 },
+            { header: 'Valor', key: 'valor', width: 20, style: { numFmt: '"$"#,##0' } },
+            { header: 'Registrado Por', key: 'registradoPor', width: 25 },
+            { header: 'Confirmado Por', key: 'confirmadoPor', width: 25 },
+            { header: 'Fecha Registro', key: 'fechaRegistro', width: 20 }
+        ];
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        let pagosEncontrados = 0;
+
+        snapshot.forEach(doc => {
+            const remision = doc.data();
+            const pagos = Array.isArray(remision.payments) ? remision.payments : [];
+
+            pagos.forEach(pago => {
+                const fechaPago = new Date(pago.date + 'T12:00:00');
+                if (fechaPago >= start && fechaPago <= end) {
+                    const nombreRegistrador = userNames[pago.registeredBy] || 'Sistema/Desconocido';
+                    let nombreConfirmador = 'Pendiente';
+                    if (pago.status === 'confirmado') {
+                        nombreConfirmador = pago.confirmedBy ? (userNames[pago.confirmedBy] || 'Usuario Borrado') : 'N/A';
+                    }
+
+                    worksheet.addRow({
+                        fecha: pago.date, numeroRemision: remision.numeroRemision, cliente: remision.clienteNombre || 'Sin Nombre',
+                        metodo: pago.method, estado: pago.status === 'confirmado' ? 'Confirmado' : 'Pendiente', valor: pago.amount,
+                        registradoPor: nombreRegistrador, confirmadoPor: nombreConfirmador,
+                        fechaRegistro: pago.registeredAt ? new Date(pago.registeredAt.seconds * 1000).toLocaleDateString() : 'N/A'
+                    });
+                    pagosEncontrados++;
+                }
+            });
+        });
+
+        if (pagosEncontrados === 0) return { success: false, message: 'No se encontraron pagos en el rango seleccionado.' };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const fileContent = Buffer.from(buffer).toString('base64');
+        return { success: true, fileContent: fileContent };
+
+    } catch (error) { throw new functions.https.HttpsError('internal', 'No se pudo generar el archivo Excel: ' + error.message); }
 });

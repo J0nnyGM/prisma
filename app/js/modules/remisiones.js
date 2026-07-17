@@ -1257,11 +1257,17 @@ function showDiscountModal(remision) {
 export function showRetentionModal(remision) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const currentRetention = remision.retention ? remision.retention.amount : 0;
+    
+    const paymentsArray = Array.isArray(remision.payments) ? remision.payments : [];
+    const totalPagadoConfirmado = paymentsArray.filter(p => p.status === 'confirmado').reduce((sum, p) => sum + p.amount, 0);
+    const saldoPendiente = remision.valorTotal - totalPagadoConfirmado;
+
     modalContentWrapper.innerHTML = `
         <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-auto text-left">
             <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-semibold">Aplicar Retenciones</h2><button id="close-retention-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div>
-            <p class="text-sm text-gray-600 mb-2">Remisión N°: <span class="font-bold">${remision.numeroRemision}</span></p>
-            <p class="text-sm text-gray-600 mb-4">Total Actual: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
+            <p class="text-sm text-gray-600 mb-1">Remisión N°: <span class="font-bold">${remision.numeroRemision}</span></p>
+            <p class="text-sm text-gray-600 mb-1">Total Actual: <span class="font-bold">${formatCurrency(remision.valorTotal)}</span></p>
+            <p class="text-sm text-gray-650 mb-4">Saldo Pendiente: <span class="font-bold text-red-600">${formatCurrency(saldoPendiente)}</span></p>
             <form id="retention-form" class="space-y-4">
                 <div><label class="block text-sm font-medium">Valor Retención (COP)</label><input type="text" id="retention-amount" class="w-full p-2 border rounded-lg mt-1" inputmode="numeric" required value="${currentRetention > 0 ? formatCurrency(currentRetention) : ''}"></div>
                 <button type="submit" class="w-full bg-amber-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-700">Aplicar Retención</button>
@@ -1279,11 +1285,14 @@ export function showRetentionModal(remision) {
         e.preventDefault();
         const retentionAmount = unformatCurrency(amountInput.value);
         if (isNaN(retentionAmount) || retentionAmount < 0) return showModalMessage("Ingresa un valor válido.");
+        if (retentionAmount > saldoPendiente) {
+            return showModalMessage(`La retención no puede exceder el saldo pendiente de ${formatCurrency(saldoPendiente)}.`);
+        }
 
         showModalMessage("Aplicando retención...", true);
         try {
             const applyRetentionFn = httpsCallable(functions, 'applyRetention');
-            await applyRetentionFn({ remisionId: remision.id, retentionAmount: retentionAmount });
+            await applyRetentionFn({ remisionId: remision.id, retentionAmount: retentionAmount, amount: retentionAmount });
 
             const updatedDoc = await getDoc(doc(db, "remisiones", remision.id));
             updateLocalCache({id: updatedDoc.id, ...updatedDoc.data()});
