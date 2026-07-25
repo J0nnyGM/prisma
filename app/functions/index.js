@@ -221,8 +221,8 @@ function generarPDF(remisionData, esPlanta) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(33, 37, 41);
-    doc.text(remision.clienteNombre || "N/A", 15, 67);
-    doc.text(remision.clienteTelefono || "N/A", 110, 67);
+    doc.text(String(remision.clienteNombre || "N/A"), 15, 67);
+    doc.text(String(remision.clienteTelefono || "N/A"), 110, 67);
 
     // Fila 2 de Datos de Cliente
     doc.setFont("helvetica", "bold");
@@ -234,8 +234,8 @@ function generarPDF(remisionData, esPlanta) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(33, 37, 41);
-    doc.text(remision.clienteNit || "N/A", 15, 80);
-    doc.text(remision.clienteEmail || "N/A", 110, 80);
+    doc.text(String(remision.clienteNit || "N/A"), 15, 80);
+    doc.text(String(remision.clienteEmail || "N/A"), 110, 80);
 
     // 6. TABLA DE ÍTEMS
     let tableColumn = ["Referencia", "Descripción", "Color", "Cant."];

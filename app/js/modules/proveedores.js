@@ -240,7 +240,7 @@ export function showEditProviderModal(proveedor) {
             </form>
         </div>
     `;
-    document.getElementById('modal-content').innerHTML = modalContent;
+    document.getElementById('modal-content-wrapper').innerHTML = modalContent;
     document.getElementById('modal').classList.remove('hidden');
 
     const btnActualizarRut = document.getElementById('btn-actualizar-rut');

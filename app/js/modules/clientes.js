@@ -264,7 +264,7 @@ export function showEditClientModal(cliente) {
             </form>
         </div>
     `;
-    document.getElementById('modal-content').innerHTML = modalContent;
+    document.getElementById('modal-content-wrapper').innerHTML = modalContent;
     document.getElementById('modal').classList.remove('hidden');
 
     const btnActualizarRutCliente = document.getElementById('btn-actualizar-rut-cliente');

@@ -1149,7 +1149,8 @@ export function showPaymentModal(remision) {
                  const updatedRem = { ...remision, _lastUpdated: Date.now() };
                  updateLocalCache(updatedRem);
 
-                 document.getElementById('modal-content').innerHTML = ''; 
+                 const modalCont = document.getElementById('modal-content');
+                 if (modalCont) modalCont.innerHTML = '';
                  document.getElementById('modal').classList.add('hidden'); 
                  
                  showTemporaryMessage(`¡Pago ${action === 'confirmar' ? 'confirmado' : 'rechazado'}!`, action === 'confirmar' ? "success" : "info");
@@ -1437,7 +1438,8 @@ function showPendingPaymentsModal() {
                 updatedRem = { id: remDocNew.id, ...remDocNew.data() };
                 updateLocalCache(updatedRem);
 
-                document.getElementById('modal-content').innerHTML = ''; 
+                const modalCont = document.getElementById('modal-content');
+                if (modalCont) modalCont.innerHTML = '';
                 document.getElementById('modal').classList.add('hidden'); 
                 showPendingPaymentsModal(); // Recargamos el modal
                 
