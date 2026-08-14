@@ -1,6 +1,6 @@
                 // js/modules/items.js
 
-                import { db } from '../firebase-config.js';
+                import { db, functions, httpsCallable } from '../firebase-config.js';
                 import { collection, doc, addDoc, updateDoc, query, getDocs, where, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
                 import { allItems, setAllItems, allItemAverageCosts, showModalMessage, hideModal, showTemporaryMessage } from '../app.js';
                 import { formatCurrency } from '../utils.js';
@@ -152,12 +152,21 @@
                         const itemDiv = document.createElement('div');
                         itemDiv.className = 'premium-card premium-card-indigo p-4 flex justify-between items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
 
+                        const precioProm = item.precioPromedioVenta ? formatCurrency(item.precioPromedioVenta) : 'Sin ventas';
+                        const totalVend = item.totalVendidos || 0;
+
                         itemDiv.innerHTML = `
-                            <div class="min-w-0">
-                                <p class="font-bold text-slate-800 flex items-center gap-3 flex-wrap">
-                                    <span class="item-ref bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded border border-indigo-150">${item.referencia}</span>
-                                    <span class="text-sm font-semibold text-slate-700">${item.descripcion}</span>
-                                </p>
+                            <div class="min-w-0 flex-grow">
+                                <div class="flex items-center gap-3 flex-wrap mb-1.5">
+                                    <span class="item-ref bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-indigo-150">${item.referencia}</span>
+                                    <span class="text-sm font-bold text-slate-800">${item.descripcion}</span>
+                                </div>
+                                <div class="flex items-center gap-2 flex-wrap text-xs">
+                                    <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200" title="Precio de venta promedio ponderado">
+                                        <i class="fa-solid fa-chart-line text-[10px]"></i> P. Promedio: ${precioProm}
+                                    </span>
+                                    ${totalVend > 0 ? `<span class="bg-slate-100 text-slate-600 font-semibold px-2 py-1 rounded-lg text-[11px]">${totalVend} unid. vendidas</span>` : ''}
+                                </div>
                             </div>
                             <div class="flex-shrink-0">
                                 <button data-item-json='${JSON.stringify(item)}' class="edit-item-btn btn-premium-outline px-3.5 py-1.5 rounded-lg text-xs hover:bg-slate-50 transition font-bold">
@@ -332,4 +341,22 @@
                             }
                         }
                     });
+
+                    const btnRecalcular = document.getElementById('btn-recalcular-precios-items');
+                    if (btnRecalcular) {
+                        btnRecalcular.addEventListener('click', async () => {
+                            if (!confirm("¿Deseas recalcular el precio de venta promedio de todos los productos basándote en el histórico de remisiones?")) return;
+                            showModalMessage("Recalculando precios promedio de venta...", true);
+                            try {
+                                const recalcularFn = httpsCallable(functions, 'recalcularPreciosPromedioItems');
+                                const result = await recalcularFn();
+                                hideModal();
+                                showTemporaryMessage(`¡Precios promedio actualizados con éxito! (${result.data?.totalItems || 0} ítems actualizados)`, "success");
+                            } catch (err) {
+                                hideModal();
+                                console.error("Error recalculando precios promedio:", err);
+                                showModalMessage("Error al recalcular precios promedio: " + err.message);
+                            }
+                        });
+                    }
                 }

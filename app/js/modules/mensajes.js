@@ -3,7 +3,7 @@
 import { db, storage, functions, httpsCallable } from '../firebase-config.js';
 import { collection, query, onSnapshot, orderBy, doc, updateDoc, serverTimestamp, limit, getDocs, where, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
-import { currentUserData, showModalMessage, showTemporaryMessage, allClientes, allRemisiones, hideModal } from '../app.js';
+import { currentUser, currentUserData, showModalMessage, showTemporaryMessage, allClientes, allRemisiones, hideModal } from '../app.js';
 import { formatCurrency } from '../utils.js';
 import { showPaymentModal } from './remisiones.js';
 

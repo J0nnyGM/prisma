@@ -443,6 +443,32 @@ body {
 }
 
 /* Modales y Formularios en Móvil (Bottom Drawers) */
+/* Filtros de Estado y Pago Activos */
+.remision-filter-btn.active-filter,
+.payment-filter-btn.active-filter,
+.cotizacion-filter-btn.active-filter {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-color: #0f172a !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
+}
+
+.remision-filter-btn.active-filter span,
+.remision-filter-btn.active-filter i,
+.payment-filter-btn.active-filter span,
+.payment-filter-btn.active-filter i,
+.cotizacion-filter-btn.active-filter span,
+.cotizacion-filter-btn.active-filter i {
+    color: #ffffff !important;
+}
+
+.remision-filter-btn.active-filter .filter-count,
+.remision-filter-btn.active-filter .filter-count-rem,
+.payment-filter-btn.active-filter .filter-count-pay,
+.cotizacion-filter-btn.active-filter .filter-count {
+    background-color: rgba(255, 255, 255, 0.25) !important;
+    color: #ffffff !important;
+}
 .mobile-form-modal {
     display: none !important; /* Oculto por defecto */
     position: fixed !important;

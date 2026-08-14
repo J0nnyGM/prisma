@@ -1610,16 +1610,18 @@ exports.setInitialBalances = functions.region("us-central1").https.onCall(async 
 });
 
 exports.exportGastosToExcel = functions.https.onCall(async (data, context) => {
-    const userRole = context.auth.token.role;
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const db = admin.firestore();
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userRole = userDoc.exists ? userDoc.data().role : null;
     const allowedRoles = ['admin', 'contabilidad'];
 
-    if (!context.auth || !allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar datos.');
+    if (!allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar datos.');
 
     const { startDate, endDate } = data;
     if (!startDate || !endDate) throw new functions.https.HttpsError('invalid-argument', 'Se requieren fechas de inicio y fin.');
 
     try {
-        const db = admin.firestore();
         const gastosRef = db.collection('gastos');
         const snapshot = await gastosRef.where('fecha', '>=', startDate).where('fecha', '<=', endDate).get();
 
@@ -1646,10 +1648,13 @@ exports.exportGastosToExcel = functions.https.onCall(async (data, context) => {
 });
 
 exports.exportPagosRemisionesToExcel = functions.https.onCall(async (data, context) => {
-    const userRole = context.auth.token.role;
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const db = admin.firestore();
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userRole = userDoc.exists ? userDoc.data().role : null;
     const allowedRoles = ['admin', 'contabilidad'];
 
-    if (!context.auth || !allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar estos datos.');
+    if (!allowedRoles.includes(userRole)) throw new functions.https.HttpsError('permission-denied', 'Solo los administradores o contabilidad pueden exportar estos datos.');
 
     const { startDate, endDate } = data;
     if (!startDate || !endDate) throw new functions.https.HttpsError('invalid-argument', 'Se requieren fechas de inicio y fin.');
@@ -1719,4 +1724,180 @@ exports.exportPagosRemisionesToExcel = functions.https.onCall(async (data, conte
         return { success: true, fileContent: fileContent };
 
     } catch (error) { throw new functions.https.HttpsError('internal', 'No se pudo generar el archivo Excel: ' + error.message); }
+});
+
+exports.recordTransfer = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const db = admin.firestore();
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Solo los administradores pueden registrar transferencias.");
+    }
+
+    const { cuentaOrigen, cuentaDestino, monto, referencia, fechaTransferencia } = data;
+    if (!cuentaOrigen || !cuentaDestino || !monto || monto <= 0 || cuentaOrigen === cuentaDestino || !fechaTransferencia) { 
+        throw new functions.https.HttpsError("invalid-argument", "Datos de transferencia inválidos o incompletos.");
+    }
+
+    try {
+        await db.collection("transferencias").add({
+            fechaRegistro: admin.firestore.FieldValue.serverTimestamp(),
+            fechaTransferencia: fechaTransferencia,
+            cuentaOrigen, cuentaDestino, monto,
+            referencia: referencia || '',
+            estado: 'pendiente',
+            registradoPor: context.auth.uid
+        });
+        return { success: true };
+    } catch (error) { throw new functions.https.HttpsError("internal", "No se pudo guardar la transferencia."); }
+});
+
+exports.confirmTransfer = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const db = admin.firestore();
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Solo los administradores pueden confirmar transferencias.");
+    }
+
+    const { transferId } = data;
+    if (!transferId) throw new functions.https.HttpsError("invalid-argument", "Falta el ID de la transferencia.");
+
+    const transferRef = db.collection("transferencias").doc(transferId);
+    const gastosRef = db.collection("gastos");
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            const transferDoc = await transaction.get(transferRef);
+            if (!transferDoc.exists) throw new Error("La transferencia no existe.");
+            
+            const transferData = transferDoc.data();
+            if (transferData.estado !== 'pendiente') throw new Error("Esta transferencia ya fue procesada o no está pendiente.");
+            if (transferData.registradoPor === context.auth.uid) throw new Error("No puedes confirmar una transferencia registrada por ti mismo.");
+
+            transaction.update(transferRef, {
+                estado: 'confirmada',
+                confirmadoPor: context.auth.uid,
+                confirmadoEn: admin.firestore.FieldValue.serverTimestamp(),
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            const fechaGasto = transferData.fechaTransferencia; 
+            const timestamp = admin.firestore.FieldValue.serverTimestamp(); 
+
+            transaction.set(gastosRef.doc(), {
+                fecha: fechaGasto, proveedorNombre: `Transferencia Salida -> ${transferData.cuentaDestino}`,
+                valorTotal: transferData.monto, fuentePago: transferData.cuentaOrigen, registradoPor: context.auth.uid, timestamp: timestamp,
+                isTransfer: true, transferId: transferId, referencia: transferData.referencia || '', _lastUpdated: timestamp
+            });
+
+            transaction.set(gastosRef.doc(), {
+                fecha: fechaGasto, proveedorNombre: `Transferencia Entrada <- ${transferData.cuentaOrigen}`,
+                valorTotal: -transferData.monto, fuentePago: transferData.cuentaDestino, registradoPor: context.auth.uid, timestamp: timestamp,
+                isTransfer: true, transferId: transferId, referencia: transferData.referencia || '', _lastUpdated: timestamp
+            });
+        });
+        return { success: true };
+    } catch (error) { throw new functions.https.HttpsError("internal", `No se pudo confirmar la transferencia: ${error.message}`); }
+});
+
+// ==========================================
+// CALCULAR PRECIO DE VENTA PROMEDIO DE ÍTEMS
+// ==========================================
+exports.recalcularPreciosPromedioItems = functions.runWith({ timeoutSeconds: 300, memory: '1GB' }).https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth requerida.");
+    const db = admin.firestore();
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Solo los administradores pueden recalcular precios promedio.");
+    }
+
+    try {
+        // 1. Obtener todas las remisiones activas
+        const remisionesSnap = await db.collection("remisiones")
+            .where("estado", "!=", "Anulada")
+            .get();
+
+        const statsByItem = {};
+
+        remisionesSnap.forEach(docSnap => {
+            const rem = docSnap.data();
+            const items = Array.isArray(rem.items) ? rem.items : [];
+            items.forEach(it => {
+                const cantidad = parseInt(it.cantidad) || 0;
+                let unitPrice = Number(it.valorPorLamina || it.valorUnitario || 0);
+                if (unitPrice <= 0 && it.valorTotal && cantidad > 0) {
+                    unitPrice = Number(it.valorTotal) / cantidad;
+                }
+
+                if (cantidad > 0 && unitPrice > 0) {
+                    const keys = [];
+                    if (it.itemId) keys.push(it.itemId);
+                    if (it.referencia) keys.push(it.referencia.trim().toLowerCase());
+
+                    keys.forEach(k => {
+                        if (!statsByItem[k]) {
+                            statsByItem[k] = { totalIngreso: 0, totalCantidad: 0 };
+                        }
+                        statsByItem[k].totalIngreso += unitPrice * cantidad;
+                        statsByItem[k].totalCantidad += cantidad;
+                    });
+                }
+            });
+        });
+
+        // 2. Actualizar la colección de ítems en lotes
+        const itemsSnap = await db.collection("items").get();
+        let batch = db.batch();
+        let batchCount = 0;
+        let totalItemsActualizados = 0;
+
+        itemsSnap.forEach(itemDoc => {
+            const itemData = itemDoc.data();
+            const itemId = itemDoc.id;
+            const itemRefNorm = (itemData.referencia || '').trim().toLowerCase();
+
+            const stat = statsByItem[itemId] || statsByItem[itemRefNorm];
+            let precioPromedioVenta = 0;
+            let totalVendidos = 0;
+
+            if (stat && stat.totalCantidad > 0) {
+                precioPromedioVenta = Math.round(stat.totalIngreso / stat.totalCantidad);
+                totalVendidos = stat.totalCantidad;
+            } else if (itemData.precioVenta) {
+                precioPromedioVenta = Math.round(Number(itemData.precioVenta));
+            }
+
+            batch.update(itemDoc.ref, {
+                precioPromedioVenta: precioPromedioVenta,
+                totalVendidos: totalVendidos,
+                ultimoCalculoPromedio: Date.now(),
+                _lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            batchCount++;
+            totalItemsActualizados++;
+
+            if (batchCount >= 450) {
+                batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+        });
+
+        if (batchCount > 0) {
+            await batch.commit();
+        }
+
+        return {
+            success: true,
+            totalItems: totalItemsActualizados,
+            totalRemisiones: remisionesSnap.size,
+            timestamp: Date.now()
+        };
+
+    } catch (error) {
+        console.error("Error al recalcular precios promedio:", error);
+        throw new functions.https.HttpsError("internal", "Error al recalcular precios promedio: " + error.message);
+    }
 });

@@ -11,6 +11,7 @@ import { loadColores, setupColoresEvents } from './modules/colores.js';
 import { loadGastos, setupGastosEvents } from './modules/gastos.js';
 import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js';
 import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js';
 import { loadNomina, setupNominaEvents, cleanupNominaListeners } from './modules/nomina.js';
 import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js';
 import { setupFacturacionEvents } from './modules/facturacion.js';
@@ -53,7 +54,13 @@ export const setAllItemAverageCosts = (data) => allItemAverageCosts = data;
 
 // --- MANEJO DE AUTENTICACIÓN ---
 let activeListeners = [];
+let prefetchTimeouts = [];
+
 export function unsubscribeAllListeners() {
+    prefetchTimeouts.forEach(t => clearTimeout(t));
+    prefetchTimeouts = [];
+    activePrefetches.clear();
+
     activeListeners.forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
             unsubscribe();
@@ -69,42 +76,62 @@ export function unsubscribeAllListeners() {
 }
 
 let isAppInitialized = false;
+let currentAuthUid = null;
+let isAuthProcessing = false;
 
 onAuthStateChanged(auth, async (user) => {
-    unsubscribeAllListeners();
     const splashEl = document.getElementById('splash-view');
     if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-            currentUser = user;
-            currentUserData = { id: user.uid, ...userDoc.data() };
-            if (currentUserData.status === 'active') {
-                document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
-                logEvent(analytics, 'login', { method: 'email', user_role: currentUserData.role });
-                
-                // Mostrar la app
-                if(authView) authView.classList.add('hidden');
-                if(deniedView) deniedView.classList.add('hidden');
-                if(appView) appView.classList.remove('hidden');
-                if(splashEl) splashEl.classList.add('hidden');
-                
-                startApp();
+        if (isAppInitialized && currentAuthUid === user.uid) {
+            return;
+        }
+        if (isAuthProcessing && currentAuthUid === user.uid) {
+            return;
+        }
+        isAuthProcessing = true;
+        currentAuthUid = user.uid;
+        unsubscribeAllListeners();
+
+        try {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists()) {
+                currentUser = user;
+                currentUserData = { id: user.uid, ...userDoc.data() };
+                if (currentUserData.status === 'active') {
+                    document.getElementById('user-info').textContent = `Usuario: ${currentUserData.nombre} (${currentUserData.role})`;
+                    logEvent(analytics, 'login', { method: 'email', user_role: currentUserData.role });
+                    
+                    // Mostrar la app
+                    if(authView) authView.classList.add('hidden');
+                    if(deniedView) deniedView.classList.add('hidden');
+                    if(appView) appView.classList.remove('hidden');
+                    if(splashEl) splashEl.classList.add('hidden');
+                    
+                    startApp();
+                } else {
+                    let message = "Tu cuenta está pendiente de aprobación.";
+                    if (currentUserData.status === 'inactive') message = "Tu cuenta ha sido desactivada temporalmente.";
+                    if (currentUserData.status === 'archived') message = "Tu cuenta ha sido archivada y no puedes acceder.";
+                    document.getElementById('denied-message').textContent = message;
+                    if(authView) authView.classList.add('hidden');
+                    if(appView) appView.classList.add('hidden');
+                    if(deniedView) deniedView.classList.remove('hidden');
+                    if(splashEl) splashEl.classList.add('hidden');
+                }
             } else {
-                let message = "Tu cuenta está pendiente de aprobación.";
-                if (currentUserData.status === 'inactive') message = "Tu cuenta ha sido desactivada temporalmente.";
-                if (currentUserData.status === 'archived') message = "Tu cuenta ha sido archivada y no puedes acceder.";
-                document.getElementById('denied-message').textContent = message;
-                if(authView) authView.classList.add('hidden');
-                if(appView) appView.classList.add('hidden');
-                if(deniedView) deniedView.classList.remove('hidden');
-                if(splashEl) splashEl.classList.add('hidden');
+                signOut(auth);
             }
-        } else {
-            signOut(auth);
+        } catch (error) {
+            console.error("Error al obtener datos de usuario:", error);
+        } finally {
+            isAuthProcessing = false;
         }
     } else {
         currentUser = null;
         currentUserData = null;
+        currentAuthUid = null;
+        isAuthProcessing = false;
+        unsubscribeAllListeners();
         localStorage.removeItem('activeView');
         if(appView) appView.classList.add('hidden');
         if(deniedView) deniedView.classList.add('hidden');
@@ -136,29 +163,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function startApp() {
     if (isAppInitialized) return;
+    isAppInitialized = true;
 
     updateUIVisibility(currentUserData);
     setupEventListeners();
 
     const tabs = {
-        remisiones: document.getElementById('tab-remisiones'), facturacion: document.getElementById('tab-facturacion'),
-        colores: document.getElementById('tab-colores'), clientes: document.getElementById('tab-clientes'),
-        gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'),
-        empleados: document.getElementById('tab-empleados'), items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
+        remisiones: document.getElementById('tab-remisiones'), cotizaciones: document.getElementById('tab-cotizaciones'),
+        facturacion: document.getElementById('tab-facturacion'), colores: document.getElementById('tab-colores'),
+        clientes: document.getElementById('tab-clientes'), gastos: document.getElementById('tab-gastos'),
+        proveedores: document.getElementById('tab-proveedores'), empleados: document.getElementById('tab-empleados'),
+        items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
         nomina: document.getElementById('tab-nomina'), funciones: document.getElementById('tab-funciones')
     };
     const views = {
-        remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'),
-        colores: document.getElementById('view-colores'), clientes: document.getElementById('view-clientes'),
-        gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'),
-        empleados: document.getElementById('view-empleados'), items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
+        remisiones: document.getElementById('view-remisiones'), cotizaciones: document.getElementById('view-cotizaciones'),
+        facturacion: document.getElementById('view-facturacion'), colores: document.getElementById('view-colores'),
+        clientes: document.getElementById('view-clientes'), gastos: document.getElementById('view-gastos'),
+        proveedores: document.getElementById('view-proveedores'), empleados: document.getElementById('view-empleados'),
+        items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
         nomina: document.getElementById('view-nomina'), funciones: document.getElementById('view-funciones')
     };
     const mobileTabs = {
-        remisiones: document.getElementById('mobile-tab-remisiones'), facturacion: document.getElementById('mobile-tab-facturacion'),
-        colores: document.getElementById('mobile-tab-colores'), clientes: document.getElementById('mobile-tab-clientes'),
-        gastos: document.getElementById('mobile-tab-gastos'), proveedores: document.getElementById('mobile-tab-proveedores'),
-        empleados: document.getElementById('mobile-tab-empleados'), items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
+        remisiones: document.getElementById('mobile-tab-remisiones'), cotizaciones: document.getElementById('mobile-tab-cotizaciones'),
+        facturacion: document.getElementById('mobile-tab-facturacion'), colores: document.getElementById('mobile-tab-colores'),
+        clientes: document.getElementById('mobile-tab-clientes'), gastos: document.getElementById('mobile-tab-gastos'),
+        proveedores: document.getElementById('mobile-tab-proveedores'), empleados: document.getElementById('mobile-tab-empleados'),
+        items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
         nomina: document.getElementById('mobile-tab-nomina'), funciones: document.getElementById('mobile-tab-funciones')
     };
 
@@ -171,7 +202,6 @@ function startApp() {
     switchView(initialView, tabs, views, mobileTabs);
 
     loadAllData();
-    isAppInitialized = true;
 }
 
 function loadAllData() {
@@ -181,6 +211,7 @@ function loadAllData() {
 
     // Las demás funciones devuelven una función de desuscripción (onSnapshot)
     activeListeners.push(loadRemisiones());
+    activeListeners.push(loadCotizaciones());
     activeListeners.push(loadGastos());
     activeListeners.push(loadItems());
     activeListeners.push(loadColores());
@@ -210,15 +241,15 @@ function loadViewTemplates() {
                 <p class="text-xs text-slate-400 font-semibold">Completa los campos para registrarte en el sistema</p>
             </div>
             <div class="space-y-4">
-                <input type="text" id="register-name" placeholder="Nombre Completo" class="w-full p-3 border border-gray-300 rounded-lg" required>
-                <input type="text" id="register-cedula" placeholder="Cédula" class="w-full p-3 border border-gray-300 rounded-lg" required>
-                <input type="tel" id="register-phone" placeholder="Celular" class="w-full p-3 border border-gray-300 rounded-lg" required>
-                <input type="text" id="register-address" placeholder="Dirección" class="w-full p-3 border border-gray-300 rounded-lg">
-                <input type="email" id="register-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-lg" required>
-                <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                <input type="text" id="register-name" placeholder="Nombre Completo" autocomplete="name" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                <input type="text" id="register-cedula" placeholder="Cédula" autocomplete="off" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                <input type="tel" id="register-phone" placeholder="Celular" autocomplete="tel" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                <input type="text" id="register-address" placeholder="Dirección" autocomplete="street-address" class="w-full p-3 border border-gray-300 rounded-lg">
+                <input type="email" id="register-email" placeholder="Correo Electrónico" autocomplete="email" class="w-full p-3 border border-gray-300 rounded-lg" required>
+                <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="new-password" class="w-full p-3 border border-gray-300 rounded-lg" required>
                 <div>
                     <label for="register-dob" class="block text-xs font-semibold text-slate-500 uppercase mb-1">Fecha de Nacimiento</label>
-                    <input type="date" id="register-dob" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required>
+                    <input type="date" id="register-dob" autocomplete="bday" class="w-full p-3 border border-gray-300 rounded-lg mt-1" required>
                 </div>
                 <div class="flex items-center space-x-2">
                     <input type="checkbox" id="register-politica" class="h-4 w-4 rounded border-gray-300 text-[#0066e2] focus:ring-[#0066e2]" required>
@@ -266,6 +297,9 @@ function loadViewTemplates() {
                         <input type="search" id="search-items" placeholder="Buscar ítem..." class="w-full md:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
+                    <button id="btn-recalcular-precios-items" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2 px-4 rounded-full text-xs shadow-md transition-all flex items-center gap-1.5 flex-shrink-0" title="Recalcular precios promedio desde el histórico de ventas">
+                        <i class="fa-solid fa-calculator"></i> <span class="hidden sm:inline">Recalcular Promedios</span>
+                    </button>
                     <button id="mobile-add-item-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5 flex-shrink-0">
                         <span class="text-base font-medium leading-none">+</span> Nuevo Ítem
                     </button>
@@ -357,8 +391,188 @@ function loadViewTemplates() {
                 </div>
             </div>
 
+            <!-- Filtros de Remisiones (Por Estado y Por Pago) -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+                <!-- Filtros por Estado de Remisión -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span class="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[70px] flex-shrink-0">Estado:</span>
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                        <button data-filter="todas" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
+                            <span>Todos</span>
+                            <span class="filter-count-rem bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-filter="Recibido" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-inbox text-amber-500 text-[11px]"></i>
+                            <span>Recibido</span>
+                            <span class="filter-count-rem bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-filter="En Proceso" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-blue-700 hover:bg-blue-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-gears text-blue-500 text-[11px]"></i>
+                            <span>En Proceso</span>
+                            <span class="filter-count-rem bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-filter="Procesado" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-check text-purple-500 text-[11px]"></i>
+                            <span>Procesado</span>
+                            <span class="filter-count-rem bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-filter="Entregado" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-truck text-emerald-500 text-[11px]"></i>
+                            <span>Entregado</span>
+                            <span class="filter-count-rem bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-filter="Anulada" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-rose-700 hover:bg-rose-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-ban text-rose-500 text-[11px]"></i>
+                            <span>Anuladas</span>
+                            <span class="filter-count-rem bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filtros por Estado de Pago -->
+                <div class="border-t border-slate-100 pt-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span class="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[70px] flex-shrink-0">Pago:</span>
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                        <button data-payment-filter="todos" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
+                            <span>Todos</span>
+                            <span class="filter-count-pay bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-payment-filter="Pendiente" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-clock text-amber-500 text-[11px]"></i>
+                            <span>Pendientes</span>
+                            <span class="filter-count-pay bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-payment-filter="Abono" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-hand-holding-dollar text-purple-500 text-[11px]"></i>
+                            <span>Con Abono</span>
+                            <span class="filter-count-pay bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button data-payment-filter="Pagado" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-circle-check text-emerald-500 text-[11px]"></i>
+                            <span>Pagados</span>
+                            <span class="filter-count-pay bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="remisiones-list-container" class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                 <div id="remisiones-list" class="space-y-4"></div>
+            </div>
+        </div>`;
+    }
+
+    const viewCotizaciones = document.getElementById('view-cotizaciones');
+    if (viewCotizaciones) {
+        viewCotizaciones.innerHTML = `
+        <div class="max-w-6xl mx-auto space-y-6">
+            <div id="cotizacion-form-container" class="mobile-form-modal">
+                <div class="modal-card max-w-md lg:max-w-4xl">
+                    <div class="modal-header-fixed">
+                        <h2 class="text-xl font-bold text-slate-800">Nueva Cotización</h2>
+                        <button type="button" class="mobile-close-form-btn text-gray-400 hover:text-gray-600 text-2xl font-bold" data-target="cotizacion-form-container">&times;</button>
+                    </div>
+                    <form id="cotizacion-form" class="modal-body-scroll space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="relative">
+                                <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Cliente</label>
+                                <input type="text" id="cotizacion-cliente-input" autocomplete="off" placeholder="Buscar y seleccionar cliente..." class="w-full p-3 border border-gray-300 rounded-lg text-sm font-semibold text-slate-800" required>
+                                <input type="hidden" id="cotizacion-cliente-id">
+                                <div id="cotizacion-cliente-list" class="search-results hidden"></div>
+                            </div>
+                            <div>
+                                <label for="cotizacion-validez" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Validez de la Oferta (Días)</label>
+                                <input type="number" id="cotizacion-validez" min="1" max="90" value="15" class="w-full p-3 border border-gray-300 rounded-lg text-sm font-semibold text-slate-800" required>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-b border-slate-100 py-4 my-2">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-md font-bold text-slate-800">Ítems a Cotizar</h3>
+                                <span class="text-xs text-slate-400 font-medium">No descuenta inventario hasta escalar</span>
+                            </div>
+                            <div id="cotizacion-items-container" class="space-y-3"></div>
+                            <button type="button" id="cotizacion-add-item-btn" class="mt-3 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl transition text-xs flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-plus text-xs"></i> Añadir Otro Ítem
+                            </button>
+                        </div>
+
+                        <div>
+                            <label for="cotizacion-observaciones" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Términos Comerciales y Observaciones</label>
+                            <textarea id="cotizacion-observaciones" rows="2" class="w-full p-3 border border-gray-300 rounded-lg text-xs" placeholder="Ej: Precios válidos por 15 días. Tiempos de entrega 3 días hábiles tras confirmación..."></textarea>
+                        </div>
+
+                        <div class="bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-200 text-xs">
+                            <div class="flex justify-between items-center"><span class="font-medium text-slate-600">Subtotal:</span><span id="cotizacion-subtotal-display" class="font-bold text-slate-900">$ 0</span></div>
+                            <div class="flex justify-between items-center"><label for="cotizacion-incluir-iva" class="flex items-center space-x-2 cursor-pointer my-0"><input type="checkbox" id="cotizacion-incluir-iva" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"><span class="text-xs font-bold text-slate-600">Incluir IVA (19%)</span></label><span id="cotizacion-iva-display" class="font-medium text-slate-600">$ 0</span></div>
+                            <hr class="border-slate-200">
+                            <div class="flex justify-between items-center text-sm"><span class="font-extrabold text-slate-800">TOTAL ESTIMADO:</span><span id="cotizacion-total-display" class="font-extrabold text-indigo-600 text-lg">$ 0</span></div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-extrabold py-3 px-4 rounded-xl hover:bg-indigo-700 transition shadow-md flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar Cotización
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Gestión de Cotizaciones</h1>
+                    <p class="text-xs font-semibold text-slate-450 mt-1">Crea propuestas comerciales, haz seguimiento de estados y escálalas a remisión oficial.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                    <div class="flex items-center gap-2 w-full sm:w-auto bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
+                        <select id="filter-month-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
+                        <span class="text-slate-300 font-light">|</span>
+                        <select id="filter-year-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
+                    </div>
+                    <div class="relative flex-grow sm:flex-grow-0 w-full sm:w-auto">
+                        <input type="search" id="search-cotizaciones" placeholder="Buscar cotización o cliente..." class="w-full sm:w-60 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <button id="mobile-add-cotizacion-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5 flex-shrink-0">
+                        <span class="text-base font-medium leading-none">+</span> Nueva Cotización
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtros por Estado -->
+            <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                <button data-filter="todas" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
+                    <span>Todas</span>
+                    <span class="filter-count bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+                <button data-filter="Pendiente" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
+                    <i class="fa-solid fa-clock text-amber-500 text-[11px]"></i>
+                    <span>Pendientes</span>
+                    <span class="filter-count bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+                <button data-filter="Aprobada" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
+                    <i class="fa-solid fa-check text-emerald-500 text-[11px]"></i>
+                    <span>Aprobadas</span>
+                    <span class="filter-count bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+                <button data-filter="Convertida" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50 shadow-xs flex-shrink-0">
+                    <i class="fa-solid fa-rocket text-indigo-500 text-[11px]"></i>
+                    <span>Convertidas</span>
+                    <span class="filter-count bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+                <button data-filter="Rechazada" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-rose-700 hover:bg-rose-50 shadow-xs flex-shrink-0">
+                    <i class="fa-solid fa-circle-xmark text-rose-500 text-[11px]"></i>
+                    <span>Rechazadas</span>
+                    <span class="filter-count bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+                <button data-filter="archivadas" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 shadow-xs flex-shrink-0">
+                    <i class="fa-solid fa-box-archive text-slate-400 text-[11px]"></i>
+                    <span>Archivadas</span>
+                    <span class="filter-count bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+            </div>
+
+            <div id="cotizaciones-list-container" class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <div id="cotizaciones-list" class="space-y-4"></div>
+                <div id="cotizaciones-pagination"></div>
             </div>
         </div>`;
     }
@@ -858,7 +1072,7 @@ function updateUIVisibility(userData) {
 function getInitialViewForUser(userData) {
     if (!userData) return 'remisiones';
     if (userData.role === 'admin') return 'remisiones';
-    const modulePriority = ['remisiones', 'mensajes', 'facturacion', 'colores', 'items', 'clientes', 'gastos', 'proveedores', 'empleados', 'nomina', 'funciones'];
+    const modulePriority = ['remisiones', 'cotizaciones', 'mensajes', 'facturacion', 'colores', 'items', 'clientes', 'gastos', 'proveedores', 'empleados', 'nomina', 'funciones'];
     if (userData.permissions) {
         for (const module of modulePriority) {
             if (userData.permissions[module]) return module;
@@ -964,26 +1178,29 @@ function setupEventListeners() {
     window.__setupEventListenersInit = true;
 
     const tabs = {
-        remisiones: document.getElementById('tab-remisiones'), facturacion: document.getElementById('tab-facturacion'),
-        colores: document.getElementById('tab-colores'), clientes: document.getElementById('tab-clientes'),
-        gastos: document.getElementById('tab-gastos'), proveedores: document.getElementById('tab-proveedores'),
-        empleados: document.getElementById('tab-empleados'), items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
+        remisiones: document.getElementById('tab-remisiones'), cotizaciones: document.getElementById('tab-cotizaciones'),
+        facturacion: document.getElementById('tab-facturacion'), colores: document.getElementById('tab-colores'),
+        clientes: document.getElementById('tab-clientes'), gastos: document.getElementById('tab-gastos'),
+        proveedores: document.getElementById('tab-proveedores'), empleados: document.getElementById('tab-empleados'),
+        items: document.getElementById('tab-items'), mensajes: document.getElementById('tab-mensajes'),
         nomina: document.getElementById('tab-nomina'), funciones: document.getElementById('tab-funciones')
     };
 
     const mobileTabs = {
-        remisiones: document.getElementById('mobile-tab-remisiones'), facturacion: document.getElementById('mobile-tab-facturacion'),
-        colores: document.getElementById('mobile-tab-colores'), clientes: document.getElementById('mobile-tab-clientes'),
-        gastos: document.getElementById('mobile-tab-gastos'), proveedores: document.getElementById('mobile-tab-proveedores'),
-        empleados: document.getElementById('mobile-tab-empleados'), items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
+        remisiones: document.getElementById('mobile-tab-remisiones'), cotizaciones: document.getElementById('mobile-tab-cotizaciones'),
+        facturacion: document.getElementById('mobile-tab-facturacion'), colores: document.getElementById('mobile-tab-colores'),
+        clientes: document.getElementById('mobile-tab-clientes'), gastos: document.getElementById('mobile-tab-gastos'),
+        proveedores: document.getElementById('mobile-tab-proveedores'), empleados: document.getElementById('mobile-tab-empleados'),
+        items: document.getElementById('mobile-tab-items'), mensajes: document.getElementById('mobile-tab-mensajes'),
         nomina: document.getElementById('mobile-tab-nomina'), funciones: document.getElementById('mobile-tab-funciones')
     };
 
     const views = {
-        remisiones: document.getElementById('view-remisiones'), facturacion: document.getElementById('view-facturacion'),
-        colores: document.getElementById('view-colores'), clientes: document.getElementById('view-clientes'),
-        gastos: document.getElementById('view-gastos'), proveedores: document.getElementById('view-proveedores'),
-        empleados: document.getElementById('view-empleados'), items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
+        remisiones: document.getElementById('view-remisiones'), cotizaciones: document.getElementById('view-cotizaciones'),
+        facturacion: document.getElementById('view-facturacion'), colores: document.getElementById('view-colores'),
+        clientes: document.getElementById('view-clientes'), gastos: document.getElementById('view-gastos'),
+        proveedores: document.getElementById('view-proveedores'), empleados: document.getElementById('view-empleados'),
+        items: document.getElementById('view-items'), mensajes: document.getElementById('view-mensajes'),
         nomina: document.getElementById('view-nomina'), funciones: document.getElementById('view-funciones')
     };
 
@@ -1048,6 +1265,18 @@ function setupEventListeners() {
     document.getElementById('close-policy-modal')?.addEventListener('click', () => { document.getElementById('policy-modal').classList.add('hidden'); });
     document.getElementById('accept-policy-btn')?.addEventListener('click', () => { document.getElementById('policy-modal').classList.add('hidden'); });
 
+    // Auto-actualizar la fecha de remisión a hoy cuando la página vuelve a estar activa o visible
+    const updateFechaRecibidoInput = () => {
+        const fechaInput = document.getElementById('fecha-recibido');
+        if (fechaInput) {
+            fechaInput.value = new Date().toISOString().split('T')[0];
+        }
+    };
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') updateFechaRecibidoInput();
+    });
+    window.addEventListener('focus', updateFechaRecibidoInput);
+
     // --- EVENT DELEGATION FOR RESPONSIVE MOBILE FORM MODALS ---
     document.body.addEventListener('click', (e) => {
         // Handle trigger buttons
@@ -1069,6 +1298,9 @@ function setupEventListeners() {
         if (e.target && e.target.id === 'mobile-add-remision-btn') {
             document.getElementById('remision-form-container')?.classList.add('show-modal');
         }
+        if (e.target && e.target.id === 'mobile-add-cotizacion-btn') {
+            document.getElementById('cotizacion-form-container')?.classList.add('show-modal');
+        }
 
         // Handle close buttons inside modals
         const closeBtn = e.target.closest('.mobile-close-form-btn');
@@ -1088,6 +1320,7 @@ function setupEventListeners() {
     setupEmpleadosEvents();
     setupNominaEvents();
     setupRemisionesEvents();
+    setupCotizacionesEvents();
     setupFacturacionEvents();
     setupMensajesEvents();
     setupFuncionesEvents();
@@ -1114,6 +1347,17 @@ function switchView(viewName, tabs, views, mobileTabs = null) {
 
     Object.values(views).forEach(view => { if (view) view.classList.add('hidden') });
     if (views[viewName]) views[viewName].classList.remove('hidden');
+
+    if (viewName === 'remisiones') {
+        const fechaInput = document.getElementById('fecha-recibido');
+        if (fechaInput) {
+            fechaInput.value = new Date().toISOString().split('T')[0];
+        }
+    }
+
+    if (viewName === 'cotizaciones') {
+        renderCotizaciones();
+    }
 
     // Expandir/contraer dinámicamente el contenedor principal <main> para el módulo de WhatsApp
     const mainContainer = document.querySelector('main');
@@ -1142,9 +1386,18 @@ export function hideModal() {
 }
 
 // --- UTILIDADES EXPORTADAS ---
-export function populateDateFilters(prefix) {
-    const monthSelect = document.getElementById(`${prefix}-month`);
-    const yearSelect = document.getElementById(`${prefix}-year`);
+export function populateDateFilters(prefixOrMonthSelect, yearSelectParam) {
+    let monthSelect;
+    let yearSelect;
+
+    if (prefixOrMonthSelect && typeof prefixOrMonthSelect === 'object' && prefixOrMonthSelect.tagName === 'SELECT') {
+        monthSelect = prefixOrMonthSelect;
+        yearSelect = yearSelectParam;
+    } else if (typeof prefixOrMonthSelect === 'string') {
+        monthSelect = document.getElementById(`${prefixOrMonthSelect}-month`) || document.getElementById(`filter-month-${prefixOrMonthSelect.replace('filter-', '')}`);
+        yearSelect = document.getElementById(`${prefixOrMonthSelect}-year`) || document.getElementById(`filter-year-${prefixOrMonthSelect.replace('filter-', '')}`);
+    }
+
     if (!monthSelect || !yearSelect) return;
 
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -1168,9 +1421,22 @@ export function populateDateFilters(prefix) {
     }
 }
 
-export function initSearchableInput(searchInput, resultsContainer, getDataFn, displayFn, onSelect) {
+export function initSearchableInput(searchInput, resultsContainer, getDataFn, displayFn, onSelect, renderItemFn = null) {
+    // Soporte tanto para argumentos posicionales como para objeto de opciones
+    if (searchInput && typeof searchInput === 'object' && !searchInput.addEventListener && searchInput.inputEl) {
+        const opts = searchInput;
+        searchInput = opts.inputEl;
+        resultsContainer = opts.listEl || opts.resultsContainer;
+        getDataFn = typeof opts.dataArray === 'function' ? opts.dataArray : (() => opts.dataArray || []);
+        displayFn = opts.displayFn || ((item) => opts.displayField ? item[opts.displayField] : String(item));
+        onSelect = opts.onSelect;
+        renderItemFn = opts.renderItemFn || null;
+    }
+
+    if (!searchInput || !searchInput.addEventListener || !resultsContainer) return;
+
     searchInput.addEventListener('input', () => {
-        const data = getDataFn();
+        const data = typeof getDataFn === 'function' ? getDataFn() : (getDataFn || []);
         const searchTerm = searchInput.value.toLowerCase();
         if (!searchTerm) {
             if (onSelect) onSelect(null, searchInput);
@@ -1178,7 +1444,10 @@ export function initSearchableInput(searchInput, resultsContainer, getDataFn, di
             resultsContainer.classList.add('hidden');
             return;
         }
-        const filteredData = data.filter(item => displayFn(item).toLowerCase().includes(searchTerm));
+        const filteredData = data.filter(item => {
+            const str = typeof displayFn === 'function' ? displayFn(item) : String(item);
+            return str.toLowerCase().includes(searchTerm);
+        });
         renderResults(filteredData);
     });
 
@@ -1195,10 +1464,14 @@ export function initSearchableInput(searchInput, resultsContainer, getDataFn, di
         results.forEach(item => {
             const div = document.createElement('div');
             div.className = 'search-result-item';
-            div.textContent = displayFn(item);
+            if (typeof renderItemFn === 'function') {
+                div.innerHTML = renderItemFn(item);
+            } else {
+                div.textContent = typeof displayFn === 'function' ? displayFn(item) : String(item);
+            }
             div.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                searchInput.value = displayFn(item);
+                searchInput.value = typeof displayFn === 'function' ? displayFn(item) : String(item);
                 resultsContainer.classList.add('hidden');
                 if (onSelect) onSelect(item, searchInput);
             });
@@ -1334,7 +1607,7 @@ export function invalidateFileCache(filePath) {
 window.invalidateFileCache = invalidateFileCache;
 
 async function getSecureFileUrl(filePath, forceRefresh = false) {
-    if (!filePath) return '';
+    if (!filePath || !auth.currentUser) return '';
     
     if (!forceRefresh) {
         const cache = loadUrlCache();
@@ -1361,6 +1634,7 @@ async function getSecureFileUrl(filePath, forceRefresh = false) {
     }
     
     const fetchPromise = (async () => {
+        if (!auth.currentUser) return '';
         try {
             // Método 1: SDK Cliente Directo (Carga ultra veloz ~100ms)
             const fileRef = ref(storage, filePath);
@@ -1375,6 +1649,7 @@ async function getSecureFileUrl(filePath, forceRefresh = false) {
             saveUrlCache(freshCache);
             return url;
         } catch (error) {
+            if (!auth.currentUser) return '';
             console.warn(`Fallo al obtener enlace directo para ${filePath}, reintentando con Cloud Function...`, error);
             try {
                 // Método 2: Respaldo de Cloud Function (Expiración en 10 minutos)
@@ -1391,7 +1666,9 @@ async function getSecureFileUrl(filePath, forceRefresh = false) {
                 saveUrlCache(freshCache);
                 return url;
             } catch (cfError) {
-                console.error(`Fallo crítico al resolver enlace de archivo seguro para ${filePath}:`, cfError);
+                if (auth.currentUser) {
+                    console.error(`Fallo crítico al resolver enlace de archivo seguro para ${filePath}:`, cfError);
+                }
                 throw cfError;
             }
         } finally {
@@ -1405,7 +1682,7 @@ async function getSecureFileUrl(filePath, forceRefresh = false) {
 
 // Prefetch en segundo plano de manera silenciosa
 export function prefetchSecureFile(filePath) {
-    if (!filePath) return;
+    if (!filePath || !auth.currentUser) return;
     const cache = loadUrlCache();
     const cachedEntry = cache[filePath];
     const isExpired = cachedEntry && cachedEntry.type === 'signed' && cachedEntry.expiresAt <= Date.now();
@@ -1417,6 +1694,7 @@ export function prefetchSecureFile(filePath) {
 
 // Escanear el DOM y precargar todos los PDF visibles con delay staggered (evita ráfagas de red)
 export function scanAndPrefetchSecureFiles() {
+    if (!auth.currentUser) return;
     const elements = document.querySelectorAll('[data-file-path]');
     let delay = 150;
     elements.forEach(el => {
@@ -1427,9 +1705,12 @@ export function scanAndPrefetchSecureFiles() {
             const isExpired = cachedEntry && cachedEntry.type === 'signed' && cachedEntry.expiresAt <= Date.now();
             
             if (!cachedEntry || isExpired) {
-                setTimeout(() => {
-                    prefetchSecureFile(path);
+                const t = setTimeout(() => {
+                    if (auth.currentUser) {
+                        prefetchSecureFile(path);
+                    }
                 }, delay);
+                prefetchTimeouts.push(t);
                 delay += 300; // Espaciar solicitudes 300ms
             }
         }
@@ -1516,30 +1797,30 @@ function showEditProfileModal() {
                 <div class="space-y-4">
                     <div>
                         <label for="profile-name" class="block text-sm font-semibold text-slate-700">Nombre Completo</label>
-                        <input type="text" id="profile-name" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.nombre || ''}" required ${disabledAttribute}>
+                        <input type="text" id="profile-name" autocomplete="name" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.nombre || ''}" required ${disabledAttribute}>
                     </div>
                     <div>
                         <label for="profile-cedula" class="block text-sm font-semibold text-slate-700">Cédula</label>
-                        <input type="text" id="profile-cedula" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.cedula || ''}" required ${disabledAttribute}>
+                        <input type="text" id="profile-cedula" autocomplete="off" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.cedula || ''}" required ${disabledAttribute}>
                     </div>
                     <div>
                         <label for="profile-dob" class="block text-sm font-semibold text-slate-700">Fecha de Nacimiento</label>
-                        <input type="date" id="profile-dob" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.dob || ''}" required ${disabledAttribute}>
+                        <input type="date" id="profile-dob" autocomplete="bday" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${disabledClasses}" value="${user.dob || ''}" required ${disabledAttribute}>
                     </div>
                 </div>
                 <hr class="border-slate-200 my-4" />
                 <div class="space-y-4">
                     <div>
                         <label for="profile-phone" class="block text-sm font-semibold text-slate-700">Celular</label>
-                        <input type="tel" id="profile-phone" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.telefono || ''}" required>
+                        <input type="tel" id="profile-phone" autocomplete="tel" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.telefono || ''}" required>
                     </div>
                     <div>
                         <label for="profile-address" class="block text-sm font-semibold text-slate-700">Dirección</label>
-                        <input type="text" id="profile-address" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.direccion || ''}">
+                        <input type="text" id="profile-address" autocomplete="street-address" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.direccion || ''}">
                     </div>
                     <div>
                         <label for="profile-email" class="block text-sm font-semibold text-slate-700">Correo Electrónico</label>
-                        <input type="email" id="profile-email" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.email || ''}" required>
+                        <input type="email" id="profile-email" autocomplete="email" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" value="${user.email || ''}" required>
                         <p class="text-xs text-slate-500 mt-1">Cambiar tu correo requiere que vuelvas a iniciar sesión.</p>
                     </div>
                 </div>

@@ -58,9 +58,9 @@
             <form id="login-form" class="bg-white p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold text-center mb-6">Iniciar Sesión</h2>
                 <div class="space-y-4">
-                    <input type="email" id="login-email" placeholder="Correo Electrónico"
+                    <input type="email" id="login-email" placeholder="Correo Electrónico" autocomplete="username"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
-                    <input type="password" id="login-password" placeholder="Contraseña"
+                    <input type="password" id="login-password" placeholder="Contraseña" autocomplete="current-password"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <button type="submit"
                         class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700">Ingresar</button>
@@ -72,20 +72,20 @@
             <form id="register-form" class="hidden bg-white p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold text-center mb-6">Crear Cuenta</h2>
                 <div class="space-y-4">
-                    <input type="text" id="register-name" placeholder="Nombre Completo"
+                    <input type="text" id="register-name" placeholder="Nombre Completo" autocomplete="name"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
-                    <input type="text" id="register-cedula" placeholder="Cédula"
+                    <input type="text" id="register-cedula" placeholder="Cédula" autocomplete="off"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
-                    <input type="tel" id="register-phone" placeholder="Celular"
+                    <input type="tel" id="register-phone" placeholder="Celular" autocomplete="tel"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
-                    <input type="text" id="register-address" placeholder="Dirección"
+                    <input type="text" id="register-address" placeholder="Dirección" autocomplete="street-address"
                         class="w-full p-3 border border-gray-300 rounded-lg">
-                    <input type="email" id="register-email" placeholder="Correo Electrónico"
+                    <input type="email" id="register-email" placeholder="Correo Electrónico" autocomplete="email"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
-                    <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)"
+                    <input type="password" id="register-password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="new-password"
                         class="w-full p-3 border border-gray-300 rounded-lg" required>
                     <div><label for="register-dob" class="block text-sm font-medium text-gray-700">Fecha de
-                            Nacimiento</label><input type="date" id="register-dob"
+                            Nacimiento</label><input type="date" id="register-dob" autocomplete="bday"
                             class="w-full p-3 border border-gray-300 rounded-lg mt-1" required></div>
 
                     <div class="flex items-center space-x-2">
@@ -124,6 +124,10 @@
                 <button id="tab-remisiones" class="tab-btn">
                     <i class="fa-solid fa-file-invoice w-5 h-5 flex-shrink-0"></i>
                     <span>Remisiones</span>
+                </button>
+                <button id="tab-cotizaciones" class="tab-btn">
+                    <i class="fa-solid fa-file-lines w-5 h-5 flex-shrink-0"></i>
+                    <span>Cotizaciones</span>
                 </button>
                 <button id="tab-mensajes" class="tab-btn relative">
                     <i class="fa-solid fa-comments w-5 h-5 flex-shrink-0"></i>
@@ -202,6 +206,7 @@
             <main class="flex-grow p-4 pb-24 md:p-8 max-w-7xl mx-auto w-full">
                 <div class="w-full">
                 <div id="view-remisiones"></div>
+                <div id="view-cotizaciones" class="hidden"></div>
                 <div id="view-facturacion" class="hidden"></div>
                 <div id="view-clientes" class="hidden"></div>
                 <div id="view-items" class="hidden"></div>
@@ -574,6 +579,10 @@
 
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Más Módulos</h3>
             <div class="grid grid-cols-4 gap-3 text-center">
+                <button id="mobile-tab-cotizaciones" class="flex flex-col items-center p-2 text-gray-600 hidden">
+                    <span class="text-2xl mb-1">📋</span>
+                    <span class="text-[10px] font-semibold">Cotizac.</span>
+                </button>
                 <button id="mobile-tab-facturacion" class="flex flex-col items-center p-2 text-gray-600 hidden">
                     <span class="text-2xl mb-1">🧾</span>
                     <span class="text-[10px] font-semibold">Facturación</span>
