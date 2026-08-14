@@ -709,6 +709,14 @@ video {
   top: 1.25rem;
 }
 
+.left-3 {
+  left: 0.75rem;
+}
+
+.top-2\.5 {
+  top: 0.625rem;
+}
+
 .z-0 {
   z-index: 0;
 }
@@ -937,6 +945,10 @@ video {
 
 .mt-auto {
   margin-top: auto;
+}
+
+.ml-0\.5 {
+  margin-left: 0.125rem;
 }
 
 .block {
@@ -2626,6 +2638,10 @@ video {
   background-color: rgb(202 138 4 / var(--tw-bg-opacity, 1));
 }
 
+.bg-slate-100\/90 {
+  background-color: rgb(241 245 249 / 0.9);
+}
+
 .bg-opacity-40 {
   --tw-bg-opacity: 0.4;
 }
@@ -2784,6 +2800,10 @@ video {
   padding: 2rem;
 }
 
+.p-0\.5 {
+  padding: 0.125rem;
+}
+
 .px-0 {
   padding-left: 0px;
   padding-right: 0px;
@@ -2909,6 +2929,11 @@ video {
   padding-bottom: 2rem;
 }
 
+.py-0 {
+  padding-top: 0px;
+  padding-bottom: 0px;
+}
+
 .pb-0 {
   padding-bottom: 0px;
 }
@@ -3003,6 +3028,14 @@ video {
 
 .pt-2\.5 {
   padding-top: 0.625rem;
+}
+
+.pl-1 {
+  padding-left: 0.25rem;
+}
+
+.pl-9 {
+  padding-left: 2.25rem;
 }
 
 .text-left {
@@ -5123,6 +5156,10 @@ body {
   background-color: rgb(161 98 7 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-white\/70:hover {
+  background-color: rgb(255 255 255 / 0.7);
+}
+
 .hover\:from-blue-700:hover {
   --tw-gradient-from: #1d4ed8 var(--tw-gradient-from-position);
   --tw-gradient-to: rgb(29 78 216 / 0) var(--tw-gradient-to-position);
@@ -5262,6 +5299,11 @@ body {
 .hover\:text-yellow-600:hover {
   --tw-text-opacity: 1;
   color: rgb(202 138 4 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-slate-900:hover {
+  --tw-text-opacity: 1;
+  color: rgb(15 23 42 / var(--tw-text-opacity, 1));
 }
 
 .hover\:underline:hover {
@@ -5604,6 +5646,10 @@ body {
 
   .sm\:w-auto {
     width: auto;
+  }
+
+  .sm\:w-52 {
+    width: 13rem;
   }
 
   .sm\:max-w-\[200px\] {
@@ -6058,5 +6104,23 @@ body {
     --tw-shadow: 0 0 #0000;
     --tw-shadow-colored: 0 0 #0000;
     box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+  }
+}
+
+@media (min-width: 1280px) {
+  .xl\:flex-row {
+    flex-direction: row;
+  }
+
+  .xl\:items-center {
+    align-items: center;
+  }
+
+  .xl\:justify-between {
+    justify-content: space-between;
+  }
+
+  .xl\:self-auto {
+    align-self: auto;
   }
 }
