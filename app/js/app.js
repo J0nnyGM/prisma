@@ -82,8 +82,72 @@ export const setAllItemAverageCosts = (data) => allItemAverageCosts = data;
 let isGlobalUpdating = false;
 let versionUnsubscribe = null;
 
+const RELOAD_ATTEMPTS_KEY = 'prisma_version_reload_count';
+const LAST_RELOAD_TIME_KEY = 'prisma_version_last_reload_time';
+
+function showManualUpdateBanner(targetVersion) {
+    if (document.getElementById('version-update-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'version-update-banner';
+    banner.className = 'fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md bg-slate-900 text-white p-4 rounded-2xl shadow-2xl z-[99999] border border-slate-700 flex items-center justify-between gap-3 animate-fade-in';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg flex-shrink-0">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+            </div>
+            <div class="text-left">
+                <p class="text-xs font-bold text-white">Nueva versión disponible (${targetVersion || APP_VERSION})</p>
+                <p class="text-[11px] text-slate-400">Toca actualizar cuando desees sincronizar.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button id="btn-manual-reload-banner" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition shadow">
+                Actualizar
+            </button>
+            <button id="btn-dismiss-banner" class="text-slate-400 hover:text-white text-xs p-1">
+                &times;
+            </button>
+        </div>
+    `;
+    document.body.appendChild(banner);
+
+    banner.querySelector('#btn-manual-reload-banner').addEventListener('click', () => {
+        sessionStorage.removeItem(RELOAD_ATTEMPTS_KEY);
+        sessionStorage.removeItem(LAST_RELOAD_TIME_KEY);
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.location.replace(`${cleanUrl}?v=${targetVersion || APP_VERSION}&_t=${Date.now()}`);
+    });
+    banner.querySelector('#btn-dismiss-banner').addEventListener('click', () => {
+        banner.remove();
+    });
+}
+
 export function triggerGlobalAppUpdate(newVersion, forceTimestamp) {
     if (isGlobalUpdating) return;
+
+    // --- PROTECCIÓN ESTRICTA CONTRA BUCLES INFINITOS (IPHONE / SAFARI CACHE) ---
+    const now = Date.now();
+    const lastReloadTime = Number(sessionStorage.getItem(LAST_RELOAD_TIME_KEY) || 0);
+    let reloadCount = Number(sessionStorage.getItem(RELOAD_ATTEMPTS_KEY) || 0);
+
+    if (now - lastReloadTime < 35000) {
+        reloadCount++;
+    } else {
+        reloadCount = 1;
+    }
+
+    sessionStorage.setItem(LAST_RELOAD_TIME_KEY, String(now));
+    sessionStorage.setItem(RELOAD_ATTEMPTS_KEY, String(reloadCount));
+
+    // Si ya intentó recargar en los últimos 35s y la versión sigue discrepando,
+    // significa que el navegador (Safari) o el servidor aún sirven la versión en caché.
+    // CANCELAMOS el bucle para que el usuario pueda seguir trabajando normalmente.
+    if (reloadCount > 1) {
+        console.warn(`[VersionWatcher] Bucle evitado (${reloadCount} recargas en menos de 35s). Mostrando aviso no bloqueante.`);
+        showManualUpdateBanner(newVersion);
+        return;
+    }
+
     isGlobalUpdating = true;
 
     try {
@@ -135,7 +199,7 @@ export function triggerGlobalAppUpdate(newVersion, forceTimestamp) {
 
     setTimeout(() => {
         const cleanUrl = window.location.origin + window.location.pathname;
-        window.location.href = `${cleanUrl}?v=${newVersion || APP_VERSION}&_t=${Date.now()}`;
+        window.location.replace(`${cleanUrl}?v=${newVersion || APP_VERSION}&_t=${Date.now()}`);
     }, 1200);
 }
 
@@ -149,6 +213,13 @@ export function initGlobalVersionWatcher() {
             const remoteVersion = data.currentVersion || data.version;
             const forceTimestamp = Number(data.forceReloadTimestamp || 0);
             const lastAppliedForce = Number(localStorage.getItem('last_applied_force_reload') || 0);
+
+            if (remoteVersion && remoteVersion === APP_VERSION) {
+                sessionStorage.removeItem(RELOAD_ATTEMPTS_KEY);
+                sessionStorage.removeItem(LAST_RELOAD_TIME_KEY);
+                const existingBanner = document.getElementById('version-update-banner');
+                if (existingBanner) existingBanner.remove();
+            }
 
             const isOutdated = remoteVersion && (remoteVersion !== APP_VERSION);
             const isForced = forceTimestamp > lastAppliedForce;
