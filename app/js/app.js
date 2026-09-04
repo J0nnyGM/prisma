@@ -1,6 +1,6 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
-export const APP_VERSION = '3.2';
+export const APP_VERSION = '3.3';
 
 // --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
 export const APP_CACHE_KEYS = [
@@ -30,19 +30,19 @@ import { auth, db, storage, functions, analytics, httpsCallable } from './fireba
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
 
-import { loadClientes, setupClientesEvents } from './modules/clientes.js?v=3.2';
-import { loadProveedores, setupProveedoresEvents } from './modules/proveedores.js?v=3.2';
-import { loadItems, setupItemsEvents } from './modules/items.js?v=3.2';
-import { loadColores, setupColoresEvents } from './modules/colores.js?v=3.2';
-import { loadGastos, setupGastosEvents } from './modules/gastos.js?v=3.2';
-import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.2';
-import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js?v=3.2';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.2';
-import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.2';
-import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.2';
-import { setupFacturacionEvents } from './modules/facturacion.js?v=3.2';
-import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.2';
-import { setupFuncionesEvents } from './modules/funciones.js?v=3.2';
+import { loadClientes, setupClientesEvents } from './modules/clientes.js?v=3.3';
+import { loadProveedores, setupProveedoresEvents } from './modules/proveedores.js?v=3.3';
+import { loadItems, setupItemsEvents } from './modules/items.js?v=3.3';
+import { loadColores, setupColoresEvents } from './modules/colores.js?v=3.3';
+import { loadGastos, setupGastosEvents } from './modules/gastos.js?v=3.3';
+import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.3';
+import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js?v=3.3';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.3';
+import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.3';
+import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.3';
+import { setupFacturacionEvents } from './modules/facturacion.js?v=3.3';
+import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.3';
+import { setupFuncionesEvents } from './modules/funciones.js?v=3.3';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { doc, getDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";

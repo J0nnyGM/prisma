@@ -303,7 +303,8 @@ export function renderRemisiones() {
             ? `<button data-file-path="${pdfPath}" data-file-title="Remisión N° ${remision.numeroRemision}" class="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center shadow-sm">Ver PDF</button>`
             : `<button class="w-full bg-slate-300 text-slate-500 border border-slate-200 px-4 py-2.5 rounded-lg text-sm font-semibold cursor-not-allowed" disabled>Generando PDF...</button>`;
 
-        const anularButton = (esAnulada || esEntregada || isPlanta || paymentsArray.length > 0) ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-red-50 text-red-650 border border-red-200 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-100 hover:text-red-700 transition shadow-sm">Anular</button>`;
+        const hasActivePayments = paymentsArray.some(p => p.status === 'confirmado' || p.status === 'por confirmar');
+        const anularButton = (esAnulada || esEntregada || isPlanta || hasActivePayments) ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-red-50 text-red-650 border border-red-200 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-100 hover:text-red-700 transition shadow-sm">Anular</button>`;
         const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-purple-700 transition shadow-sm">Abonar (${formatCurrency(saldoPendiente)})</button>`;
         const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount) ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-cyan-700 transition shadow-sm">Descuento</button>`;
         
@@ -370,7 +371,9 @@ export function renderRemisiones() {
 
     remisionesListEl.querySelectorAll('.anular-btn').forEach(button => button.addEventListener('click', (e) => { 
         const remisionId = e.currentTarget.dataset.remisionId; 
-        if (confirm(`¿Estás seguro de que quieres ANULAR esta remisión?`)) handleAnularRemision(remisionId); 
+        const remObj = allRemisiones.find(r => r.id === remisionId);
+        const remNum = remObj ? `N° ${remObj.numeroRemision}` : '';
+        if (confirm(`¿Estás seguro de que quieres ANULAR la remisión ${remNum}?`)) handleAnularRemision(remisionId); 
     }));
     remisionesListEl.querySelectorAll('.status-update-btn').forEach(button => button.addEventListener('click', (e) => { 
         handleStatusUpdate(e.currentTarget.dataset.remisionId, e.currentTarget.dataset.currentStatus); 
@@ -1089,19 +1092,51 @@ async function handleStatusUpdate(remisionId, currentStatus) {
 }
 
 async function handleAnularRemision(remisionId) { 
+    const remisionActual = allRemisiones.find(r => r.id === remisionId);
+    if (!remisionActual) return;
+
+    if (remisionActual.estado === 'Anulada') {
+        showModalMessage("Esta remisión ya se encuentra anulada.");
+        return;
+    }
+    if (remisionActual.estado === 'Entregado') {
+        showModalMessage("No se puede anular una remisión que ya fue entregada.");
+        return;
+    }
+
+    const paymentsArray = Array.isArray(remisionActual.payments) ? remisionActual.payments : [];
+    const hasActivePayments = paymentsArray.some(p => p.status === 'confirmado' || p.status === 'por confirmar');
+    if (hasActivePayments) {
+        showModalMessage("No se puede anular una remisión con pagos confirmados o pendientes por confirmar.");
+        return;
+    }
+
     showModalMessage("Anulando remisión...", true); 
     try { 
-        await updateDoc(doc(db, "remisiones", remisionId), { estado: "Anulada", _lastUpdated: serverTimestamp() }); 
+        const updateData = { 
+            estado: "Anulada", 
+            anuladaPor: currentUser ? currentUser.uid : null,
+            anuladaAt: serverTimestamp(),
+            _lastUpdated: serverTimestamp() 
+        };
+        await updateDoc(doc(db, "remisiones", remisionId), updateData); 
         
-        const remisionActual = allRemisiones.find(r => r.id === remisionId);
-        if (remisionActual) {
-            updateLocalCache({ ...remisionActual, estado: "Anulada", _lastUpdated: Date.now() });
-        }
+        updateLocalCache({ 
+            ...remisionActual, 
+            estado: "Anulada", 
+            anuladaPor: currentUser ? currentUser.uid : null,
+            anuladaAt: Date.now(),
+            _lastUpdated: Date.now() 
+        });
 
         hideModal(); 
         showModalMessage("¡Remisión anulada con éxito!", false, 2000); 
     } 
-    catch (error) { console.error("Error al anular la remisión:", error); hideModal(); showModalMessage("Error al anular la remisión."); } 
+    catch (error) { 
+        console.error("Error al anular la remisión:", error); 
+        hideModal(); 
+        showModalMessage("Error al anular la remisión."); 
+    } 
 }
 
 export function showPaymentModal(remision) {
@@ -1158,10 +1193,22 @@ export function showPaymentModal(remision) {
                     </tr>`;
         }).join('');
 
+    const esAnulada = remision.estado === 'Anulada';
+    const esEntregada = remision.estado === 'Entregado';
+    const canAnularModal = !esAnulada && !esEntregada && currentUserData?.role === 'admin' && totalConfirmado === 0 && totalPorConfirmar === 0;
+    const anularBtnModalHtml = canAnularModal ? `
+        <button id="modal-anular-remision-btn" data-remision-id="${remision.id}" class="bg-rose-50 text-rose-700 border border-rose-250 px-3 py-1.5 rounded-lg text-xs font-extrabold hover:bg-rose-100 hover:text-rose-800 transition flex items-center gap-1 shadow-sm">
+            🚫 Anular Remisión
+        </button>
+    ` : '';
+
     modalContentWrapper.innerHTML = `
         <div class="bg-white rounded-lg p-6 shadow-xl max-w-4xl w-full mx-auto text-left">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Gestionar Pagos (N° ${remision.numeroRemision})</h2>
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-semibold">Gestionar Pagos (N° ${remision.numeroRemision})</h2>
+                    ${anularBtnModalHtml}
+                </div>
                 <button id="close-secondary-payment-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center">
@@ -1204,6 +1251,18 @@ export function showPaymentModal(remision) {
           modal.classList.add('hidden');
           modalContentWrapper.innerHTML = '';
       });
+
+      const btnModalAnular = modalContentWrapper.querySelector('#modal-anular-remision-btn');
+      if (btnModalAnular) {
+          btnModalAnular.addEventListener('click', () => {
+              if (confirm(`¿Estás seguro de que quieres ANULAR la remisión N° ${remision.numeroRemision}?`)) {
+                  activePaymentModalRemisionId = null;
+                  modal.classList.add('hidden');
+                  modalContentWrapper.innerHTML = '';
+                  handleAnularRemision(remision.id);
+              }
+          });
+      }
 
      // Lógica de Confirmar o Rechazar
      modalContentWrapper.querySelectorAll('.action-payment-btn').forEach(btn => {
