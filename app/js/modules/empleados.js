@@ -5638,7 +5638,7 @@ async function showPayrollConfigModal() {
     try {
         const configDoc = await getDoc(doc(_db, "config", "payroll"));
         const config = configDoc.exists() ? configDoc.data() : {
-            salarioMinimo: 1300000,
+            salarioMinimo: 1750905,
             auxilioTransporte: 249095,
             porcentajeSalud: 4,
             porcentajePension: 4,

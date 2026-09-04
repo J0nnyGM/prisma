@@ -15,6 +15,7 @@ import {
 // --- ESTADO LOCAL DEL MÓDULO ---
 let activeNominaSubTab = 'nomina_quincenal';
 let selectedNominaMonthYear = '';
+let selectedNominaQuincenaNum = null;
 let currentDrillDownUserId = null;
 let currentDrillDownSubTab = 'nomina';
 let unsubscribeNominaGlobal = null;
@@ -164,11 +165,13 @@ function getNextPeriodSuggestion(lastConcept) {
         }
     }
     if (monthIndex === -1) return null;
-    const isFirst = lastConcept.toLowerCase().includes('primera');
-    const isSecond = lastConcept.toLowerCase().includes('segunda');
+    const isFirst = lastConcept.toLowerCase().includes('primera') || lastConcept.toLowerCase().includes('1ª') || lastConcept.toLowerCase().includes('1ra');
+    const isSecond = lastConcept.toLowerCase().includes('segunda') || lastConcept.toLowerCase().includes('2ª') || lastConcept.toLowerCase().includes('2da');
+    const isMensual = lastConcept.toLowerCase().includes('mensual') || lastConcept.toLowerCase().includes('completo');
+
     if (isFirst) {
         return `Segunda Quincena de ${months[monthIndex]} ${year}`;
-    } else if (isSecond) {
+    } else if (isSecond || isMensual) {
         let nextMonthIndex = monthIndex + 1;
         if (nextMonthIndex > 11) {
             nextMonthIndex = 0;
@@ -177,6 +180,153 @@ function getNextPeriodSuggestion(lastConcept) {
         return `Primera Quincena de ${months[nextMonthIndex]} ${year}`;
     }
     return null;
+}
+
+export async function resolveEmployeeContinuity(userId, user) {
+    try {
+        const snap = await getDocs(
+            query(
+                collection(db, "users", userId, "paymentHistory"),
+                orderBy("createdAt", "desc"),
+                limit(15)
+            )
+        );
+        const regularPayments = [];
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            const concepto = (data.concepto || '').trim();
+            const lower = concepto.toLowerCase();
+            const isQuincena = lower.includes('primera') || 
+                               lower.includes('segunda') ||
+                               lower.includes('mensual');
+            const isExcluded = lower.includes('prima') ||
+                               lower.includes('cesant') ||
+                               lower.includes('vacacion') ||
+                               lower.includes('liquidac');
+            if (isQuincena && !isExcluded) {
+                const periodRange = getQuincenaPeriodFromConcept(concepto);
+                regularPayments.push({
+                    concepto,
+                    paymentDate: data.paymentDate,
+                    createdAt: data.createdAt,
+                    endDate: periodRange ? periodRange.endDate : new Date(data.paymentDate || 0)
+                });
+            }
+        });
+
+        if (regularPayments.length > 0) {
+            regularPayments.sort((a, b) => {
+                const diff = b.endDate.getTime() - a.endDate.getTime();
+                if (diff !== 0) return diff;
+                const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                return timeB - timeA;
+            });
+            const latest = regularPayments[0];
+            const next = getNextPeriodSuggestion(latest.concepto);
+            return {
+                lastPaidConcept: latest.concepto,
+                nextSuggestedConcept: next,
+                hasHistory: true,
+                reason: `Última quincena registrada: ${latest.concepto}`
+            };
+        }
+    } catch(e) {
+        console.warn("Error resolviendo continuidad de nómina:", e);
+    }
+
+    // Si no tiene pagos previos, sugerir según fecha de ingreso
+    const fechaIngresoStr = user?.contratacion?.fechaIngreso || user?.fechaIngreso;
+    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    if (fechaIngresoStr) {
+        const startDate = new Date(fechaIngresoStr + 'T00:00:00');
+        const y = startDate.getFullYear();
+        const m = months[startDate.getMonth()];
+        const d = startDate.getDate();
+        const q = d <= 15 ? `Primera Quincena de ${m} ${y}` : `Segunda Quincena de ${m} ${y}`;
+        return {
+            lastPaidConcept: null,
+            nextSuggestedConcept: q,
+            hasHistory: false,
+            reason: `Sin pagos previos. Fecha de ingreso: ${fechaIngresoStr}`
+        };
+    }
+
+    // Si no tiene fecha de ingreso, sugerir según fecha actual
+    const today = new Date();
+    const curY = today.getFullYear();
+    const curM = today.getMonth();
+    let fallbackQ = '';
+    if (today.getDate() <= 10) {
+        const prev = new Date(curY, curM - 1, 1);
+        fallbackQ = `Segunda Quincena de ${months[prev.getMonth()]} ${prev.getFullYear()}`;
+    } else if (today.getDate() <= 25) {
+        fallbackQ = `Primera Quincena de ${months[curM]} ${curY}`;
+    } else {
+        fallbackQ = `Segunda Quincena de ${months[curM]} ${curY}`;
+    }
+    return {
+        lastPaidConcept: null,
+        nextSuggestedConcept: fallbackQ,
+        hasHistory: false,
+        reason: 'Sugerido por fecha actual'
+    };
+}
+
+export function generatePayrollPeriodOptions(suggestedConcept) {
+    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const today = new Date();
+    
+    let minYear = today.getFullYear();
+    let minMonth = today.getMonth() - 2;
+    
+    if (suggestedConcept) {
+        const r = getQuincenaPeriodFromConcept(suggestedConcept);
+        if (r) {
+            const sugYear = r.startDate.getFullYear();
+            const sugMonth = r.startDate.getMonth();
+            if (sugYear < minYear || (sugYear === minYear && sugMonth < minMonth)) {
+                minYear = sugYear;
+                minMonth = sugMonth;
+            }
+        }
+    }
+    
+    const curr = new Date(minYear, minMonth, 1);
+    const endBase = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const options = [];
+    const seenValues = new Set();
+    
+    while (curr <= endBase) {
+        const y = curr.getFullYear();
+        const m = curr.getMonth();
+        const mName = months[m];
+        
+        const q1 = `Primera Quincena de ${mName} ${y}`;
+        const q2 = `Segunda Quincena de ${mName} ${y}`;
+        const qM = `Nómina Mensual ${mName} ${y}`;
+        
+        options.push({ value: q1, label: `1ª Quincena - ${mName} ${y}` });
+        options.push({ value: q2, label: `2ª Quincena - ${mName} ${y}` });
+        options.push({ value: qM, label: `Mes Completo - ${mName} ${y}` });
+        
+        seenValues.add(q1);
+        seenValues.add(q2);
+        seenValues.add(qM);
+        
+        curr.setMonth(curr.getMonth() + 1);
+    }
+    
+    let prependHtml = '';
+    if (suggestedConcept && !seenValues.has(suggestedConcept)) {
+        prependHtml = `<option value="${suggestedConcept}" selected>★ ${suggestedConcept} (Continuidad Sugerida)</option>`;
+    }
+    
+    return prependHtml + options.map(opt => {
+        const isSuggested = opt.value === suggestedConcept;
+        const displayLabel = isSuggested ? `★ ${opt.label} (Continuidad Sugerida)` : opt.label;
+        return `<option value="${opt.value}" ${isSuggested ? 'selected' : ''}>${displayLabel}</option>`;
+    }).join('');
 }
 
 function calculateBaseForBenefits(user) {
@@ -222,8 +372,18 @@ function calculateIndemnificationValue(type, startDate, endDate, contractEndDate
     return 0;
 }
 
-let payrollConfig = {
-    salarioMinimo: 1300000,
+// Caché local para evitar condiciones de carrera en cargas frías
+const PAYROLL_CONFIG_CACHE_KEY = 'payroll_config_cache';
+let cachedPayrollConfig = null;
+try {
+    const rawConfig = localStorage.getItem(PAYROLL_CONFIG_CACHE_KEY);
+    if (rawConfig) cachedPayrollConfig = JSON.parse(rawConfig);
+} catch (e) {
+    console.warn("Error leyendo payroll_config_cache:", e);
+}
+
+let payrollConfig = cachedPayrollConfig || {
+    salarioMinimo: 1750905,
     auxilioTransporte: 249095,
     porcentajeSalud: 4,
     porcentajePension: 4,
@@ -238,12 +398,16 @@ export function getPayrollConfig() {
                 if (snapshot.exists()) {
                     const data = snapshot.data();
                     payrollConfig = {
-                        salarioMinimo: parseFloat(data.salarioMinimo) || 1300000,
+                        salarioMinimo: parseFloat(data.salarioMinimo) || 1750905,
                         auxilioTransporte: parseFloat(data.auxilioTransporte) || 249095,
                         porcentajeSalud: parseFloat(data.porcentajeSalud) || 4,
                         porcentajePension: parseFloat(data.porcentajePension) || 4,
                         multiplicadorHoraExtra: parseFloat(data.multiplicadorHoraExtra) || 1.25
                     };
+                    try {
+                        localStorage.setItem(PAYROLL_CONFIG_CACHE_KEY, JSON.stringify(payrollConfig));
+                    } catch (e) {}
+                    window.dispatchEvent(new CustomEvent('payrollConfigChanged', { detail: payrollConfig }));
                 }
             }, (error) => {
                 // Silenciamos advertencias de autenticación o permisos temporales
@@ -269,15 +433,13 @@ function getUsersMap() {
     return newMap;
 }
 
-function getCurrentActiveQuincena(selectedMonthYear) {
+function getCurrentActiveQuincena(selectedMonthYear, qNum = selectedNominaQuincenaNum) {
     if (!selectedMonthYear) return '';
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const [year, month] = selectedMonthYear.split('-').map(Number);
     const foundMonth = months[month - 1];
-    const today = new Date();
-    const day = today.getDate();
-    const q = day > 15 ? 'Segunda Quincena de' : 'Primera Quincena de';
-    return `${q} ${foundMonth} ${year}`;
+    const quincena = (qNum === 2) ? 'Segunda Quincena de' : 'Primera Quincena de';
+    return `${quincena} ${foundMonth} ${year}`;
 }
 
 function getBankCode(bankName) {
@@ -339,9 +501,23 @@ export function loadNomina() {
     console.log("Suscripción de datos en tiempo real de nómina y préstamos.");
     if (!selectedNominaMonthYear) {
         const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        selectedNominaMonthYear = `${year}-${month}`;
+        if (today.getDate() <= 10) {
+            // Del 1 al 10 se liquida/paga usualmente la 2da quincena del mes anterior
+            const prev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            selectedNominaMonthYear = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+            selectedNominaQuincenaNum = 2;
+        } else if (today.getDate() <= 25) {
+            // Del 11 al 25 se trabaja la 1ra quincena del mes en curso
+            selectedNominaMonthYear = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            selectedNominaQuincenaNum = 1;
+        } else {
+            // Del 26 en adelante se trabaja la 2da quincena del mes en curso
+            selectedNominaMonthYear = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            selectedNominaQuincenaNum = 2;
+        }
+    }
+    if (!selectedNominaQuincenaNum) {
+        selectedNominaQuincenaNum = new Date().getDate() > 15 ? 2 : 1;
     }
     renderNominaSkeleton();
     switchNominaSubTab(activeNominaSubTab);
@@ -410,10 +586,20 @@ function renderNominaSkeleton() {
                     </h1>
                     <p class="text-xs font-semibold text-slate-400 mt-1">Cálculo contable, prestaciones sociales colombianas, liquidación de contratos y deudas de RRHH.</p>
                 </div>
-                <div class="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
-                    <label for="nomina-month-selector" class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Mes Contable</label>
-                    <input type="month" id="nomina-month-selector" value="${selectedNominaMonthYear}" 
-                        class="border-0 p-0 text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer outline-none w-32">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <div class="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                        <label for="nomina-month-selector" class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Mes Contable</label>
+                        <input type="month" id="nomina-month-selector" value="${selectedNominaMonthYear}" 
+                            class="border-0 p-0 text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer outline-none w-32">
+                    </div>
+                    <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm shrink-0" id="nomina-quincena-selector-group">
+                        <button type="button" data-quincena="1" class="btn-toggle-quincena px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 1 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                            1ª Qna (1-15)
+                        </button>
+                        <button type="button" data-quincena="2" class="btn-toggle-quincena px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 2 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                            2ª Qna (16-fin)
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -444,6 +630,24 @@ function renderNominaSkeleton() {
         } else {
             renderActiveSubTab();
         }
+    });
+
+    viewContainer.querySelectorAll('.btn-toggle-quincena').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const qVal = parseInt(btn.dataset.quincena);
+            if (selectedNominaQuincenaNum !== qVal) {
+                selectedNominaQuincenaNum = qVal;
+                viewContainer.querySelectorAll('.btn-toggle-quincena').forEach(b => {
+                    const isActive = parseInt(b.dataset.quincena) === selectedNominaQuincenaNum;
+                    b.className = `btn-toggle-quincena px-3 py-1.5 rounded-lg text-xs font-black transition-all ${isActive ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`;
+                });
+                if (currentDrillDownUserId) {
+                    loadIndividualDashboard(currentDrillDownUserId, currentDrillDownSubTab);
+                } else {
+                    renderActiveSubTab();
+                }
+            }
+        });
     });
 
     const subTabNav = document.getElementById('nomina-subtabs-nav');
@@ -652,9 +856,11 @@ async function loadNominaQuincenalTab(container) {
         );
 
         const statPromises = activeUsers.map(op => getDoc(doc(db, "employeeStats", op.id, "monthlyStats", currentStatDocId)));
+        const continuityPromises = activeUsers.map(op => resolveEmployeeContinuity(op.id, op));
 
-        const [statSnapshots, paymentsSnapshot] = await Promise.all([
+        const [statSnapshots, continuityResults, paymentsSnapshot] = await Promise.all([
             Promise.all(statPromises),
+            Promise.all(continuityPromises),
             getDocs(paymentsQuery).catch(err => {
                 console.error("Error consultando pagos duplicados:", err);
                 return { empty: true };
@@ -681,6 +887,8 @@ async function loadNominaQuincenalTab(container) {
             const deductionPotential = Math.min(loanInfo.estimatedDeduction, loanInfo.totalBalance);
             const dedSobreMinimo = operario.deduccionSobreMinimo === true || operario.deduccionSobreMinimo === 'true';
 
+            const continuity = (continuityResults && continuityResults[index]) ? continuityResults[index] : null;
+
             return {
                 id: operario.id,
                 fullName: `${operario.firstName} ${operario.lastName}`,
@@ -701,7 +909,8 @@ async function loadNominaQuincenalTab(container) {
                 deduccionSobreMinimo: dedSobreMinimo,
                 incapacitado: operario.incapacitado || false,
                 incapacidadStart: operario.incapacidadStart || null,
-                incapacidadDays: operario.incapacidadDays || 0
+                incapacidadDays: operario.incapacidadDays || 0,
+                continuityInfo: continuity
             };
         });
 
@@ -851,6 +1060,11 @@ async function loadNominaQuincenalTab(container) {
                 const isIncapacitatedInPeriod = range ? getIncapacitatedDaysInPeriod(data, range.startDate, range.endDate) > 0 : data.incapacitado;
                 const incapacitadoBadge = isIncapacitatedInPeriod ? ' <span class="text-rose-600 font-extrabold bg-rose-50 px-1 py-0.5 rounded border border-rose-100 text-[8px] ml-1 shadow-xs"><i class="fa-solid fa-house-medical mr-1"></i>INCAPACITADO</span>' : '';
 
+                let continuityBadge = '';
+                if (!data.isAlreadyPaid && data.continuityInfo?.nextSuggestedConcept && data.continuityInfo.nextSuggestedConcept !== activeQuincena) {
+                    continuityBadge = ` <span class="inline-flex items-center gap-1 text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded shadow-xs" title="Siguiente quincena cronológica pendiente: ${data.continuityInfo.nextSuggestedConcept}"><i class="fa-solid fa-clock-rotate-left text-amber-600"></i> Sugerida: ${data.continuityInfo.nextSuggestedConcept}</span>`;
+                }
+
                 row.innerHTML = `
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-3">
@@ -859,7 +1073,11 @@ async function loadNominaQuincenalTab(container) {
                             </div>
                             <div class="min-w-0">
                                 <p class="font-bold text-slate-800 text-sm leading-tight truncate">${data.fullName}</p>
-                                <p class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mt-0.5 leading-none">${data.role}${incapacitadoBadge}</p>
+                                <div class="flex flex-wrap items-center gap-1 mt-0.5">
+                                    <span class="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none">${data.role}</span>
+                                    ${incapacitadoBadge}
+                                    ${continuityBadge}
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -890,6 +1108,7 @@ async function loadNominaQuincenalTab(container) {
 
         toggleLoans.addEventListener('change', updateView);
         searchInput.addEventListener('input', updateView);
+        window.addEventListener('payrollConfigChanged', updateView);
 
         exportBtn.addEventListener('click', async () => {
             const applyLoans = toggleLoans.checked;
@@ -2453,7 +2672,7 @@ async function loadGlobalHistoryTab(container) {
             const usersMap = getUsersMap();
 
             snapshot.forEach(docSnap => {
-                const payment = docSnap.data();
+                const payment = { id: docSnap.id, ...docSnap.data() };
                 const userId = payment.userId || docSnap.ref.parent.parent.id;
                 const user = usersMap.get(userId);
                 const userName = user ? `${user.firstName} ${user.lastName}` : 'Operario Desconocido';
@@ -3034,6 +3253,387 @@ async function openPaymentVoucherModal(payment, user) {
     
     if(btnX) { const n = btnX.cloneNode(true); btnX.parentNode.replaceChild(n, btnX); n.onclick = closeModal; }
     if(btnF) { const n = btnF.cloneNode(true); btnF.parentNode.replaceChild(n, btnF); n.onclick = closeModal; }
+
+    let editBtn = document.getElementById('voucher-edit-btn');
+    if (!editBtn) {
+        const footer = modal.querySelector('.bg-slate-50.p-4') || modal.querySelector('.bg-slate-50');
+        if (footer) {
+            editBtn = document.createElement('button');
+            editBtn.id = 'voucher-edit-btn';
+            editBtn.className = "bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-xl flex items-center transition-all text-xs shadow-sm mr-auto";
+            editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i> Corregir Comprobante';
+            footer.insertBefore(editBtn, footer.firstChild);
+        }
+    }
+    if (editBtn) {
+        editBtn.onclick = () => {
+            closeModal();
+            showEditPaymentVoucherModal(payment, user);
+        };
+    }
+}
+
+// ==========================================
+// MODAL PARA CORREGIR COMPROBANTE DE NÓMINA
+// ==========================================
+export async function showEditPaymentVoucherModal(payment, user) {
+    if (!payment || !user) return;
+
+    let modal = document.getElementById('edit-payment-voucher-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'edit-payment-voucher-modal';
+        modal.className = "fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 transition-all duration-300";
+        document.body.appendChild(modal);
+    }
+
+    const userId = user.id || payment.userId;
+    const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.nombre || 'Colaborador';
+    const userCedula = user.idNumber || user.cedula || '---';
+
+    const paymentDateStr = payment.paymentDate || 
+        (payment.createdAt?.toDate ? payment.createdAt.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+
+    const availableMethods = Array.from(new Set([...METODOS_DE_PAGO, payment.fuentePago].filter(Boolean)));
+    const metodosOptions = availableMethods.map(m => 
+        `<option value="${m}" ${payment.fuentePago === m ? 'selected' : ''}>${m}</option>`
+    ).join('');
+
+    const diasPagados = payment.diasPagados || payment.desglose?.diasPagados || 15;
+    const diasAux = payment.diasAuxTransporte ?? payment.desglose?.diasAuxTransporte ?? (payment.diasPagados || 15);
+
+    const salarioProrrateado = payment.desglose?.salarioProrrateado || 0;
+    const auxTransporte = payment.desglose?.auxilioTransporteProrrateado || 0;
+    const horasExtra = payment.desglose?.horasExtra || 0;
+    const otros = payment.desglose?.otros || 0;
+    const bonificacion = payment.desglose?.bonificacionM2 || 0;
+    const deduccionSalud = Math.abs(payment.desglose?.deduccionSalud || 0);
+    const deduccionPension = Math.abs(payment.desglose?.deduccionPension || 0);
+    const abonoPrestamos = payment.desglose?.abonoPrestamos || 0;
+    const totalPagar = payment.monto || 0;
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[95vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+            <!-- Cabecera -->
+            <div class="bg-gradient-to-r from-amber-500 to-orange-600 p-4 text-white flex justify-between items-center shadow-sm shrink-0">
+                <div>
+                    <h3 class="font-black text-base flex items-center gap-2">
+                        <i class="fa-solid fa-pen-to-square"></i> Corregir Comprobante de Nómina
+                    </h3>
+                    <p class="text-[11px] text-amber-100 font-medium mt-0.5">
+                        ${userName} • C.C. ${userCedula}
+                    </p>
+                </div>
+                <button type="button" id="close-edit-voucher-modal" class="text-white/80 hover:text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Formulario -->
+            <form id="form-edit-payment-voucher" class="p-5 overflow-y-auto flex-1 space-y-4 custom-scrollbar text-left">
+                <!-- Concepto / Periodo -->
+                <div>
+                    <label class="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Concepto / Periodo</label>
+                    <input type="text" id="ev-concepto" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white transition-colors" value="${payment.concepto || ''}" required>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Fecha de Pago</label>
+                        <input type="date" id="ev-fecha" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white transition-colors" value="${paymentDateStr}" required>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Fuente de Pago</label>
+                        <select id="ev-fuente" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white transition-colors">
+                            ${metodosOptions}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Días Salario</label>
+                        <input type="number" id="ev-dias-pagados" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-center text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white transition-colors" value="${diasPagados}" min="1" max="30">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Días Aux. Transporte</label>
+                        <input type="number" id="ev-dias-aux" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold text-center text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white transition-colors" value="${diasAux}" min="0" max="30">
+                    </div>
+                </div>
+
+                <!-- Desglose Financiero -->
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                    <div class="flex justify-between items-center pb-2 border-b border-slate-200">
+                        <span class="text-[10px] font-black text-slate-600 uppercase tracking-wider">Desglose de Valores</span>
+                        <button type="button" id="ev-btn-recalcular-ley" class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1.5 shadow-xs">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Recalcular con Ley 2026
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2.5 text-xs">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Básico Prorrateado</label>
+                            <input type="text" id="ev-salario" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(salarioProrrateado)}">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Auxilio Transporte</label>
+                            <input type="text" id="ev-aux" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(auxTransporte)}">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Horas Extra / Otros</label>
+                            <input type="text" id="ev-extras" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(horasExtra + otros + bonificacion)}">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-amber-700 mb-0.5">Abono Préstamos</label>
+                            <input type="text" id="ev-prestamos" class="ev-currency-input w-full p-2 border border-amber-200 text-amber-800 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(abonoPrestamos)}">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-rose-600 mb-0.5">Salud (-4%)</label>
+                            <input type="text" id="ev-salud" class="ev-currency-input w-full p-2 border border-rose-200 text-rose-600 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(deduccionSalud)}">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-rose-600 mb-0.5">Pensión (-4%)</label>
+                            <input type="text" id="ev-pension" class="ev-currency-input w-full p-2 border border-rose-200 text-rose-600 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(deduccionPension)}">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Neto Preview -->
+                <div class="bg-slate-900 text-white p-4 rounded-xl flex justify-between items-center shadow-sm">
+                    <div>
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block leading-none">Neto del Comprobante</span>
+                        <span class="text-[11px] text-slate-300">Total a pagar corregido</span>
+                    </div>
+                    <div class="text-right">
+                        <span id="ev-neto-display" class="text-2xl font-black font-mono text-emerald-400">${currencyFormatter.format(totalPagar)}</span>
+                    </div>
+                </div>
+
+                <div class="pt-1">
+                    <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-600">
+                        <input type="checkbox" id="ev-sync-gastos" checked class="w-4 h-4 text-amber-600 rounded focus:ring-amber-500">
+                        <span>Sincronizar automáticamente con el egreso contable en Gastos</span>
+                    </label>
+                </div>
+
+                <!-- Botones Footer -->
+                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                    <button type="button" id="ev-cancel-btn" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="ev-submit-btn" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i> Guardar Corrección
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    const closeModal = () => {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    };
+
+    document.getElementById('close-edit-voucher-modal').onclick = closeModal;
+    document.getElementById('ev-cancel-btn').onclick = closeModal;
+
+    const parseMoneyInput = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return 0;
+        return unformatCurrency(el.value) || 0;
+    };
+
+    const calculateNeto = () => {
+        const salario = parseMoneyInput('ev-salario');
+        const aux = parseMoneyInput('ev-aux');
+        const extras = parseMoneyInput('ev-extras');
+        const salud = parseMoneyInput('ev-salud');
+        const pension = parseMoneyInput('ev-pension');
+        const prestamos = parseMoneyInput('ev-prestamos');
+
+        const neto = Math.max(0, (salario + aux + extras) - (salud + pension + prestamos));
+        document.getElementById('ev-neto-display').textContent = currencyFormatter.format(neto);
+        return neto;
+    };
+
+    modal.querySelectorAll('.ev-currency-input').forEach(input => {
+        setupCurrencyInput(input);
+        input.addEventListener('input', calculateNeto);
+    });
+
+    document.getElementById('ev-btn-recalcular-ley').onclick = () => {
+        const config = getPayrollConfig();
+        const dias = parseInt(document.getElementById('ev-dias-pagados').value) || 15;
+        const diasAuxVal = parseInt(document.getElementById('ev-dias-aux').value) || dias;
+        
+        const basicoMensual = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || (salarioProrrateado * 30 / dias);
+        const salarioPro = (basicoMensual / 30) * dias;
+        const auxMensual = basicoMensual <= (config.salarioMinimo * 2) ? config.auxilioTransporte : 0;
+        const auxPro = (auxMensual / 30) * diasAuxVal;
+        
+        let baseDed = 0;
+        const dedSobreMinimo = user.deduccionSobreMinimo === true || user.deduccionSobreMinimo === 'true' || payment.desglose?.deduccionSobreMinimo;
+        if (dedSobreMinimo) {
+            baseDed = (config.salarioMinimo / 30) * dias;
+        } else {
+            baseDed = salarioPro;
+        }
+        if (baseDed < (config.salarioMinimo / 30) * dias) {
+            baseDed = (config.salarioMinimo / 30) * dias;
+        }
+        
+        const saludDed = Math.round(baseDed * (config.porcentajeSalud / 100));
+        const pensionDed = Math.round(baseDed * (config.porcentajePension / 100));
+        
+        document.getElementById('ev-salario').value = currencyFormatter.format(salarioPro);
+        document.getElementById('ev-aux').value = currencyFormatter.format(auxPro);
+        document.getElementById('ev-salud').value = currencyFormatter.format(saludDed);
+        document.getElementById('ev-pension').value = currencyFormatter.format(pensionDed);
+        
+        calculateNeto();
+        
+        if (window.showToast) {
+            window.showToast("Deducciones recalculadas según parámetros legales 2026", "success");
+        }
+    };
+
+    const form = document.getElementById('form-edit-payment-voucher');
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('ev-submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<div class="loader-small-white mx-auto"></div>';
+
+        try {
+            const conceptoNuevo = document.getElementById('ev-concepto').value.trim();
+            const fechaNueva = document.getElementById('ev-fecha').value;
+            const fuenteNueva = document.getElementById('ev-fuente').value;
+            const diasPagarNuevos = parseInt(document.getElementById('ev-dias-pagados').value) || 15;
+            const diasAuxNuevos = parseInt(document.getElementById('ev-dias-aux').value) || 0;
+            
+            const salarioNuevo = parseMoneyInput('ev-salario');
+            const auxNuevo = parseMoneyInput('ev-aux');
+            const extrasNuevo = parseMoneyInput('ev-extras');
+            const saludNuevo = parseMoneyInput('ev-salud');
+            const pensionNuevo = parseMoneyInput('ev-pension');
+            const prestamosNuevo = parseMoneyInput('ev-prestamos');
+            const netoNuevo = calculateNeto();
+            
+            const syncGastos = document.getElementById('ev-sync-gastos').checked;
+
+            const paymentRef = doc(db, "users", userId, "paymentHistory", payment.id);
+            const updatedDesglose = {
+                ...(payment.desglose || {}),
+                salarioProrrateado: salarioNuevo,
+                auxilioTransporteProrrateado: auxNuevo,
+                diasAuxTransporte: diasAuxNuevos,
+                horasExtra: extrasNuevo,
+                deduccionSalud: -saludNuevo,
+                deduccionPension: -pensionNuevo,
+                abonoPrestamos: prestamosNuevo
+            };
+
+            await updateDoc(paymentRef, {
+                concepto: conceptoNuevo,
+                paymentDate: fechaNueva,
+                fuentePago: fuenteNueva,
+                diasPagados: diasPagarNuevos,
+                diasAuxTransporte: diasAuxNuevos,
+                monto: netoNuevo,
+                desglose: updatedDesglose,
+                _lastCorrectedAt: serverTimestamp(),
+                _correctedBy: currentUser?.uid || 'admin'
+            });
+
+            // Actualizar user.pagos[] si existe
+            try {
+                const userRef = doc(db, "users", userId);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists() && Array.isArray(userSnap.data().pagos)) {
+                    const currentPagos = userSnap.data().pagos;
+                    const updatedPagos = currentPagos.map(p => {
+                        if (p.id === payment.id || p.paymentHistoryId === payment.id || (p.paymentDate === payment.paymentDate && p.concepto === payment.concepto)) {
+                            return {
+                                ...p,
+                                monto: netoNuevo,
+                                concepto: conceptoNuevo,
+                                paymentDate: fechaNueva,
+                                fuentePago: fuenteNueva
+                            };
+                        }
+                        return p;
+                    });
+                    await updateDoc(userRef, { pagos: updatedPagos });
+                }
+            } catch(e) {
+                console.warn("No se pudo actualizar array user.pagos:", e);
+            }
+
+            // Sincronizar en Gastos
+            if (syncGastos) {
+                try {
+                    const gastosQ = query(
+                        collection(db, "gastos"),
+                        where("proveedorId", "==", userId)
+                    );
+                    const gastosSnap = await getDocs(gastosQ);
+                    let matchedGastoDoc = null;
+
+                    gastosSnap.forEach(gDoc => {
+                        const gData = gDoc.data();
+                        if (gData.paymentHistoryId === payment.id) {
+                            matchedGastoDoc = gDoc;
+                        }
+                    });
+
+                    if (!matchedGastoDoc) {
+                        gastosSnap.forEach(gDoc => {
+                            const gData = gDoc.data();
+                            const fact = (gData.numeroFactura || '').toLowerCase();
+                            const oldConcept = (payment.concepto || '').toLowerCase();
+                            if (fact.includes(oldConcept) || (gData.fecha === payment.paymentDate && Math.abs(gData.valorTotal - payment.monto) < 100)) {
+                                matchedGastoDoc = gDoc;
+                            }
+                        });
+                    }
+
+                    if (matchedGastoDoc) {
+                        await updateDoc(matchedGastoDoc.ref, {
+                            valorTotal: netoNuevo,
+                            numeroFactura: `Nómina ${conceptoNuevo}`,
+                            fecha: fechaNueva,
+                            fuentePago: fuenteNueva,
+                            _lastUpdated: serverTimestamp()
+                        });
+                    }
+
+                    window.dispatchEvent(new CustomEvent('gastosChanged'));
+                } catch(ge) {
+                    console.warn("Error sincronizando gasto correspondiente:", ge);
+                }
+            }
+
+            closeModal();
+
+            if (window.showToast) {
+                window.showToast("Comprobante de nómina corregido exitosamente", "success");
+            } else {
+                showTemporaryMessage("Comprobante de nómina corregido exitosamente", "success");
+            }
+
+            loadIndividualDashboard(userId, currentDrillDownSubTab || 'nomina');
+
+        } catch (err) {
+            console.error("Error corrigiendo comprobante:", err);
+            alert("Error al corregir comprobante: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Corrección';
+        }
+    };
 }
 
 
@@ -3063,6 +3663,7 @@ async function renderStandardPayrollForm(container, user) {
                     <div class="relative">
                         <select id="payment-concepto" class="w-full border border-gray-300 rounded-lg p-3 text-sm font-medium bg-gray-50 focus:bg-white transition-colors cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500"></select>
                     </div>
+                    <div id="payment-continuity-banner"></div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Días Salario</label>
@@ -3164,65 +3765,29 @@ async function renderStandardPayrollForm(container, user) {
         }
     } catch(e) { console.warn("No stats yet"); }
 
-    // 3. Rellenar Select de Periodo (Opciones Inteligentes)
+    // 3. Rellenar Select de Periodo con Continuidad Inteligente
     const conceptoSelect = document.getElementById('payment-concepto');
-    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    const currentMonth = months[today.getMonth()];
-    const year = today.getFullYear();
+    const continuityBanner = document.getElementById('payment-continuity-banner');
     
-    // Consulta inteligente de historial para sugerir el siguiente periodo contable
-    let suggestedConcept = null;
-    try {
-        const qLast = query(
-            collection(db, "users", user.id, "paymentHistory"),
-            orderBy("createdAt", "desc"),
-            limit(1)
-        );
-        const lastSnap = await getDocs(qLast);
-        if (!lastSnap.empty) {
-            const lastPayment = lastSnap.docs[0].data();
-            suggestedConcept = getNextPeriodSuggestion(lastPayment.concepto);
-        }
-    } catch(e) {
-        console.warn("Error al sugerir periodo desde historial", e);
-    }
-    
-    let suggestedOptionHtml = '';
-    if (suggestedConcept) {
-        const defaultOptions = [
-            `Primera Quincena de ${currentMonth} ${year}`,
-            `Segunda Quincena de ${currentMonth} ${year}`,
-            `Nómina Mensual ${currentMonth} ${year}`
-        ];
-        
-        if (!defaultOptions.includes(suggestedConcept)) {
-            let shortLabel = suggestedConcept;
-            if (suggestedConcept.includes('Primera Quincena')) {
-                shortLabel = `1ª Quincena - ${suggestedConcept.replace('Primera Quincena de ', '')} (Sugerida)`;
-            } else if (suggestedConcept.includes('Segunda Quincena')) {
-                shortLabel = `2ª Quincena - ${suggestedConcept.replace('Segunda Quincena de ', '')} (Sugerida)`;
-            } else if (suggestedConcept.includes('Nómina Mensual')) {
-                shortLabel = `Mes Completo - ${suggestedConcept.replace('Nómina Mensual ', '')} (Sugerido)`;
-            }
-            suggestedOptionHtml = `<option value="${suggestedConcept}" selected>${shortLabel}</option>`;
-        }
-    }
-    
-    conceptoSelect.innerHTML = `
-        ${suggestedOptionHtml}
-        <option value="Primera Quincena de ${currentMonth} ${year}">1ª Quincena - ${currentMonth}</option>
-        <option value="Segunda Quincena de ${currentMonth} ${year}">2ª Quincena - ${currentMonth}</option>
-        <option value="Nómina Mensual ${currentMonth} ${year}">Mes Completo</option>
-    `;
+    // Consulta inteligente de continuidad para sugerir la quincena pendiente cronológica
+    const continuity = await resolveEmployeeContinuity(user.id, user);
+    const suggestedConcept = continuity.nextSuggestedConcept;
 
-    // Pre-selección inteligente
+    conceptoSelect.innerHTML = generatePayrollPeriodOptions(suggestedConcept);
     if (suggestedConcept) {
         conceptoSelect.value = suggestedConcept;
-    } else {
-        const dayOfMonth = today.getDate();
-        if (dayOfMonth > 15) {
-            conceptoSelect.value = `Segunda Quincena de ${currentMonth} ${year}`;
-        }
+    }
+
+    if (continuityBanner) {
+        continuityBanner.innerHTML = `
+            <div class="mt-2 text-[11px] bg-indigo-50/80 border border-indigo-150 rounded-lg p-2.5 flex items-center gap-2 text-indigo-950 font-medium shadow-xs">
+                <i class="fa-solid fa-link text-indigo-600 text-xs shrink-0"></i>
+                <div class="min-w-0 leading-tight">
+                    ${continuity.lastPaidConcept ? `<span>Última registrada: <strong class="text-slate-700">${continuity.lastPaidConcept}</strong> ➜ </span>` : ''}
+                    <span>Continuidad sugerida: <strong class="text-indigo-700 font-bold">${suggestedConcept || 'N/A'}</strong></span>
+                </div>
+            </div>
+        `;
     }
 
     // Configurar días iniciales según la opción pre-seleccionada
@@ -3733,7 +4298,7 @@ async function renderLiquidacionForm(container, user) {
     container.innerHTML = `<div class="py-12 text-center"><div class="loader mx-auto"></div><p class="text-sm text-gray-400 mt-2">Analizando cortes y periodos...</p></div>`;
 
     try {
-        const config = getPayrollConfig() || { salarioMinimo: 1300000 }; 
+        const config = getPayrollConfig() || { salarioMinimo: 1750905 }; 
         const currentYear = new Date().getFullYear();
         
         // 1. BASES
@@ -4149,7 +4714,7 @@ async function renderVacacionesForm(container, user) {
     container.innerHTML = `<div class="py-12 text-center"><div class="loader mx-auto"></div><p class="text-sm text-gray-400 mt-2">Calculando días disponibles...</p></div>`;
 
     try {
-        const config = getPayrollConfig() || { salarioMinimo: 1300000 };
+        const config = getPayrollConfig() || { salarioMinimo: 1750905 };
         
         // 1. BASE: Vacaciones siempre es sobre el básico (sin auxilio), salvo que sea salario mínimo.
         let vacationBase = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || 0;
@@ -4467,6 +5032,8 @@ async function saveSpecialPayment(userId, data, loanPayments = [], paymentMethod
             fuentePago: paymentMethod,
             registradoPor: currentUser.uid,
             timestamp: Date.now(),
+            isSalaryExpense: true,
+            paymentHistoryId: paymentHistoryRef.id,
             _lastUpdated: serverTimestamp()
         });
     }
@@ -4697,20 +5264,25 @@ function loadPaymentHistoryList(userId, tableBody, user) {
                     </div>
                     <p class="text-xs text-gray-700 font-medium truncate max-w-[200px]">${payment.concepto} ${isSpecial}</p>
                     
-                    <div class="flex justify-end gap-2 mt-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                         <button class="view-voucher-btn text-[10px] font-bold bg-white text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors shadow-sm flex items-center">
+                    <div class="flex justify-end gap-1.5 mt-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                         <button class="view-voucher-btn text-[10px] font-bold bg-white text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition-colors shadow-2xs flex items-center">
                             <i class="fa-regular fa-eye mr-1"></i> Ver
                          </button>
-                         <button class="delete-payment-btn text-[10px] font-bold bg-white text-rose-500 border border-rose-200 px-3 py-1.5 rounded-lg hover:bg-rose-50 transition-colors shadow-sm flex items-center">
-                            <i class="fa-solid fa-trash mr-1"></i>
+                         <button class="edit-voucher-btn text-[10px] font-bold bg-white text-amber-600 border border-amber-200 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 transition-colors shadow-2xs flex items-center" title="Corregir Comprobante">
+                            <i class="fa-solid fa-pen-to-square mr-1"></i> Corregir
+                         </button>
+                         <button class="delete-payment-btn text-[10px] font-bold bg-white text-rose-500 border border-rose-200 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 transition-colors shadow-2xs flex items-center" title="Eliminar Comprobante">
+                            <i class="fa-solid fa-trash"></i>
                          </button>
                     </div>
                 </td>`;
             
              const viewBtn = tr.querySelector('.view-voucher-btn');
+             const editBtn = tr.querySelector('.edit-voucher-btn');
              const delBtn = tr.querySelector('.delete-payment-btn');
 
              viewBtn.onclick = () => openPaymentVoucherModal(payment, user);
+             editBtn.onclick = () => showEditPaymentVoucherModal(payment, user);
              
              delBtn.onclick = () => {
                  _openConfirmModal("¿Eliminar este registro de pago de forma permanente?", async() => {
@@ -5051,6 +5623,8 @@ async function handleRegisterPayment(e, userId) {
             fuentePago: paymentMethod,
             registradoPor: currentUserId,
             timestamp: Date.now(),
+            isSalaryExpense: true,
+            paymentHistoryId: paymentHistoryRef.id,
             _lastUpdated: serverTimestamp()
         });
 

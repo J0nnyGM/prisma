@@ -14,6 +14,7 @@ export function setupFuncionesEvents() {
 
     const exportGastosBtn = document.getElementById('btn-func-export-gastos');
     const exportPagosBtn = document.getElementById('btn-func-export-pagos');
+    const forceUpdateBtn = document.getElementById('btn-func-force-update');
 
     if (exportGastosBtn) {
         exportGastosBtn.addEventListener('click', () => showExportModal('gastos'));
@@ -21,6 +22,13 @@ export function setupFuncionesEvents() {
 
     if (exportPagosBtn) {
         exportPagosBtn.addEventListener('click', () => showExportModal('pagos'));
+    }
+
+    if (forceUpdateBtn) {
+        forceUpdateBtn.addEventListener('click', async () => {
+            const { forceGlobalAppUpdate } = await import('../app.js?v=3.2');
+            forceGlobalAppUpdate();
+        });
     }
 }
 

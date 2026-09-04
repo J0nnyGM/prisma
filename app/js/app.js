@@ -1,25 +1,51 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
+export const APP_VERSION = '3.2';
+
+// --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
+export const APP_CACHE_KEYS = [
+    'gastos_cache', 'gastos_last_sync',
+    'remisiones_cache', 'remisiones_last_sync',
+    'items_cache', 'items_last_sync',
+    'clientes_cache', 'clientes_last_sync',
+    'proveedores_cache', 'proveedores_last_sync',
+    'colores_cache', 'colores_last_sync',
+    'payroll_config_cache', 'activeView'
+];
+
+(function checkAppVersion() {
+    try {
+        const storedVersion = localStorage.getItem('app_version');
+        if (storedVersion !== APP_VERSION) {
+            console.log(`[Version] Actualizando versión de app de ${storedVersion} a ${APP_VERSION}. Limpiando cachés...`);
+            APP_CACHE_KEYS.forEach(k => localStorage.removeItem(k));
+            localStorage.setItem('app_version', APP_VERSION);
+        }
+    } catch (e) {
+        console.warn("Error en chequeo de versión de app:", e);
+    }
+})();
+
 import { auth, db, storage, functions, analytics, httpsCallable } from './firebase-config.js';
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
 
-import { loadClientes, setupClientesEvents } from './modules/clientes.js';
-import { loadProveedores, setupProveedoresEvents } from './modules/proveedores.js';
-import { loadItems, setupItemsEvents } from './modules/items.js';
-import { loadColores, setupColoresEvents } from './modules/colores.js';
-import { loadGastos, setupGastosEvents } from './modules/gastos.js';
-import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js';
-import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js';
-import { loadNomina, setupNominaEvents, cleanupNominaListeners } from './modules/nomina.js';
-import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js';
-import { setupFacturacionEvents } from './modules/facturacion.js';
-import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js';
-import { setupFuncionesEvents } from './modules/funciones.js';
+import { loadClientes, setupClientesEvents } from './modules/clientes.js?v=3.2';
+import { loadProveedores, setupProveedoresEvents } from './modules/proveedores.js?v=3.2';
+import { loadItems, setupItemsEvents } from './modules/items.js?v=3.2';
+import { loadColores, setupColoresEvents } from './modules/colores.js?v=3.2';
+import { loadGastos, setupGastosEvents } from './modules/gastos.js?v=3.2';
+import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.2';
+import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js?v=3.2';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.2';
+import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.2';
+import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.2';
+import { setupFacturacionEvents } from './modules/facturacion.js?v=3.2';
+import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.2';
+import { setupFuncionesEvents } from './modules/funciones.js?v=3.2';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import { doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { doc, getDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { logEvent } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-analytics.js";
 import { ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
 
@@ -52,11 +78,155 @@ export const setAllColores = (data) => allColores = data;
 export const setAllPendingLoans = (data) => allPendingLoans = data;
 export const setAllItemAverageCosts = (data) => allItemAverageCosts = data;
 
+// --- SISTEMA DE ACTUALIZACIÓN FORZADA MULTI-DISPOSITIVO EN TIEMPO REAL ---
+let isGlobalUpdating = false;
+let versionUnsubscribe = null;
+
+export function triggerGlobalAppUpdate(newVersion, forceTimestamp) {
+    if (isGlobalUpdating) return;
+    isGlobalUpdating = true;
+
+    try {
+        if (forceTimestamp) {
+            localStorage.setItem('last_applied_force_reload', String(forceTimestamp));
+        }
+        if (newVersion) {
+            localStorage.setItem('app_version', String(newVersion));
+        }
+
+        APP_CACHE_KEYS.forEach(k => localStorage.removeItem(k));
+
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                names.forEach(name => caches.delete(name));
+            }).catch(() => {});
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(regs => {
+                regs.forEach(r => r.unregister());
+            }).catch(() => {});
+        }
+    } catch (e) {
+        console.warn("Error limpiando almacenamiento:", e);
+    }
+
+    const existingOverlay = document.getElementById('version-update-overlay');
+    if (!existingOverlay) {
+        const overlay = document.createElement('div');
+        overlay.id = 'version-update-overlay';
+        overlay.className = 'fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[99999] flex flex-col items-center justify-center p-6 text-white text-center animate-fade-in';
+        overlay.innerHTML = `
+            <div class="bg-white text-slate-800 p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-auto border border-slate-100 flex flex-col items-center">
+                <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl mb-4 animate-spin" style="animation-duration: 3s;">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </div>
+                <h3 class="text-xl font-black text-slate-900 mb-2">Actualizando Prisma</h3>
+                <p class="text-xs text-slate-500 font-medium mb-4 leading-relaxed">
+                    Se ha publicado la versión <b>${newVersion || APP_VERSION}</b> del sistema. Sincronizando datos y recargando automáticamente...
+                </p>
+                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div class="bg-indigo-600 h-full w-full animate-pulse"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    setTimeout(() => {
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.location.href = `${cleanUrl}?v=${newVersion || APP_VERSION}&_t=${Date.now()}`;
+    }, 1200);
+}
+
+export function initGlobalVersionWatcher() {
+    if (versionUnsubscribe) return;
+
+    try {
+        versionUnsubscribe = onSnapshot(doc(db, "config", "appVersion"), (docSnap) => {
+            if (!docSnap.exists()) return;
+            const data = docSnap.data();
+            const remoteVersion = data.currentVersion || data.version;
+            const forceTimestamp = Number(data.forceReloadTimestamp || 0);
+            const lastAppliedForce = Number(localStorage.getItem('last_applied_force_reload') || 0);
+
+            const isOutdated = remoteVersion && (remoteVersion !== APP_VERSION);
+            const isForced = forceTimestamp > lastAppliedForce;
+
+            if (isOutdated || isForced) {
+                console.log(`[VersionWatcher] Nueva versión remota detectada (${remoteVersion}). Local: ${APP_VERSION}. Recargando...`);
+                triggerGlobalAppUpdate(remoteVersion, forceTimestamp);
+            }
+        }, (err) => {
+            console.warn("[VersionWatcher] Error escuchando versión remota:", err);
+        });
+
+        const checkVersionOnWake = async () => {
+            try {
+                const snap = await getDoc(doc(db, "config", "appVersion"));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const remoteVersion = data.currentVersion || data.version;
+                    const forceTimestamp = Number(data.forceReloadTimestamp || 0);
+                    const lastAppliedForce = Number(localStorage.getItem('last_applied_force_reload') || 0);
+
+                    if ((remoteVersion && remoteVersion !== APP_VERSION) || (forceTimestamp > lastAppliedForce)) {
+                        triggerGlobalAppUpdate(remoteVersion, forceTimestamp);
+                    }
+                }
+            } catch(e) {
+                console.warn("[VersionWatcher] Error verificando en wake:", e);
+            }
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkVersionOnWake();
+        });
+        window.addEventListener('focus', checkVersionOnWake);
+
+    } catch (e) {
+        console.warn("[VersionWatcher] Error inicializando vigilante de versión:", e);
+    }
+}
+
+export async function forceGlobalAppUpdate() {
+    if (!currentUser || currentUserData?.role !== 'admin') {
+        alert("Solo los administradores pueden ejecutar esta acción.");
+        return;
+    }
+    if (!confirm("¿Deseas forzar la actualización de Prisma en TODOS los dispositivos conectados? Todos los celulares, tablets y ordenadores se sincronizarán y recargarán de inmediato.")) {
+        return;
+    }
+
+    try {
+        if (window.showToast) window.showToast("Enviando orden de actualización global...", "info");
+        const now = Date.now();
+        await setDoc(doc(db, "config", "appVersion"), {
+            currentVersion: APP_VERSION,
+            minVersion: APP_VERSION,
+            forceReloadTimestamp: now,
+            updatedBy: currentUser.uid,
+            updatedByName: currentUserData.nombre || 'Administrador',
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        triggerGlobalAppUpdate(APP_VERSION, now);
+    } catch (e) {
+        console.error("Error forzando actualización global:", e);
+        alert("Error al enviar orden de actualización: " + e.message);
+    }
+}
+
 // --- MANEJO DE AUTENTICACIÓN ---
 let activeListeners = [];
 let prefetchTimeouts = [];
 
 export function unsubscribeAllListeners() {
+    if (versionUnsubscribe) {
+        versionUnsubscribe();
+        versionUnsubscribe = null;
+    }
+
     prefetchTimeouts.forEach(t => clearTimeout(t));
     prefetchTimeouts = [];
     activePrefetches.clear();
@@ -165,8 +335,10 @@ function startApp() {
     if (isAppInitialized) return;
     isAppInitialized = true;
 
+    initGlobalVersionWatcher();
     updateUIVisibility(currentUserData);
     setupEventListeners();
+    getPayrollConfig();
 
     const tabs = {
         remisiones: document.getElementById('tab-remisiones'), cotizaciones: document.getElementById('tab-cotizaciones'),
@@ -999,6 +1171,14 @@ function loadViewTemplates() {
                         <h3 class="font-bold text-lg mb-2 text-slate-800">Exportar Pagos</h3>
                         <p class="text-sm text-slate-500 mb-4">Descarga un archivo Excel con el historial de abonos y pagos de remisiones.</p>
                         <button id="btn-func-export-pagos" class="bg-green-600 text-white font-bold py-2 px-6 rounded-full hover:bg-green-700 transition shadow-sm">Exportar Pagos</button>
+                    </div>
+                    <div class="border border-indigo-200 p-5 rounded-lg text-center bg-indigo-50/50 hover:bg-indigo-50 hover:shadow-md transition md:col-span-2">
+                        <div class="text-4xl mb-3">🔄</div>
+                        <h3 class="font-bold text-lg mb-1 text-slate-800">Sincronización y Actualización Forzada</h3>
+                        <p class="text-xs text-slate-500 mb-3 max-w-md mx-auto">Emite una señal en tiempo real a todos los dispositivos (celulares, tablets y computadores) para limpiar sus cachés y recargar inmediatamente la última versión del sistema (v3.2).</p>
+                        <button id="btn-func-force-update" class="bg-indigo-650 hover:bg-indigo-755 text-white font-bold py-2.5 px-6 rounded-full transition shadow-sm text-xs flex items-center gap-2 mx-auto">
+                            <i class="fa-solid fa-arrows-rotate"></i> Forzar Actualización en Todos los Dispositivos
+                        </button>
                     </div>
                 </div>
             </div>

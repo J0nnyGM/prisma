@@ -1002,19 +1002,19 @@ async function handleRemisionSubmit(e) {
         const payments = [];
         let saldoPendiente = Math.round(totalFinal);
         let formaPagoFinal = "Pendiente";
+        const fechaHoy = new Date().toISOString().split('T')[0];
 
         if (formaPago !== "Pendiente") {
             payments.push({
                 amount: Math.round(totalFinal),
+                date: fechaHoy,
                 method: formaPago.toLowerCase(),
-                status: 'confirmado',
+                status: 'por confirmar',
                 registeredAt: Date.now(),
-                confirmedAt: Date.now(),
-                confirmedBy: currentUser.uid,
                 registeredBy: currentUser.uid
             });
-            saldoPendiente = 0;
-            formaPagoFinal = "Cancelado";
+            saldoPendiente = Math.round(totalFinal);
+            formaPagoFinal = "Pendiente";
         }
 
         const nuevaRemision = {
@@ -1125,18 +1125,20 @@ export function showPaymentModal(remision) {
 
     const paymentsHTML = paymentsArray
         .map((p, i) => ({ ...p, originalIndex: i }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .sort((a, b) => new Date(b.date || b.fecha || b.registeredAt) - new Date(a.date || a.fecha || a.registeredAt))
         .map((p) => {
             let statusBadge = ''; let confirmButton = ''; let rejectButton = '';
+            const paymentDate = p.date || p.fecha || (p.registeredAt ? new Date(p.registeredAt).toISOString().split('T')[0] : (p.confirmedAt ? new Date(p.confirmedAt).toISOString().split('T')[0] : 'Sin fecha'));
+            const isMyPayment = p.registeredBy === currentUser.uid || (!p.registeredBy && remision.creadoPor === currentUser.uid);
             
             if (p.status === 'por confirmar') {
                 statusBadge = `<span class="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Por Confirmar</span>`;
                 if (currentUserData.role === 'admin') {
-                    if (p.registeredBy !== currentUser.uid) {
+                    if (!isMyPayment) {
                         confirmButton = `<button data-remision-id="${remision.id}" data-payment-index="${p.originalIndex}" data-action="confirmar" class="action-payment-btn bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600">Confirmar</button>`;
                         rejectButton = `<button data-remision-id="${remision.id}" data-payment-index="${p.originalIndex}" data-action="rechazar" class="action-payment-btn bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 mt-1 sm:mt-0 ml-0 sm:ml-1">Rechazar</button>`;
                     } else {
-                        confirmButton = `<button class="bg-gray-400 text-white text-xs px-2 py-1 rounded cursor-not-allowed" disabled title="No puedes confirmar/rechazar tu propio registro.">Pendiente de Admin</button>`;
+                        confirmButton = `<button class="bg-gray-400 text-white text-xs px-2 py-1 rounded cursor-not-allowed" disabled title="No puedes confirmar/rechazar tu propio registro. Requiere otro administrador.">Pendiente de Admin</button>`;
                     }
                 }
             } else if (p.status === 'rechazado') {
@@ -1148,7 +1150,7 @@ export function showPaymentModal(remision) {
             }
             
             return `<tr class="border-b"> 
-                        <td class="p-2 text-xs sm:text-sm">${p.date}</td> 
+                        <td class="p-2 text-xs sm:text-sm font-medium">${paymentDate}</td> 
                         <td class="p-2 text-xs sm:text-sm">${p.method}</td> 
                         <td class="p-2 text-right text-xs sm:text-sm">${p.amountHTML || formatCurrency(p.amount)}</td> 
                         <td class="p-2 text-center">${statusBadge}</td> 
@@ -1224,8 +1226,9 @@ export function showPaymentModal(remision) {
                      updatedPayments = Array.isArray(remisionDoc.data().payments) ? remisionDoc.data().payments : [];
                      
                      const registeredBy = updatedPayments[paymentIndex].registeredBy;
-                     if (registeredBy && currentUser && currentUser.uid && registeredBy === currentUser.uid) {
-                         throw "Error de Seguridad: No puedes confirmar/rechazar tu propio pago.";
+                     const remisionCreator = remisionDoc.data().creadoPor;
+                     if (currentUser && currentUser.uid && (registeredBy === currentUser.uid || (!registeredBy && remisionCreator === currentUser.uid))) {
+                         throw "Error de Seguridad: No puedes confirmar/rechazar tu propio pago. Debe ser confirmado por otro administrador.";
                      }
                      
                      updatedPayments[paymentIndex].status = action === 'confirmar' ? 'confirmado' : 'rechazado';
@@ -1453,9 +1456,10 @@ function showPendingPaymentsModal() {
         html = '<p class="text-center text-gray-500 py-6">¡Todo al día! No hay pagos pendientes de confirmación.</p>';
     } else {
         html = pendingPayments.map(p => {
-            const isMe = p.registeredBy === currentUser.uid;
+            const isMe = p.registeredBy === currentUser.uid || (!p.registeredBy && p.remision.creadoPor === currentUser.uid);
             const canVerify = currentUserData?.role === 'admin';
             const registradoPorNombre = allUsers.find(u => u.id === p.registeredBy)?.nombre || 'Desconocido';
+            const displayDate = p.date || p.fecha || (p.registeredAt ? new Date(p.registeredAt).toISOString().split('T')[0] : 'Sin fecha');
             
             return `
             <div class="border p-4 rounded-lg flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-gray-50 mb-3 shadow-sm">
@@ -1466,7 +1470,7 @@ function showPendingPaymentsModal() {
                     <p class="text-xs text-gray-500">Fecha de registro: ${p.registeredAt ? new Date(p.registeredAt).toLocaleDateString() : 'N/A'}</p>
                 </div>
                 <div class="flex flex-col sm:items-end text-left sm:text-right">
-                    <p class="text-sm text-gray-600 font-semibold">${p.method} | ${p.date}</p>
+                    <p class="text-sm text-gray-600 font-semibold">${p.method} | ${displayDate}</p>
                     <p class="font-bold text-xl text-indigo-700 mb-2">${formatCurrency(p.amount)}</p>
                     <div class="flex gap-2">
                         <button data-remision-id="${p.remision.id}" 
@@ -1527,6 +1531,12 @@ function showPendingPaymentsModal() {
                     const remisionRef = doc(db, "remisiones", remisionId);
                     const remisionDoc = await transaction.get(remisionRef);
                     let payments = Array.isArray(remisionDoc.data().payments) ? remisionDoc.data().payments : [];
+                    
+                    const registeredBy = payments[paymentIndex]?.registeredBy;
+                    const remisionCreator = remisionDoc.data()?.creadoPor;
+                    if (currentUser && currentUser.uid && (registeredBy === currentUser.uid || (!registeredBy && remisionCreator === currentUser.uid))) {
+                        throw "Error de Seguridad: No puedes confirmar/rechazar tu propio pago.";
+                    }
                     
                     payments[paymentIndex].status = 'rechazado';
                     payments[paymentIndex].confirmedBy = currentUser.uid;

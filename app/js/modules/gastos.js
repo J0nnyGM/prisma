@@ -143,27 +143,44 @@ export function renderGastos() {
 
     paginatedGastos.forEach((gasto) => {
         const el = document.createElement('div');
-        el.className = 'premium-card premium-card-orange p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
+        
+        const isSalaryExpense = gasto.isSalaryExpense || gasto.isEmployeePayment || 
+            (gasto.proveedorNombre && (gasto.proveedorNombre.toLowerCase().includes('pago de nómina') || gasto.proveedorNombre.toLowerCase().includes('pago de nomina') || gasto.proveedorNombre.toLowerCase().includes('nómina especial') || gasto.proveedorNombre.toLowerCase().includes('nomina especial'))) ||
+            (gasto.numeroFactura && (gasto.numeroFactura.toLowerCase().includes('nómina') || gasto.numeroFactura.toLowerCase().includes('nomina')));
+
+        el.className = isSalaryExpense 
+            ? 'premium-card premium-card-indigo p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition border-l-4 border-l-indigo-600'
+            : 'premium-card premium-card-orange p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
         
         const nameInitial = (gasto.proveedorNombre || 'G').charAt(0).toUpperCase();
         let deleteBtnHTML = '';
-        if (isAdmin && !gasto.isEmployeePayment && !gasto.isTransfer && !gasto.isImportacionGasto) {
-            deleteBtnHTML = `<button data-gasto-id="${gasto.id}" class="delete-gasto-btn bg-red-50 text-red-600 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-100 hover:text-red-700 transition border border-red-200 shadow-sm" title="Eliminar Gasto">✕</button>`;
+        
+        if (isAdmin && !isSalaryExpense && !gasto.isEmployeePayment && !gasto.isTransfer && !gasto.isImportacionGasto) {
+            deleteBtnHTML = `<button data-gasto-id="${gasto.id}" class="delete-gasto-btn bg-red-50 text-red-600 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-100 hover:text-red-700 transition border border-red-200 shadow-xs" title="Eliminar Gasto">✕</button>`;
         }
 
         let badgeFactura = gasto.numeroFactura 
-            ? `<span class="bg-orange-50 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-100 font-mono">Factura: ${gasto.numeroFactura}</span>`
+            ? `<span class="${isSalaryExpense ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-orange-50 text-orange-700 border-orange-100'} text-[10px] font-bold px-2 py-0.5 rounded border font-mono">Factura: ${gasto.numeroFactura}</span>`
             : '';
+
+        let badgeNomina = isSalaryExpense
+            ? `<span class="bg-indigo-100 text-indigo-800 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-200"><i class="fa-solid fa-user-check mr-1"></i>Nómina</span>`
+            : '';
+
+        const avatarHTML = isSalaryExpense
+            ? `<div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs flex-shrink-0"><i class="fa-solid fa-money-bill-wave"></i></div>`
+            : `<div class="premium-avatar premium-avatar-orange flex-shrink-0">${nameInitial}</div>`;
 
         el.innerHTML = `
             <div class="flex items-center gap-4 flex-grow min-w-0">
-                <div class="premium-avatar premium-avatar-orange flex-shrink-0">${nameInitial}</div>
+                ${avatarHTML}
                 <div class="flex-grow min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                         <p class="font-bold text-base text-slate-900 truncate" title="${gasto.proveedorNombre}">${gasto.proveedorNombre}</p>
+                        ${badgeNomina}
                         ${badgeFactura}
                     </div>
-                    <p class="text-xs text-slate-500 mt-1">Fecha: ${gasto.fecha}</p>
+                    <p class="text-xs text-slate-500 mt-1">Fecha: ${gasto.fecha}${gasto.observacion ? ` &bull; <span class="italic text-slate-500 font-normal truncate" title="${gasto.observacion}">Nota: ${gasto.observacion}</span>` : ''}</p>
                 </div>
             </div>
             
@@ -221,6 +238,7 @@ export function renderGastos() {
         };
     });
 }
+
 
 // --- FUNCIONALIDAD: PAPELERA DE GASTOS ---
 async function showDeletedGastosModal() {
