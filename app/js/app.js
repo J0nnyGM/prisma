@@ -225,35 +225,12 @@ export function initGlobalVersionWatcher() {
             const isForced = forceTimestamp > lastAppliedForce;
 
             if (isOutdated || isForced) {
-                console.log(`[VersionWatcher] Nueva versión remota detectada (${remoteVersion}). Local: ${APP_VERSION}. Recargando...`);
+                console.log(`[VersionWatcher] Nueva versión remota detectada (${remoteVersion}). Local: ${APP_VERSION}.`);
                 triggerGlobalAppUpdate(remoteVersion, forceTimestamp);
             }
         }, (err) => {
             console.warn("[VersionWatcher] Error escuchando versión remota:", err);
         });
-
-        const checkVersionOnWake = async () => {
-            try {
-                const snap = await getDoc(doc(db, "config", "appVersion"));
-                if (snap.exists()) {
-                    const data = snap.data();
-                    const remoteVersion = data.currentVersion || data.version;
-                    const forceTimestamp = Number(data.forceReloadTimestamp || 0);
-                    const lastAppliedForce = Number(localStorage.getItem('last_applied_force_reload') || 0);
-
-                    if ((remoteVersion && remoteVersion !== APP_VERSION) || (forceTimestamp > lastAppliedForce)) {
-                        triggerGlobalAppUpdate(remoteVersion, forceTimestamp);
-                    }
-                }
-            } catch(e) {
-                console.warn("[VersionWatcher] Error verificando en wake:", e);
-            }
-        };
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') checkVersionOnWake();
-        });
-        window.addEventListener('focus', checkVersionOnWake);
 
     } catch (e) {
         console.warn("[VersionWatcher] Error inicializando vigilante de versión:", e);
