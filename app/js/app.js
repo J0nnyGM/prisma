@@ -26,6 +26,7 @@ export const APP_CACHE_KEYS = [
     }
 })();
 
+
 import { auth, db, storage, functions, analytics, httpsCallable } from './firebase-config.js';
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
@@ -2095,4 +2096,4 @@ function showEditProfileModal() {
         }
     });
 }
-
+
