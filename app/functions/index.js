@@ -8,6 +8,19 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const axios = require("axios");
 const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
+
+// Cargar imagen QR de pago interbancario Bre-B (Davivienda) para remisiones
+let qrPagoBreBBase64 = "";
+try {
+    const qrPath = path.join(__dirname, "assets", "qr_pago_breb.png");
+    if (fs.existsSync(qrPath)) {
+        qrPagoBreBBase64 = "data:image/png;base64," + fs.readFileSync(qrPath).toString("base64");
+    }
+} catch (err) {
+    functions.logger.error("Error al cargar imagen QR Bre-B:", err);
+}
 
 // Importamos webhook una sola vez
 const waWebhook = require("./webhook"); // <--- LIMPIEZA: Importación única
@@ -252,6 +265,7 @@ function generarPDF(remisionData, esPlanta) {
     });
 
     doc.autoTable({
+        margin: { left: 15, right: 15 },
         head: [tableColumn],
         body: tableRows,
         startY: 88,
@@ -267,23 +281,51 @@ function generarPDF(remisionData, esPlanta) {
             3: { cellWidth: 20, halign: "center" }
         } : {
             0: { cellWidth: 25 },
-            1: { cellWidth: 65 },
+            1: { cellWidth: 63 },
             2: { cellWidth: 30 },
             3: { cellWidth: 15, halign: "center" },
-            4: { cellWidth: 22, halign: "right" },
-            5: { cellWidth: 23, halign: "right" }
+            4: { cellWidth: 23, halign: "right" },
+            5: { cellWidth: 24, halign: "right" }
         }
     });
 
     // 7. TOTALES Y CONDICIONES (DEBAJO DE LA TABLA)
     const finalY = doc.lastAutoTable.finalY;
-    let yPos = finalY + 10;
 
-    // Si nos queda muy poco espacio, creamos una nueva página
-    if (yPos > 215) {
-        doc.addPage();
-        yPos = 25;
+    // Dimensiones y posición del QR Bre-B (Davivienda) - Aspect ratio 712x733
+    const qrW = 54;
+    const qrH = 55.6;
+    const qrX = 195 - qrW; // 141 (alineado con margen derecho en 195)
+    const qrY = 265 - qrH; // 209.4 (termina en 265, antes de la línea en 268)
+
+    // Cálculo del espacio requerido por Totales
+    let totalsHeight = 16; // Subtotal (6) + TOTAL (10)
+    if (remision.discount && remision.discount.amount > 0) totalsHeight += 6;
+    if (remision.incluyeIVA) totalsHeight += 6;
+
+    // Cálculo del espacio requerido por Observaciones y Detalles de Pago
+    const textoObservaciones = (remision.observaciones && remision.observaciones.trim() !== "")
+        ? doc.splitTextToSize(remision.observaciones, 110)
+        : [];
+    let leftInfoHeight = 0;
+    if (textoObservaciones.length > 0) {
+        leftInfoHeight += (textoObservaciones.length * 4.5) + 10;
     }
+    if (!isForPlanta) {
+        leftInfoHeight += 14;
+    }
+
+    // Verificar colisión con el bloque inferior (QR en qrY=209.4 y Firma en Y=250)
+    let startYInfo = finalY + 8;
+    const totalsCollision = !isForPlanta && (startYInfo + totalsHeight > qrY - 3);
+    const leftCollision = startYInfo + leftInfoHeight > 225;
+
+    if (totalsCollision || leftCollision) {
+        doc.addPage();
+        startYInfo = 25;
+    }
+
+    let yPos = startYInfo;
 
     if (!isForPlanta) {
         // Cuadro de Totales (Alineado a la derecha)
@@ -327,23 +369,19 @@ function generarPDF(remisionData, esPlanta) {
         doc.text("TOTAL:", rightLabelsX, yPos);
         doc.text(formatCurrency(remision.valorTotal), rightValuesX, yPos, { align: "right" });
         
-        // Reset font size
         doc.setFontSize(10);
-        yPos += 10;
     }
 
     // Información de pago y observaciones (Alineado a la izquierda)
-    let leftInfoY = finalY + 10;
-    if (leftInfoY > 215) leftInfoY = 25; // Si se añadió página
+    let leftInfoY = startYInfo;
 
-    if (remision.observaciones && remision.observaciones.trim() !== "") {
+    if (textoObservaciones.length > 0) {
         doc.setFontSize(9);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(108, 117, 125);
         doc.text("Observaciones:", 15, leftInfoY);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(33, 37, 41);
-        const textoObservaciones = doc.splitTextToSize(remision.observaciones, 110);
         doc.text(textoObservaciones, 15, leftInfoY + 4);
         leftInfoY += (textoObservaciones.length * 4.5) + 6;
     }
@@ -359,23 +397,29 @@ function generarPDF(remisionData, esPlanta) {
         doc.text(`Estado: ${remision.estado}`, 15, leftInfoY + 8);
     }
 
-    // Asegurarse de que yPos esté después de toda la info de la izquierda
-    yPos = Math.max(yPos, leftInfoY + 15);
-
-    // 8. SECCIÓN DE FIRMA Y PIE DE PÁGINA (Al final del documento)
-    if (yPos > 240) {
-        doc.addPage();
-        yPos = 30;
+    // 8. SECCIÓN DE FIRMA, QR Y PIE DE PÁGINA (Al final del documento)
+    // QR de Pago Interbancario Bre-B (Davivienda) a la derecha
+    if (!isForPlanta && qrPagoBreBBase64) {
+        doc.addImage(qrPagoBreBBase64, "PNG", qrX, qrY, qrW, qrH, undefined, "FAST");
     }
 
-    yPos = 250;
+    // Firma a la izquierda (o centrada en planta)
+    const firmaY = 250;
     doc.setDrawColor(220, 224, 230);
     doc.setLineWidth(0.3);
-    doc.line(40, yPos, 120, yPos);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(108, 117, 125);
-    doc.text("Firma y Sello de Recibido", 80, yPos + 4, { align: "center" });
+    if (!isForPlanta) {
+        doc.line(20, firmaY, 115, firmaY);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(108, 117, 125);
+        doc.text("Firma y Sello de Recibido", 67, firmaY + 4, { align: "center" });
+    } else {
+        doc.line(40, firmaY, 120, firmaY);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(108, 117, 125);
+        doc.text("Firma y Sello de Recibido", 80, firmaY + 4, { align: "center" });
+    }
 
     // Footer de la empresa
     doc.setDrawColor(33, 37, 41);
