@@ -365,31 +365,42 @@ async function updateDashboard(year, month) {
         })
         .reduce((sum, p) => sum + p.amount, 0);
 
-    const expensesThisMonth = allGastos.filter(g => { const d = new Date(g.fecha + 'T00:00:00'); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0);
-
-    // Fallbacks calculados en memoria (ventas basadas en remisiones y gastos basados en egresos)
-    const inMemoryVentas = allRemisiones
-        .filter(r => { 
-            const d = new Date(r.fechaRecibido + 'T00:00:00'); 
-            return d.getMonth() === month && d.getFullYear() === year && r.estado !== 'Anulada'; 
+    const expensesThisMonth = (allGastos || [])
+        .filter(g => {
+            if (g.estado === 'eliminado') return false;
+            if (!g.fecha) return false;
+            const d = new Date(g.fecha + 'T00:00:00'); 
+            return d.getMonth() === month && d.getFullYear() === year; 
         })
-        .reduce((sum, r) => sum + r.valorTotal, 0);
+        .reduce((sum, g) => sum + (parseFloat(g.valorTotal) || 0), 0);
+
+    // Valores calculados en tiempo real desde la memoria activa
+    const inMemoryVentas = (allRemisiones || [])
+        .filter(r => { 
+            if (r.estado === 'Anulada') return false;
+            if (!r.fechaRecibido) return false;
+            const d = new Date(r.fechaRecibido + 'T00:00:00'); 
+            return d.getMonth() === month && d.getFullYear() === year; 
+        })
+        .reduce((sum, r) => sum + (parseFloat(r.valorTotal) || 0), 0);
 
     let docVentas = inMemoryVentas;
     let docGastos = expensesThisMonth;
 
-    // Intentar leer desde la colección "estadisticas_mensuales" (YYYY_MM)
-    const docId = `${year}_${(month + 1).toString().padStart(2, '0')}`;
-    try {
-        const docRef = doc(db, "estadisticas_mensuales", docId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.totalVentas !== undefined) docVentas = data.totalVentas;
-            if (data.totalGastos !== undefined) docGastos = data.totalGastos;
+    // Solo consultar "estadisticas_mensuales" como respaldo si las colecciones aún no han cargado
+    if ((!allGastos || allGastos.length === 0) || (!allRemisiones || allRemisiones.length === 0)) {
+        const docId = `${year}_${(month + 1).toString().padStart(2, '0')}`;
+        try {
+            const docRef = doc(db, "estadisticas_mensuales", docId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if ((!allRemisiones || allRemisiones.length === 0) && data.totalVentas !== undefined) docVentas = data.totalVentas;
+                if ((!allGastos || allGastos.length === 0) && data.totalGastos !== undefined) docGastos = data.totalGastos;
+            }
+        } catch (error) {
+            console.warn(`Error al cargar estadisticas_mensuales/${docId}:`, error);
         }
-    } catch (error) {
-        console.warn(`Error al cargar estadisticas_mensuales/${docId}:`, error);
     }
 
     // CARTERA DEL MES (SOLO RESTAR PAGOS CONFIRMADOS)
@@ -439,7 +450,8 @@ async function updateDashboard(year, month) {
     });
 
     allGastos.forEach(g => {
-        if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal;
+        if (g.estado === 'eliminado') return;
+        if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= (parseFloat(g.valorTotal) || 0);
     });
 
     METODOS_DE_PAGO.forEach(metodo => {
@@ -517,7 +529,12 @@ async function updateDashboard(year, month) {
             })
             .reduce((sum, p) => sum + p.amount, 0));
             
-        expensesData.push(allGastos.filter(g => { const gDate = new Date(g.fecha + 'T00:00:00'); return gDate.getMonth() === m && gDate.getFullYear() === y; }).reduce((sum, g) => sum + g.valorTotal, 0));
+        expensesData.push((allGastos || []).filter(g => { 
+            if (g.estado === 'eliminado') return false;
+            if (!g.fecha) return false;
+            const gDate = new Date(g.fecha + 'T00:00:00'); 
+            return gDate.getMonth() === m && gDate.getFullYear() === y; 
+        }).reduce((sum, g) => sum + (parseFloat(g.valorTotal) || 0), 0));
     }
     
     const ctx = document.getElementById('profitLossChart')?.getContext('2d');
@@ -1392,7 +1409,12 @@ function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
         })
         .reduce((sum, p) => sum + p.amount, 0);
         
-    const expensesInRange = allGastos.filter(g => { const d = new Date(g.fecha); return d >= startDate && d <= endDate; }).reduce((sum, g) => sum + g.valorTotal, 0);
+    const expensesInRange = (allGastos || []).filter(g => { 
+        if (g.estado === 'eliminado') return false;
+        if (!g.fecha) return false;
+        const d = new Date(g.fecha); 
+        return d >= startDate && d <= endDate; 
+    }).reduce((sum, g) => sum + (parseFloat(g.valorTotal) || 0), 0);
     const profitInRange = salesInRange - expensesInRange;
 
     const summaryData = [
@@ -1418,7 +1440,12 @@ function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
             })
             .reduce((sum, p) => sum + p.amount, 0);
             
-        const monthlyExpenses = allGastos.filter(g => { const d = new Date(g.fecha); return d.getMonth() === month && d.getFullYear() === year; }).reduce((sum, g) => sum + g.valorTotal, 0);
+        const monthlyExpenses = (allGastos || []).filter(g => { 
+            if (g.estado === 'eliminado') return false;
+            if (!g.fecha) return false;
+            const d = new Date(g.fecha); 
+            return d.getMonth() === month && d.getFullYear() === year; 
+        }).reduce((sum, g) => sum + (parseFloat(g.valorTotal) || 0), 0);
         const monthlyProfit = monthlySales - monthlyExpenses;
         
         const endOfMonth = new Date(year, month + 1, 0);
@@ -1446,7 +1473,10 @@ function generateSummaryPDF(startYear, startMonth, endYear, endMonth) {
         }
     }));
     
-    allGastos.forEach(g => { if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= g.valorTotal; });
+    allGastos.forEach(g => { 
+        if (g.estado === 'eliminado') return;
+        if (accountBalances[g.fuentePago] !== undefined) accountBalances[g.fuentePago] -= (parseFloat(g.valorTotal) || 0); 
+    });
 
     const totalCartera = allRemisiones.filter(r => r.estado !== 'Anulada').reduce((sum, r) => { 
         const totalPagado = (r.payments || [])

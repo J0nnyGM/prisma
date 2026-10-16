@@ -3191,7 +3191,11 @@ async function openPaymentVoucherModal(payment, user) {
             const diasAux = payment.diasAuxTransporte !== undefined ? payment.diasAuxTransporte : (d.diasAuxTransporte !== undefined ? d.diasAuxTransporte : payment.diasPagados);
             earningsList.innerHTML += createRow(`Aux. Transporte (${diasAux} días)`, d.auxilioTransporteProrrateado);
         }
-        if (d.horasExtra > 0) earningsList.innerHTML += createRow('Horas Extra', d.horasExtra);
+        if (d.horasExtra > 0) {
+            const cantH = payment.horas?.totalHorasExtra || d.cantHorasExtra || 0;
+            const labelHorasExtra = cantH > 0 ? `Horas Extra (${cantH} ${cantH === 1 ? 'hora' : 'horas'})` : 'Horas Extra';
+            earningsList.innerHTML += createRow(labelHorasExtra, d.horasExtra);
+        }
         
         if (displayBonificacion > 0) {
             const labelBono = (d.deduccionSobreMinimo) ? 'Bonificación / Aux. No Salarial' : 'Bonificación';

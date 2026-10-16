@@ -265,7 +265,7 @@ function generarPDF(remisionData, esPlanta) {
     });
 
     doc.autoTable({
-        margin: { left: 15, right: 15 },
+        margin: { left: 15, right: 15, bottom: 25 },
         head: [tableColumn],
         body: tableRows,
         startY: 88,
@@ -292,12 +292,6 @@ function generarPDF(remisionData, esPlanta) {
     // 7. TOTALES Y CONDICIONES (DEBAJO DE LA TABLA)
     const finalY = doc.lastAutoTable.finalY;
 
-    // Dimensiones y posición del QR Bre-B (Davivienda) - Aspect ratio 712x733
-    const qrW = 54;
-    const qrH = 55.6;
-    const qrX = 195 - qrW; // 141 (alineado con margen derecho en 195)
-    const qrY = 265 - qrH; // 209.4 (termina en 265, antes de la línea en 268)
-
     // Cálculo del espacio requerido por Totales
     let totalsHeight = 16; // Subtotal (6) + TOTAL (10)
     if (remision.discount && remision.discount.amount > 0) totalsHeight += 6;
@@ -305,25 +299,48 @@ function generarPDF(remisionData, esPlanta) {
 
     // Cálculo del espacio requerido por Observaciones y Detalles de Pago
     const textoObservaciones = (remision.observaciones && remision.observaciones.trim() !== "")
-        ? doc.splitTextToSize(remision.observaciones, 110)
+        ? doc.splitTextToSize(remision.observaciones, 85)
         : [];
     let leftInfoHeight = 0;
     if (textoObservaciones.length > 0) {
-        leftInfoHeight += (textoObservaciones.length * 4.5) + 10;
+        leftInfoHeight += (textoObservaciones.length * 4.5) + 6;
     }
     if (!isForPlanta) {
-        leftInfoHeight += 14;
+        leftInfoHeight += 16;
     }
 
-    // Verificar colisión con el bloque inferior (QR en qrY=209.4 y Firma en Y=250)
-    let startYInfo = finalY + 8;
-    const totalsCollision = !isForPlanta && (startYInfo + totalsHeight > qrY - 3);
-    const leftCollision = startYInfo + leftInfoHeight > 225;
+    // Evaluación dinámica de espacio para evitar saltos de página innecesarios
+    // La línea del pie de página está en Y=268, dejando límite de contenido en Y=265
+    // Firma está en Y=250 en la mitad izquierda
+    const availableSpace = 265 - finalY;
+    let startYInfo = finalY + 6;
+    let needsNewPage = false;
 
-    if (totalsCollision || leftCollision) {
+    if (isForPlanta) {
+        if (startYInfo + leftInfoHeight > 242) {
+            needsNewPage = true;
+        }
+    } else {
+        // En la mitad derecha va Totales + QR de Bre-B.
+        // El QR requiere al menos 55mm de altura para ser legible y nítido.
+        const minSpaceNeeded = totalsHeight + 10 + 55;
+        if (availableSpace < minSpaceNeeded || (startYInfo + leftInfoHeight > 242)) {
+            needsNewPage = true;
+        }
+    }
+
+    if (needsNewPage) {
         doc.addPage();
         startYInfo = 25;
     }
+
+    // Dimensiones dinámicas del QR Bre-B en la mitad derecha (105 a 195, ancho disponible 90mm)
+    // Se escala proporcionalmente para aprovechar el espacio disponible sin forzar página extra
+    const availableForQR = 265 - (startYInfo + totalsHeight + 4);
+    const qrH = Math.min(82.4, Math.max(55, availableForQR));
+    const qrW = qrH * (712 / 733);
+    const qrX = 105 + (90 - qrW) / 2; // Centrado en la mitad derecha
+    const qrY = 265 - qrH;            // Alineado en la parte inferior antes del footer
 
     let yPos = startYInfo;
 
@@ -408,17 +425,17 @@ function generarPDF(remisionData, esPlanta) {
     doc.setDrawColor(220, 224, 230);
     doc.setLineWidth(0.3);
     if (!isForPlanta) {
-        doc.line(20, firmaY, 115, firmaY);
+        doc.line(20, firmaY, 100, firmaY);
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(108, 117, 125);
-        doc.text("Firma y Sello de Recibido", 67, firmaY + 4, { align: "center" });
+        doc.text("Firma y Sello de Recibido", 60, firmaY + 4, { align: "center" });
     } else {
-        doc.line(40, firmaY, 120, firmaY);
+        doc.line(55, firmaY, 155, firmaY);
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(108, 117, 125);
-        doc.text("Firma y Sello de Recibido", 80, firmaY + 4, { align: "center" });
+        doc.text("Firma y Sello de Recibido", 105, firmaY + 4, { align: "center" });
     }
 
     // Footer de la empresa
@@ -1111,15 +1128,51 @@ exports.aggregateGastos = functions.firestore
         const before = change.before.exists ? change.before.data() : null;
         const after = change.after.exists ? change.after.data() : null;
 
-        const expenseBefore = before ? (before.valorTotal || 0) : 0;
-        const expenseAfter = after ? (after.valorTotal || 0) : 0;
+        // Si está eliminado (soft-delete), el valor efectivo del gasto es 0
+        const isBeforeActive = before && before.estado !== 'eliminado';
+        const isAfterActive = after && after.estado !== 'eliminado';
+
+        const expenseBefore = isBeforeActive ? (before.valorTotal || 0) : 0;
+        const expenseAfter = isAfterActive ? (after.valorTotal || 0) : 0;
+
+        const dateBefore = before ? before.fecha : null;
+        const dateAfter = after ? after.fecha : null;
+
+        // Si no hay cambio en valor ni en fecha, terminar
+        if (expenseBefore === expenseAfter && dateBefore === dateAfter) return null;
+
+        const batch = admin.firestore().batch();
+
+        // CASO A: La fecha cambió entre meses diferentes
+        if (dateBefore && dateAfter && dateBefore.substring(0, 7) !== dateAfter.substring(0, 7)) {
+            if (expenseBefore > 0) {
+                const oldId = `${new Date(dateBefore).getFullYear()}_${(new Date(dateBefore).getMonth() + 1).toString().padStart(2, '0')}`;
+                const oldRef = admin.firestore().collection("estadisticas_mensuales").doc(oldId);
+                batch.set(oldRef, {
+                    totalGastos: admin.firestore.FieldValue.increment(-expenseBefore),
+                    ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            }
+
+            if (expenseAfter > 0) {
+                const newId = `${new Date(dateAfter).getFullYear()}_${(new Date(dateAfter).getMonth() + 1).toString().padStart(2, '0')}`;
+                const newRef = admin.firestore().collection("estadisticas_mensuales").doc(newId);
+                batch.set(newRef, {
+                    totalGastos: admin.firestore.FieldValue.increment(expenseAfter),
+                    ultimaActualizacion: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            }
+            return batch.commit();
+        }
+
+        // CASO B: Mismo mes o creación/borrado
+        const date = dateAfter || dateBefore;
+        if (!date) return null;
 
         const deltaExpense = expenseAfter - expenseBefore;
-
         if (deltaExpense === 0) return null;
 
-        const dateStr = after ? after.fecha : before.fecha;
-        return updateMonthlyStats(dateStr, 0, 0, deltaExpense);
+        return updateMonthlyStats(date, 0, 0, deltaExpense);
     });
 
 /**
@@ -1165,7 +1218,7 @@ exports.rebuildMonthlyStats = functions.https.onCall(async (data, context) => {
     // Procesar Gastos
     gastoSnap.forEach(doc => {
         const g = doc.data();
-        if (!g.fecha) return;
+        if (!g.fecha || g.estado === 'eliminado') return;
         const [year, month] = g.fecha.split('-');
         const key = `${year}_${month}`;
         

@@ -15,18 +15,20 @@ const SYNC_KEY = 'gastos_last_sync';
 
 let currentPage = 1;
 const itemsPerPage = 20;
+let mapGastos = new Map();
 
 // --- CARGA DE DATOS (TIEMPO REAL + BORRADO LÓGICO) ---
 export function loadGastos() {
     const cachedData = localStorage.getItem(CACHE_KEY);
     
-    let mapGastos = new Map();
+    mapGastos = new Map();
     let maxLastUpdated = 0; 
 
     if (cachedData) {
         try {
             const parsedData = JSON.parse(cachedData);
             parsedData.forEach(g => {
+                if (g.estado === 'eliminado') return;
                 mapGastos.set(g.id, g);
                 if (g._lastUpdated && g._lastUpdated > maxLastUpdated) {
                     maxLastUpdated = g._lastUpdated;
@@ -105,7 +107,7 @@ export function renderGastos() {
     const hasTrailingSpace = rawSearch.endsWith(' ');
     const searchTerm = rawSearch.trim().toLowerCase();
 
-    let filtered = allGastos;
+    let filtered = (allGastos || []).filter(g => g.estado !== 'eliminado');
 
     if (year !== 'all') {
         filtered = filtered.filter(g => new Date(g.fecha).getFullYear() == year);
@@ -228,6 +230,17 @@ export function renderGastos() {
                     deletedBy: currentUser.uid,
                     _lastUpdated: serverTimestamp()
                 });
+
+                if (mapGastos && mapGastos.has(gastoId)) {
+                    mapGastos.delete(gastoId);
+                    const finalArray = Array.from(mapGastos.values());
+                    finalArray.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(finalArray));
+                    setAllGastos(finalArray);
+                    renderGastos();
+                    document.dispatchEvent(new CustomEvent('gastosChanged'));
+                }
+
                 hideModal();
                 showTemporaryMessage("Gasto eliminado con éxito", "success");
             } catch (error) {

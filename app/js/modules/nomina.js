@@ -3204,7 +3204,11 @@ async function openPaymentVoucherModal(payment, user) {
             const diasAux = payment.diasAuxTransporte !== undefined ? payment.diasAuxTransporte : (d.diasAuxTransporte !== undefined ? d.diasAuxTransporte : payment.diasPagados);
             earningsList.innerHTML += createRow(`Aux. Transporte (${diasAux} días)`, d.auxilioTransporteProrrateado);
         }
-        if (d.horasExtra > 0) earningsList.innerHTML += createRow('Horas Extra', d.horasExtra);
+        if (d.horasExtra > 0) {
+            const cantH = payment.horas?.totalHorasExtra || d.cantHorasExtra || 0;
+            const labelHorasExtra = cantH > 0 ? `Horas Extra (${cantH} ${cantH === 1 ? 'hora' : 'horas'})` : 'Horas Extra';
+            earningsList.innerHTML += createRow(labelHorasExtra, d.horasExtra);
+        }
         if (displayBonificacion > 0) {
             const labelBono = (d.deduccionSobreMinimo) ? 'Bonificación / Aux. No Salarial' : 'Bonificación';
             earningsList.innerHTML += createRow(labelBono, displayBonificacion, true);
@@ -3305,6 +3309,7 @@ export async function showEditPaymentVoucherModal(payment, user) {
     const salarioProrrateado = payment.desglose?.salarioProrrateado || 0;
     const auxTransporte = payment.desglose?.auxilioTransporteProrrateado || 0;
     const horasExtra = payment.desglose?.horasExtra || 0;
+    const cantHorasExtra = payment.horas?.totalHorasExtra ?? payment.desglose?.cantHorasExtra ?? 0;
     const otros = payment.desglose?.otros || 0;
     const bonificacion = payment.desglose?.bonificacionM2 || 0;
     const deduccionSalud = Math.abs(payment.desglose?.deduccionSalud || 0);
@@ -3379,14 +3384,36 @@ export async function showEditPaymentVoucherModal(payment, user) {
                             <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Auxilio Transporte</label>
                             <input type="text" id="ev-aux" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(auxTransporte)}">
                         </div>
+
+                        <!-- Horas Extra: Cantidad y Valor -->
+                        <div class="col-span-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-150">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[10px] font-black text-indigo-950 uppercase tracking-wide flex items-center gap-1.5">
+                                    <i class="fa-solid fa-clock text-indigo-600"></i> Horas Extra
+                                </span>
+                                <span id="ev-horas-rate-info" class="text-[9px] text-indigo-700 font-bold font-mono"></span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[9px] font-bold text-indigo-900 mb-0.5">Cant. Horas</label>
+                                    <input type="number" id="ev-horas-cant" class="w-full p-2 border border-indigo-200 rounded-lg text-center font-mono font-bold bg-white text-xs outline-none focus:ring-2 focus:ring-indigo-500" value="${cantHorasExtra}" min="0" step="any" placeholder="0">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-indigo-900 mb-0.5">Valor Total ($)</label>
+                                    <input type="text" id="ev-horas-valor" class="ev-currency-input w-full p-2 border border-indigo-200 rounded-lg text-right font-mono font-bold bg-white text-xs text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500" value="${currencyFormatter.format(horasExtra)}">
+                                </div>
+                            </div>
+                        </div>
+
                         <div>
-                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Horas Extra / Otros</label>
-                            <input type="text" id="ev-extras" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(horasExtra + otros + bonificacion)}">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Bonificación</label>
+                            <input type="text" id="ev-bonificacion" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(bonificacion)}">
                         </div>
                         <div>
-                            <label class="block text-[10px] font-bold text-amber-700 mb-0.5">Abono Préstamos</label>
-                            <input type="text" id="ev-prestamos" class="ev-currency-input w-full p-2 border border-amber-200 text-amber-800 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(abonoPrestamos)}">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Otros Ingresos</label>
+                            <input type="text" id="ev-otros" class="ev-currency-input w-full p-2 border border-slate-200 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(otros)}">
                         </div>
+
                         <div>
                             <label class="block text-[10px] font-bold text-rose-600 mb-0.5">Salud (-4%)</label>
                             <input type="text" id="ev-salud" class="ev-currency-input w-full p-2 border border-rose-200 text-rose-600 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(deduccionSalud)}">
@@ -3394,6 +3421,11 @@ export async function showEditPaymentVoucherModal(payment, user) {
                         <div>
                             <label class="block text-[10px] font-bold text-rose-600 mb-0.5">Pensión (-4%)</label>
                             <input type="text" id="ev-pension" class="ev-currency-input w-full p-2 border border-rose-200 text-rose-600 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(deduccionPension)}">
+                        </div>
+
+                        <div class="col-span-2">
+                            <label class="block text-[10px] font-bold text-amber-700 mb-0.5">Abono Préstamos</label>
+                            <input type="text" id="ev-prestamos" class="ev-currency-input w-full p-2 border border-amber-200 text-amber-800 rounded-lg text-right font-mono font-bold bg-white" value="${currencyFormatter.format(abonoPrestamos)}">
                         </div>
                     </div>
                 </div>
@@ -3449,12 +3481,16 @@ export async function showEditPaymentVoucherModal(payment, user) {
     const calculateNeto = () => {
         const salario = parseMoneyInput('ev-salario');
         const aux = parseMoneyInput('ev-aux');
-        const extras = parseMoneyInput('ev-extras');
+        const horasVal = parseMoneyInput('ev-horas-valor');
+        const bonif = parseMoneyInput('ev-bonificacion');
+        const otrosVal = parseMoneyInput('ev-otros');
         const salud = parseMoneyInput('ev-salud');
         const pension = parseMoneyInput('ev-pension');
         const prestamos = parseMoneyInput('ev-prestamos');
 
-        const neto = Math.max(0, (salario + aux + extras) - (salud + pension + prestamos));
+        const totalDevengado = salario + aux + horasVal + bonif + otrosVal;
+        const totalDeducciones = salud + pension + prestamos;
+        const neto = Math.max(0, totalDevengado - totalDeducciones);
         document.getElementById('ev-neto-display').textContent = currencyFormatter.format(neto);
         return neto;
     };
@@ -3464,29 +3500,56 @@ export async function showEditPaymentVoucherModal(payment, user) {
         input.addEventListener('input', calculateNeto);
     });
 
+    const config = getPayrollConfig();
+    const basicoMensual = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || (salarioProrrateado * 30 / (diasPagados || 15));
+    const valorHora = basicoMensual / 235;
+    const multiplicador = config?.multiplicadorHoraExtra || 1.25;
+    const rateInfoEl = document.getElementById('ev-horas-rate-info');
+    if (rateInfoEl) {
+        rateInfoEl.textContent = `Tasa: ${currencyFormatter.format(Math.round(valorHora * multiplicador))}/h`;
+    }
+
+    const calcHorasExtraVal = () => {
+        const cant = parseFloat(document.getElementById('ev-horas-cant').value) || 0;
+        const val = Math.round(cant * valorHora * multiplicador);
+        document.getElementById('ev-horas-valor').value = currencyFormatter.format(val);
+        calculateNeto();
+    };
+
+    document.getElementById('ev-horas-cant').addEventListener('input', calcHorasExtraVal);
+
     document.getElementById('ev-btn-recalcular-ley').onclick = () => {
-        const config = getPayrollConfig();
+        const cfg = getPayrollConfig();
         const dias = parseInt(document.getElementById('ev-dias-pagados').value) || 15;
         const diasAuxVal = parseInt(document.getElementById('ev-dias-aux').value) || dias;
         
-        const basicoMensual = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || (salarioProrrateado * 30 / dias);
-        const salarioPro = (basicoMensual / 30) * dias;
-        const auxMensual = basicoMensual <= (config.salarioMinimo * 2) ? config.auxilioTransporte : 0;
-        const auxPro = (auxMensual / 30) * diasAuxVal;
+        const basico = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || (salarioProrrateado * 30 / dias);
+        const salarioPro = Math.round((basico / 30) * dias);
+        const auxMensual = basico <= (cfg.salarioMinimo * 2) ? cfg.auxilioTransporte : 0;
+        const auxPro = Math.round((auxMensual / 30) * diasAuxVal);
         
+        // Recalcular horas extra si hay cantidad
+        const cantHoras = parseFloat(document.getElementById('ev-horas-cant').value) || 0;
+        const vHora = basico / 235;
+        const mult = cfg.multiplicadorHoraExtra || 1.25;
+        const horasVal = Math.round(cantHoras * vHora * mult);
+        document.getElementById('ev-horas-valor').value = currencyFormatter.format(horasVal);
+
+        const bonifVal = parseMoneyInput('ev-bonificacion');
+
         let baseDed = 0;
         const dedSobreMinimo = user.deduccionSobreMinimo === true || user.deduccionSobreMinimo === 'true' || payment.desglose?.deduccionSobreMinimo;
         if (dedSobreMinimo) {
-            baseDed = (config.salarioMinimo / 30) * dias;
+            baseDed = (cfg.salarioMinimo / 30) * dias;
         } else {
-            baseDed = salarioPro;
+            baseDed = salarioPro + horasVal + bonifVal;
         }
-        if (baseDed < (config.salarioMinimo / 30) * dias) {
-            baseDed = (config.salarioMinimo / 30) * dias;
+        if (baseDed < (cfg.salarioMinimo / 30) * dias) {
+            baseDed = (cfg.salarioMinimo / 30) * dias;
         }
         
-        const saludDed = Math.round(baseDed * (config.porcentajeSalud / 100));
-        const pensionDed = Math.round(baseDed * (config.porcentajePension / 100));
+        const saludDed = Math.round(baseDed * (cfg.porcentajeSalud / 100));
+        const pensionDed = Math.round(baseDed * (cfg.porcentajePension / 100));
         
         document.getElementById('ev-salario').value = currencyFormatter.format(salarioPro);
         document.getElementById('ev-aux').value = currencyFormatter.format(auxPro);
@@ -3514,9 +3577,12 @@ export async function showEditPaymentVoucherModal(payment, user) {
             const diasPagarNuevos = parseInt(document.getElementById('ev-dias-pagados').value) || 15;
             const diasAuxNuevos = parseInt(document.getElementById('ev-dias-aux').value) || 0;
             
+            const cantHorasNuevas = parseFloat(document.getElementById('ev-horas-cant').value) || 0;
             const salarioNuevo = parseMoneyInput('ev-salario');
             const auxNuevo = parseMoneyInput('ev-aux');
-            const extrasNuevo = parseMoneyInput('ev-extras');
+            const horasNuevo = parseMoneyInput('ev-horas-valor');
+            const bonifNuevo = parseMoneyInput('ev-bonificacion');
+            const otrosNuevo = parseMoneyInput('ev-otros');
             const saludNuevo = parseMoneyInput('ev-salud');
             const pensionNuevo = parseMoneyInput('ev-pension');
             const prestamosNuevo = parseMoneyInput('ev-prestamos');
@@ -3530,7 +3596,10 @@ export async function showEditPaymentVoucherModal(payment, user) {
                 salarioProrrateado: salarioNuevo,
                 auxilioTransporteProrrateado: auxNuevo,
                 diasAuxTransporte: diasAuxNuevos,
-                horasExtra: extrasNuevo,
+                horasExtra: horasNuevo,
+                cantHorasExtra: cantHorasNuevas,
+                bonificacionM2: bonifNuevo,
+                otros: otrosNuevo,
                 deduccionSalud: -saludNuevo,
                 deduccionPension: -pensionNuevo,
                 abonoPrestamos: prestamosNuevo
@@ -3544,6 +3613,10 @@ export async function showEditPaymentVoucherModal(payment, user) {
                 diasAuxTransporte: diasAuxNuevos,
                 monto: netoNuevo,
                 desglose: updatedDesglose,
+                horas: {
+                    ...(payment.horas || {}),
+                    totalHorasExtra: cantHorasNuevas
+                },
                 _lastCorrectedAt: serverTimestamp(),
                 _correctedBy: currentUser?.uid || 'admin'
             });
@@ -3700,7 +3773,7 @@ async function renderStandardPayrollForm(container, user) {
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Horas Extra (Cant.)</label>
                         <div class="flex items-center gap-2">
-                            <input type="number" id="payment-horas-diurnas" class="payment-horas-input w-20 border border-gray-300 rounded-lg p-3 text-center text-sm focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="0" min="0">
+                            <input type="number" id="payment-horas-diurnas" class="payment-horas-input w-20 border border-gray-300 rounded-lg p-3 text-center text-sm focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="0" min="0" step="any" value="0">
                             <span id="payment-total-horas" class="text-sm font-bold text-gray-600 font-mono flex-grow text-right bg-gray-50 p-3 rounded-lg border border-gray-200">$ 0</span>
                         </div>
                     </div>
@@ -5441,7 +5514,7 @@ function updatePaymentTotal() {
     const horasExtra = parseFloat(document.getElementById('payment-horas-diurnas').value) || 0;
     const valorHora = (salarioMensual / 235);
     const multiplicador = config.multiplicadorHoraExtra || 1.25;
-    const totalHorasExtra = (horasExtra * valorHora * multiplicador);
+    const totalHorasExtra = Math.round(horasExtra * valorHora * multiplicador);
 
     document.getElementById('payment-total-horas').textContent = currencyFormatter.format(totalHorasExtra);
 
@@ -5488,8 +5561,14 @@ async function handleRegisterPayment(e, userId) {
     
     // Función auxiliar para limpiar moneda
     const parseMoney = (idOrValue) => {
-        let val = typeof idOrValue === 'string' ? idOrValue : document.getElementById(idOrValue).value;
-        return parseFloat(val.replace(/[$. ]/g, '')) || 0;
+        let val = '';
+        if (typeof idOrValue === 'string') {
+            const el = document.getElementById(idOrValue);
+            val = el ? (el.value !== undefined ? el.value : el.textContent) : idOrValue;
+        } else if (idOrValue && typeof idOrValue === 'object') {
+            val = idOrValue.value !== undefined ? idOrValue.value : idOrValue.textContent;
+        }
+        return unformatCurrency(val);
     };
 
     try {
@@ -5506,8 +5585,13 @@ async function handleRegisterPayment(e, userId) {
         const auxTransporteProrrateado = (auxTransporteMensual / 30) * diasAuxTransporte;
 
         const otros = parseMoney('payment-otros');
-        // Aseguramos leer el texto del span de horas
-        const totalHorasExtra = parseMoney(document.getElementById('payment-total-horas').textContent); 
+        
+        // CÁLCULO DIRECTO Y EXACTO DE HORAS EXTRA
+        const cantHorasExtra = parseFloat(document.getElementById('payment-horas-diurnas')?.value) || 0;
+        const valorHora = (salarioMensual / 235);
+        const multiplicador = config.multiplicadorHoraExtra || 1.25;
+        const totalHorasExtra = Math.round(cantHorasExtra * valorHora * multiplicador);
+        
         const concepto = document.getElementById('payment-concepto').value;
 
         // 3. Préstamos
@@ -5594,6 +5678,7 @@ async function handleRegisterPayment(e, userId) {
                 diasAuxTransporte: diasAuxTransporte,
                 bonificacionM2: bonificacionPagada,
                 horasExtra: totalHorasExtra, 
+                cantHorasExtra: cantHorasExtra,
                 otros: otros, 
                 abonoPrestamos: totalLoanDeduction,
                 detallesPrestamos: loanPayments, 
@@ -5602,7 +5687,7 @@ async function handleRegisterPayment(e, userId) {
                 baseDeduccion: baseDeduccion, 
                 deduccionSobreMinimo: deduccionSobreMinimo
             },
-            horas: { totalHorasExtra: parseFloat(document.getElementById('payment-horas-diurnas').value) || 0 },
+            horas: { totalHorasExtra: cantHorasExtra },
             createdAt: serverTimestamp(),
             registeredBy: currentUserId,
             registeredByName: registeredByName
