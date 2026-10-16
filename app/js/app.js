@@ -1280,7 +1280,7 @@ function loadViewTemplates() {
                     <div class="border border-indigo-200 p-5 rounded-lg text-center bg-indigo-50/50 hover:bg-indigo-50 hover:shadow-md transition md:col-span-2">
                         <div class="text-4xl mb-3">🔄</div>
                         <h3 class="font-bold text-lg mb-1 text-slate-800">Sincronización y Actualización Forzada</h3>
-                        <p class="text-xs text-slate-500 mb-3 max-w-md mx-auto">Emite una señal en tiempo real a todos los dispositivos (celulares, tablets y computadores) para limpiar sus cachés y recargar inmediatamente la última versión del sistema (v3.2).</p>
+                        <p class="text-xs text-slate-500 mb-3 max-w-md mx-auto">Emite una señal en tiempo real a todos los dispositivos (celulares, tablets y computadores) para limpiar sus cachés y recargar inmediatamente la última versión del sistema (v${APP_VERSION}).</p>
                         <button id="btn-func-force-update" class="bg-indigo-650 hover:bg-indigo-755 text-white font-bold py-2.5 px-6 rounded-full transition shadow-sm text-xs flex items-center gap-2 mx-auto">
                             <i class="fa-solid fa-arrows-rotate"></i> Forzar Actualización en Todos los Dispositivos
                         </button>
