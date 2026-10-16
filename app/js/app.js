@@ -38,7 +38,7 @@ import { loadColores, setupColoresEvents, renderColores } from './modules/colore
 import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.4';
 import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.4';
 import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.4';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.4';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones, allCotizaciones } from './modules/cotizaciones.js?v=3.4';
 import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.4';
 import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.4';
 import { setupFacturacionEvents } from './modules/facturacion.js?v=3.4';
@@ -204,6 +204,19 @@ export function triggerGlobalAppUpdate(newVersion, forceTimestamp) {
     }, 1200);
 }
 
+function isVersionNewer(vRemote, vLocal) {
+    if (!vRemote || !vLocal) return false;
+    const rParts = String(vRemote).split('.').map(n => parseInt(n, 10) || 0);
+    const lParts = String(vLocal).split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(rParts.length, lParts.length); i++) {
+        const r = rParts[i] || 0;
+        const l = lParts[i] || 0;
+        if (r > l) return true;
+        if (r < l) return false;
+    }
+    return false;
+}
+
 export function initGlobalVersionWatcher() {
     if (versionUnsubscribe) return;
 
@@ -215,14 +228,24 @@ export function initGlobalVersionWatcher() {
             const forceTimestamp = Number(data.forceReloadTimestamp || 0);
             const lastAppliedForce = Number(localStorage.getItem('last_applied_force_reload') || 0);
 
-            if (remoteVersion && remoteVersion === APP_VERSION) {
+            // Si la versión local es igual o superior a la remota, remover banners y sincronizar si es admin
+            if (!isVersionNewer(remoteVersion, APP_VERSION)) {
                 sessionStorage.removeItem(RELOAD_ATTEMPTS_KEY);
                 sessionStorage.removeItem(LAST_RELOAD_TIME_KEY);
                 const existingBanner = document.getElementById('version-update-banner');
                 if (existingBanner) existingBanner.remove();
+
+                if (currentUserData && currentUserData.role === 'admin' && isVersionNewer(APP_VERSION, remoteVersion)) {
+                    console.log(`[VersionWatcher] Sincronizando appVersion en Firestore a ${APP_VERSION}...`);
+                    setDoc(doc(db, "config", "appVersion"), {
+                        currentVersion: APP_VERSION,
+                        minVersion: APP_VERSION,
+                        updatedAt: serverTimestamp()
+                    }, { merge: true }).catch(() => {});
+                }
             }
 
-            const isOutdated = remoteVersion && (remoteVersion !== APP_VERSION);
+            const isOutdated = remoteVersion && isVersionNewer(remoteVersion, APP_VERSION);
             const isForced = forceTimestamp > lastAppliedForce;
 
             if (isOutdated || isForced) {
@@ -269,6 +292,7 @@ export async function forceGlobalAppUpdate() {
 // --- MANEJO DE AUTENTICACIÓN ---
 let activeListeners = [];
 let prefetchTimeouts = [];
+const activePrefetches = new Map();
 
 export function unsubscribeAllListeners() {
     if (versionUnsubscribe) {
@@ -278,7 +302,9 @@ export function unsubscribeAllListeners() {
 
     prefetchTimeouts.forEach(t => clearTimeout(t));
     prefetchTimeouts = [];
-    activePrefetches.clear();
+    if (typeof activePrefetches !== 'undefined' && activePrefetches) {
+        activePrefetches.clear();
+    }
 
     activeListeners.forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
@@ -367,13 +393,13 @@ export function ensureViewTemplates() {
     loadViewTemplates();
 
     // Si ya llegaron datos en tiempo real mientras se inyectaba el DOM, renderizarlos de inmediato
-    if (Array.isArray(allRemisiones) && allRemisiones.length > 0) renderRemisiones();
-    if (Array.isArray(allGastos) && allGastos.length > 0) renderGastos();
-    if (Array.isArray(allCotizaciones) && allCotizaciones.length > 0) renderCotizaciones();
-    if (Array.isArray(allItems) && allItems.length > 0) renderItems();
-    if (Array.isArray(allClientes) && allClientes.length > 0) renderClientes();
-    if (Array.isArray(allProveedores) && allProveedores.length > 0) renderProveedores();
-    if (Array.isArray(allColores) && allColores.length > 0) renderColores();
+    if (typeof allRemisiones !== 'undefined' && Array.isArray(allRemisiones) && allRemisiones.length > 0) renderRemisiones();
+    if (typeof allGastos !== 'undefined' && Array.isArray(allGastos) && allGastos.length > 0) renderGastos();
+    if (typeof allCotizaciones !== 'undefined' && Array.isArray(allCotizaciones) && allCotizaciones.length > 0) renderCotizaciones();
+    if (typeof allItems !== 'undefined' && Array.isArray(allItems) && allItems.length > 0) renderItems();
+    if (typeof allClientes !== 'undefined' && Array.isArray(allClientes) && allClientes.length > 0) renderClientes();
+    if (typeof allProveedores !== 'undefined' && Array.isArray(allProveedores) && allProveedores.length > 0) renderProveedores();
+    if (typeof allColores !== 'undefined' && Array.isArray(allColores) && allColores.length > 0) renderColores();
 }
 
 function initAuthFormListeners() {
@@ -1896,8 +1922,6 @@ function saveUrlCache(cache) {
         if (dirty) saveUrlCache(cache);
     } catch(e) {}
 })();
-
-const activePrefetches = new Map();
 
 // Resolver enlace de Storage (con pool de promesas y caché inteligente)
 export function invalidateFileCache(filePath) {

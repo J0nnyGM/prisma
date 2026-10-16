@@ -70,6 +70,9 @@ export async function showDashboardModal() {
     const hasRealBalances = Object.keys(initialBalances).some(key => METODOS_DE_PAGO.includes(key));
     let initialBalanceButtonHTML = !hasRealBalances ? `<button id="set-initial-balance-btn" class="bg-slate-650 hover:bg-indigo-755 text-white text-xs font-bold py-2 px-3 sm:text-sm sm:py-2 sm:px-4 rounded-xl transition-colors whitespace-nowrap shadow-xs">Saldos Iniciales</button>` : '';
 
+    const isAdmin = currentUserData && currentUserData.role === 'admin';
+    const rebuildButtonHTML = isAdmin ? `<button id="rebuild-stats-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1.5 px-3 rounded-xl transition-colors whitespace-nowrap shadow-xs flex items-center gap-1 active:scale-95" title="Recalcular estadísticas y sincronizar saldos"><i class="fa-solid fa-rotate text-indigo-600"></i><span>Recalcular</span></button>` : '';
+
     const saldosHTML = METODOS_DE_PAGO.map(metodo => `
         <div class="bg-slate-50 border border-slate-100 p-3 sm:p-4 rounded-xl shadow-xs">
             <div class="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">${metodo.toUpperCase()}</div>
@@ -89,6 +92,7 @@ export async function showDashboardModal() {
             </div>
             <div class="flex items-center gap-1.5 flex-wrap w-full md:w-auto justify-start md:justify-end">
                 ${initialBalanceButtonHTML}
+                ${rebuildButtonHTML}
                 <button id="show-transfer-modal-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl transition-colors whitespace-nowrap shadow-xs flex items-center gap-1 active:scale-95"><i class="fa-solid fa-arrow-right-arrow-left"></i><span>Transferir Fondos</span></button>
                 <button id="download-report-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white text-xs font-bold py-1.5 px-3 rounded-xl transition-colors whitespace-nowrap shadow-xs flex items-center gap-1 active:scale-95"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>
                 <button id="close-dashboard-modal-desktop" class="text-gray-500 hover:text-gray-800 text-3xl hidden md:block ml-2">&times;</button>
@@ -273,6 +277,35 @@ export async function showDashboardModal() {
 
     const initialBalanceBtn = document.getElementById('set-initial-balance-btn');
     if (initialBalanceBtn) initialBalanceBtn.addEventListener('click', showInitialBalanceModal);
+
+    const rebuildStatsBtn = document.getElementById('rebuild-stats-btn');
+    if (rebuildStatsBtn) {
+        rebuildStatsBtn.addEventListener('click', async () => {
+            if (!confirm("¿Deseas recalcular todas las estadísticas y sincronizar los saldos? Esto analizará todas las remisiones y gastos activos, corrigiendo de raíz cualquier desfase ocasionado por gastos eliminados.")) return;
+            
+            showModalMessage("Recalculando estadísticas históricas...", true);
+            try {
+                const rebuildFn = httpsCallable(functions, 'rebuildMonthlyStats');
+                await rebuildFn();
+                
+                // Limpiar cachés locales para forzar sincronización limpia
+                localStorage.removeItem('gastos_cache');
+                localStorage.removeItem('gastos_last_sync');
+                localStorage.removeItem('remisiones_cache');
+                localStorage.removeItem('remisiones_last_sync');
+                
+                hideModal();
+                showTemporaryMessage("¡Saldos y estadísticas recalculados con éxito!", "success");
+                
+                // Recargar dashboard con los nuevos datos
+                await showDashboardModal();
+            } catch (err) {
+                console.error("Error al recalcular estadísticas:", err);
+                hideModal();
+                showModalMessage("Error al recalcular: " + (err.message || err));
+            }
+        });
+    }
 
     const downloadBtn = document.getElementById('download-report-btn');
     if (downloadBtn) downloadBtn.addEventListener('click', showReportDateRangeModal);

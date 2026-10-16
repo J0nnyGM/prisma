@@ -214,17 +214,17 @@ export function renderCotizaciones() {
         else if (esAprobada) cardColorClass = 'premium-card-green';
         else if (esConvertida) cardColorClass = 'premium-card-purple';
 
-        el.className = `premium-card ${cardColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition`;
+        el.className = `premium-card ${cardColorClass} p-3.5 sm:p-5 bg-white shadow-xs hover:shadow-md transition flex flex-col gap-3 rounded-2xl border border-slate-200/90 text-left`;
 
         const statusClasses = {
-            'Pendiente': 'status-recibido',
-            'Aprobada': 'status-entregado',
-            'Convertida': 'status-procesado',
-            'Rechazada': 'status-anulada',
-            'Archivada': 'status-en-proceso'
+            'Pendiente': 'bg-amber-100/80 text-amber-900 border-amber-300',
+            'Aprobada': 'bg-emerald-100/80 text-emerald-900 border-emerald-300',
+            'Convertida': 'bg-purple-100/80 text-purple-900 border-purple-300',
+            'Rechazada': 'bg-rose-100/80 text-rose-900 border-rose-300',
+            'Archivada': 'bg-slate-100/80 text-slate-800 border-slate-300'
         };
 
-        const statusBadge = `<span class="status-badge ${statusClasses[c.estado] || 'status-recibido'}">${c.estado}</span>`;
+        const statusBadge = `<span class="inline-flex items-center text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusClasses[c.estado] || 'bg-slate-100 text-slate-800 border-slate-200'}">${c.estado}</span>`;
         const itemsCount = Array.isArray(c.items) ? c.items.length : 0;
 
         let remisionBadge = '';
@@ -243,35 +243,90 @@ export function renderCotizaciones() {
             versionBadge = `<button data-id="${c.id}" class="version-history-btn bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-sky-200 transition flex items-center gap-1 shadow-xs" title="Ver historial de versiones"><i class="fa-solid fa-clock-rotate-left text-[10px]"></i> v${c.version || 1} (${prevCount} previa${prevCount !== 1 ? 's' : ''})</button>`;
         }
 
-        const pdfButton = `<button data-id="${c.id}" class="pdf-cot-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition text-center shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>`;
-        const editButton = esConvertida ? '' : `<button data-id="${c.id}" class="edit-cot-btn w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-pen-to-square"></i><span>Editar</span></button>`;
-        const escalarButton = esConvertida ? '' : `<button data-id="${c.id}" class="escalar-cot-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-rocket text-amber-300"></i><span>Escalar</span></button>`;
-        const opcionesButton = `<button data-id="${c.id}" class="options-cot-btn w-full bg-slate-800 hover:bg-slate-900 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-ellipsis-vertical"></i><span>Opciones</span></button>`;
+        // Resumen detallado de productos e ítems cotizados
+        let itemsHtml = '';
+        if (Array.isArray(c.items) && c.items.length > 0) {
+            const totalPiezas = c.items.reduce((sum, it) => sum + (Number(it.cantidad) || 0), 0);
+            const itemsListText = c.items.map(it => {
+                const cant = it.cantidad || 1;
+                const desc = it.descripcion || it.referencia || 'Ítem';
+                const col = it.color ? ` (${it.color})` : '';
+                return `<b class="text-slate-800">${cant}x</b> ${desc}${col}`;
+            }).join(' <span class="text-slate-300">&bull;</span> ');
+
+            itemsHtml = `
+                <div class="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 text-xs">
+                    <div class="flex items-center justify-between text-slate-700 font-bold pb-1 mb-1 border-b border-slate-200/50">
+                        <span class="flex items-center gap-1.5 text-indigo-700">
+                            <i class="fa-solid fa-boxes-stacked text-[11px]"></i>
+                            <span>${itemsCount} ${itemsCount === 1 ? 'producto' : 'productos'} (${totalPiezas} piezas)</span>
+                        </span>
+                        ${c.observaciones ? `<span class="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title="${c.observaciones}"><i class="fa-regular fa-comment-dots"></i> Términos</span>` : ''}
+                    </div>
+                    <div class="text-[11px] text-slate-600 font-medium line-clamp-2 leading-relaxed">
+                        ${itemsListText}
+                    </div>
+                </div>
+            `;
+        }
+
+        const pdfButton = `<button data-id="${c.id}" class="pdf-cot-btn flex-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-xl text-xs font-bold transition shadow-2xs text-center flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-file-pdf text-emerald-600"></i><span>PDF</span></button>`;
+        const editButton = esConvertida ? '' : `<button data-id="${c.id}" class="edit-cot-btn flex-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition shadow-2xs text-center flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-pen-to-square text-slate-500"></i><span>Editar</span></button>`;
+        const escalarButton = esConvertida ? '' : `<button data-id="${c.id}" class="escalar-cot-btn w-full bg-[#de7518] hover:bg-[#c96310] text-white py-2.5 px-4 rounded-xl text-xs font-extrabold transition shadow-xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-rocket text-amber-300"></i><span>Escalar a Remisión</span></button>`;
+        const opcionesButton = `<button data-id="${c.id}" class="options-cot-btn bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition shadow-2xs text-center active:scale-95 flex items-center justify-center" title="Más Opciones"><i class="fa-solid fa-ellipsis-vertical"></i></button>`;
 
         el.innerHTML = `
-            <div class="flex-grow min-w-0 text-left">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="remision-id font-bold text-slate-800">COT-${c.numeroCotizacion}</span>
-                    <p class="font-bold text-base sm:text-lg text-slate-900 truncate" title="${c.clienteNombre || 'Sin Cliente'}">${c.clienteNombre || 'Sin Cliente'}</p>
+            <!-- Cabecera de la Cotización -->
+            <div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="inline-flex items-center bg-slate-900 text-white font-black text-xs px-2.5 py-1 rounded-lg tracking-wider shadow-2xs">
+                        COT-${c.numeroCotizacion}
+                    </span>
+                    <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                        ${statusBadge}
+                        ${remisionBadge}
+                        ${versionBadge}
+                        ${c.archivada ? '<span class="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-extrabold border border-slate-300 rounded-full">ARCHIVADA</span>' : ''}
+                    </div>
                 </div>
-                <div class="flex items-center gap-1.5 flex-wrap mt-1">
-                    ${statusBadge} ${remisionBadge} ${versionBadge}
-                    ${c.archivada ? '<span class="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-extrabold border border-slate-300 rounded-full">ARCHIVADA</span>' : ''}
+
+                <!-- Nombre del Cliente y Contacto -->
+                <div class="mt-2">
+                    <h3 class="font-extrabold text-base sm:text-lg text-slate-900 leading-snug break-words">
+                        ${c.clienteNombre || 'Sin Cliente'}
+                    </h3>
+                    ${c.clienteTelefono ? `
+                        <p class="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
+                            <i class="fa-solid fa-phone text-[10px] text-slate-400"></i> ${c.clienteTelefono}
+                            ${c.clienteNit ? `<span class="text-slate-300">&bull;</span><span>NIT: ${c.clienteNit}</span>` : ''}
+                        </p>
+                    ` : ''}
                 </div>
-                <p class="text-[11px] sm:text-xs text-slate-500 mt-2 font-medium">
-                    Fecha: ${c.fecha || 'N/A'} &bull; Validez: ${c.validez || 15} días &bull; ${itemsCount} ítem${itemsCount !== 1 ? 's' : ''}
-                    ${c.clienteTelefono ? `&bull; Tel: ${c.clienteTelefono}` : ''}
-                </p>
-                <p class="text-xs text-slate-600 mt-1 font-semibold">
-                    Monto Total: <span class="text-sm font-extrabold text-indigo-650">${formatCurrency(c.valorTotal || 0)}</span>
-                    ${c.incluyeIVA ? '<span class="text-[10px] text-slate-400 font-bold ml-1">(IVA Incluido)</span>' : ''}
-                </p>
             </div>
-            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 flex-shrink-0 w-full sm:max-w-xs mt-1 sm:mt-2 lg:mt-0">
-                ${pdfButton}
+
+            <!-- Resumen de Productos / Ítems -->
+            ${itemsHtml}
+
+            <!-- Fila Financiera y de Fechas -->
+            <div class="flex items-center justify-between text-xs pt-1 flex-wrap gap-1">
+                <span class="text-slate-400 font-medium text-[11px]">
+                    <i class="fa-regular fa-calendar-days text-[11px] mr-1 text-slate-400"></i>${c.fecha || 'N/A'} &bull; Validez: ${c.validez || 15} días
+                </span>
+                <div class="text-right">
+                    <span class="text-slate-500 text-[11px] mr-1">Total:</span>
+                    <span class="text-sm font-extrabold text-indigo-650">${formatCurrency(c.valorTotal || 0)}</span>
+                    ${c.incluyeIVA ? '<span class="text-[10px] text-slate-400 font-bold ml-1">(IVA)</span>' : ''}
+                </div>
+            </div>
+
+            <!-- Acciones Ergonómicas -->
+            <div class="space-y-2 pt-1 border-t border-slate-100/80">
                 ${escalarButton}
-                ${editButton}
-                ${opcionesButton}
+                <div class="flex items-center gap-2">
+                    ${pdfButton}
+                    ${editButton}
+                    ${opcionesButton}
+                </div>
             </div>
         `;
         listEl.appendChild(el);

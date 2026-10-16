@@ -582,6 +582,17 @@ body {
     }
 }
 
+/* Utilidad para ocultar barras de scroll nativas en contenedores deslizables (filtros horizontales) */
+.scrollbar-none::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+.scrollbar-none {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+}
+
 /* Premium Card, Avatar and Pagination Styles */
 .premium-card {
     background: #ffffff !important;
@@ -591,12 +602,19 @@ body {
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
     position: relative !important;
     overflow: hidden !important;
-    padding-left: 1.5rem !important; /* Deja espacio para la barra de color */
+    padding-left: 1.25rem !important;
+}
+
+@media (max-width: 639px) {
+    .premium-card {
+        padding: 0.875rem 0.875rem 0.875rem 1.1rem !important;
+        border-radius: 0.875rem !important;
+    }
 }
 
 .premium-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 12px 24px -10px rgba(222, 117, 24, 0.12), 0 4px 8px -2px rgba(222, 117, 24, 0.04) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 20px -8px rgba(222, 117, 24, 0.12), 0 4px 6px -2px rgba(222, 117, 24, 0.03) !important;
     border-color: #cbd5e1 !important;
 }
 
