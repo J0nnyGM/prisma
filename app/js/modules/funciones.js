@@ -26,7 +26,7 @@ export function setupFuncionesEvents() {
 
     if (forceUpdateBtn) {
         forceUpdateBtn.addEventListener('click', async () => {
-            const { forceGlobalAppUpdate } = await import('../app.js?v=3.2');
+            const { forceGlobalAppUpdate } = await import('../app.js?v=3.4');
             forceGlobalAppUpdate();
         });
     }

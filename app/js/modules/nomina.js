@@ -578,25 +578,25 @@ function renderNominaSkeleton() {
         <div class="max-w-7xl mx-auto space-y-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
-                    <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                        <span class="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-500 text-white shadow-md">
+                    <h1 class="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                        <span class="p-1.5 sm:p-2 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-500 text-white shadow-md text-base sm:text-xl">
                             <i class="fa-solid fa-money-check-dollar"></i>
                         </span>
                         Gestión de Nómina y Prestaciones
                     </h1>
                     <p class="text-xs font-semibold text-slate-400 mt-1">Cálculo contable, prestaciones sociales colombianas, liquidación de contratos y deudas de RRHH.</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2.5">
-                    <div class="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-sm shrink-0">
                         <label for="nomina-month-selector" class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Mes Contable</label>
                         <input type="month" id="nomina-month-selector" value="${selectedNominaMonthYear}" 
-                            class="border-0 p-0 text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer outline-none w-32">
+                            class="border-0 p-0 text-xs sm:text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer outline-none w-32">
                     </div>
                     <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm shrink-0" id="nomina-quincena-selector-group">
-                        <button type="button" data-quincena="1" class="btn-toggle-quincena px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 1 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                        <button type="button" data-quincena="1" class="btn-toggle-quincena px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 1 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
                             1ª Qna (1-15)
                         </button>
-                        <button type="button" data-quincena="2" class="btn-toggle-quincena px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 2 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                        <button type="button" data-quincena="2" class="btn-toggle-quincena px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedNominaQuincenaNum === 2 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
                             2ª Qna (16-fin)
                         </button>
                     </div>
@@ -604,15 +604,15 @@ function renderNominaSkeleton() {
             </div>
             
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-1.5 overflow-hidden">
-                <nav id="nomina-subtabs-nav" class="flex flex-wrap md:flex-nowrap gap-1">
-                    <button data-tab="nomina_quincenal" class="nomina-subtab-btn flex-1 py-3 px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2">
+                <nav id="nomina-subtabs-nav" class="flex overflow-x-auto scrollbar-none md:flex-nowrap gap-1">
+                    <button data-tab="nomina_quincenal" class="nomina-subtab-btn shrink-0 md:flex-1 py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2 whitespace-nowrap">
                         <i class="fa-solid fa-money-bill-wave text-base"></i> Nómina Quincenal
                     </button>
-                    <button data-tab="gestion_prestamos" class="nomina-subtab-btn flex-1 py-3 px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2 relative">
+                    <button data-tab="gestion_prestamos" class="nomina-subtab-btn shrink-0 md:flex-1 py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2 whitespace-nowrap relative">
                         <i class="fa-solid fa-hand-holding-dollar text-base"></i> Gestión de Préstamos
                         <span id="nomina-loan-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full h-5 w-5 flex items-center justify-center border-2 border-white shadow-sm"></span>
                     </button>
-                    <button data-tab="historial_pagos" class="nomina-subtab-btn flex-1 py-3 px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2">
+                    <button data-tab="historial_pagos" class="nomina-subtab-btn shrink-0 md:flex-1 py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-bold text-xs uppercase tracking-wider text-center transition-all duration-200 flex items-center justify-center gap-2 whitespace-nowrap">
                         <i class="fa-solid fa-clock-rotate-left text-base"></i> Historial Global
                     </button>
                 </nav>
@@ -740,7 +740,7 @@ async function loadNominaQuincenalTab(container) {
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-150 animate-pulse h-24"></div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4 pb-4 border-b border-slate-100">
                     <div class="flex items-center gap-3 w-full md:w-auto">
                         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">

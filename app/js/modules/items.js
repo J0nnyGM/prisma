@@ -150,16 +150,16 @@
 
                     paginatedItems.forEach(item => {
                         const itemDiv = document.createElement('div');
-                        itemDiv.className = 'premium-card premium-card-indigo p-4 flex justify-between items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
+                        itemDiv.className = 'premium-card premium-card-indigo p-3.5 sm:p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-white shadow-sm hover:shadow-md transition';
 
                         const precioProm = item.precioPromedioVenta ? formatCurrency(item.precioPromedioVenta) : 'Sin ventas';
                         const totalVend = item.totalVendidos || 0;
 
                         itemDiv.innerHTML = `
                             <div class="min-w-0 flex-grow">
-                                <div class="flex items-center gap-3 flex-wrap mb-1.5">
+                                <div class="flex items-center gap-2 sm:gap-3 flex-wrap mb-1.5">
                                     <span class="item-ref bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-indigo-150">${item.referencia}</span>
-                                    <span class="text-sm font-bold text-slate-800">${item.descripcion}</span>
+                                    <span class="text-sm font-bold text-slate-800 break-words">${item.descripcion}</span>
                                 </div>
                                 <div class="flex items-center gap-2 flex-wrap text-xs">
                                     <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200" title="Precio de venta promedio ponderado">
@@ -168,7 +168,7 @@
                                     ${totalVend > 0 ? `<span class="bg-slate-100 text-slate-600 font-semibold px-2 py-1 rounded-lg text-[11px]">${totalVend} unid. vendidas</span>` : ''}
                                 </div>
                             </div>
-                            <div class="flex-shrink-0">
+                            <div class="flex-shrink-0 self-end sm:self-center">
                                 <button data-item-json='${JSON.stringify(item)}' class="edit-item-btn btn-premium-outline px-3.5 py-1.5 rounded-lg text-xs hover:bg-slate-50 transition font-bold">
                                     Editar Ítem
                                 </button>
@@ -178,7 +178,7 @@
                     });
 
                     const paginationEl = document.createElement('div');
-                    paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+                    paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-6';
                     paginationEl.innerHTML = `
                         <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItemsCount)} de ${totalItemsCount} ítems</span>
                         <div class="flex gap-2">

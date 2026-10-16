@@ -1,6 +1,6 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
-export const APP_VERSION = '3.3';
+export const APP_VERSION = '3.4';
 
 // --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
 export const APP_CACHE_KEYS = [
@@ -31,19 +31,19 @@ import { auth, db, storage, functions, analytics, httpsCallable } from './fireba
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
 
-import { loadClientes, setupClientesEvents } from './modules/clientes.js?v=3.3';
-import { loadProveedores, setupProveedoresEvents } from './modules/proveedores.js?v=3.3';
-import { loadItems, setupItemsEvents } from './modules/items.js?v=3.3';
-import { loadColores, setupColoresEvents } from './modules/colores.js?v=3.3';
-import { loadGastos, setupGastosEvents } from './modules/gastos.js?v=3.3';
-import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.3';
-import { loadRemisiones, setupRemisionesEvents } from './modules/remisiones.js?v=3.3';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.3';
-import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.3';
-import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.3';
-import { setupFacturacionEvents } from './modules/facturacion.js?v=3.3';
-import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.3';
-import { setupFuncionesEvents } from './modules/funciones.js?v=3.3';
+import { loadClientes, setupClientesEvents, renderClientes } from './modules/clientes.js?v=3.4';
+import { loadProveedores, setupProveedoresEvents, renderProveedores } from './modules/proveedores.js?v=3.4';
+import { loadItems, setupItemsEvents, renderItems } from './modules/items.js?v=3.4';
+import { loadColores, setupColoresEvents, renderColores } from './modules/colores.js?v=3.4';
+import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.4';
+import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.4';
+import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.4';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones } from './modules/cotizaciones.js?v=3.4';
+import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.4';
+import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.4';
+import { setupFacturacionEvents } from './modules/facturacion.js?v=3.4';
+import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.4';
+import { setupFuncionesEvents } from './modules/funciones.js?v=3.4';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { doc, getDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -360,9 +360,25 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. INYECTAR EL HTML ANTES DE HACER NADA
+let areTemplatesLoaded = false;
+export function ensureViewTemplates() {
+    if (areTemplatesLoaded) return;
+    areTemplatesLoaded = true;
     loadViewTemplates();
+
+    // Si ya llegaron datos en tiempo real mientras se inyectaba el DOM, renderizarlos de inmediato
+    if (Array.isArray(allRemisiones) && allRemisiones.length > 0) renderRemisiones();
+    if (Array.isArray(allGastos) && allGastos.length > 0) renderGastos();
+    if (Array.isArray(allCotizaciones) && allCotizaciones.length > 0) renderCotizaciones();
+    if (Array.isArray(allItems) && allItems.length > 0) renderItems();
+    if (Array.isArray(allClientes) && allClientes.length > 0) renderClientes();
+    if (Array.isArray(allProveedores) && allProveedores.length > 0) renderProveedores();
+    if (Array.isArray(allColores) && allColores.length > 0) renderColores();
+}
+
+function initAuthFormListeners() {
+    if (window.__authFormListenersInit) return;
+    window.__authFormListenersInit = true;
 
     if(loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
     if(registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
@@ -378,9 +394,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const logoutDeniedBtn = document.getElementById('logout-denied-user');
     if(logoutDeniedBtn) logoutDeniedBtn.addEventListener('click', () => signOut(auth));
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        ensureViewTemplates();
+        initAuthFormListeners();
+    });
+} else {
+    ensureViewTemplates();
+    initAuthFormListeners();
+}
 
 function startApp() {
+    ensureViewTemplates();
     if (isAppInitialized) return;
     isAppInitialized = true;
 
@@ -583,102 +610,107 @@ function loadViewTemplates() {
                 </div>
             </div>
             
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-2">
                 <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Historial de Remisiones</h1>
-                    <p class="text-xs font-semibold text-slate-450 mt-1">Genera, imprime y realiza el seguimiento de las remisiones y abonos de clientes.</p>
+                    <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Historial de Remisiones</h1>
+                    <p class="hidden sm:block text-xs font-semibold text-slate-450 mt-1">Genera, imprime y realiza el seguimiento de las remisiones y abonos de clientes.</p>
                 </div>
-                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                    <div class="flex items-center gap-2 w-full sm:w-auto bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-                        <select id="filter-remisiones-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
-                        <span class="text-slate-300 font-light">|</span>
-                        <select id="filter-remisiones-year" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
-                    </div>
-                    <div class="relative flex-grow sm:flex-grow-0 w-full sm:w-auto">
-                        <input type="search" id="search-remisiones" placeholder="Buscar cliente o remisión..." class="w-full sm:w-60 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
-                        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>
-                    <div class="flex gap-2 flex-shrink-0">
-                        <button id="btn-pending-payments" class="relative bg-amber-500 text-white w-10 h-10 rounded-full hover:bg-amber-600 hidden transition-all shadow-md flex items-center justify-center" title="Pagos por Confirmar">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs flex-grow sm:flex-grow-0">
+                            <select id="filter-remisiones-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
+                            <span class="text-slate-300 font-light">|</span>
+                            <select id="filter-remisiones-year" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
+                        </div>
+                        <button id="btn-pending-payments" class="relative bg-amber-500 text-white w-9 h-9 rounded-xl hover:bg-amber-600 hidden transition-all shadow-xs flex items-center justify-center shrink-0 active:scale-95" title="Pagos por Confirmar">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1m-4.5 9h11a2 2 0 002-2v-1a2 2 0 00-2-2h-1.5M7.5 17H4a2 2 0 01-2-2v-1a2 2 0 012-2h1.5"></path>
                             </svg>
-                            <span id="badge-pending-payments" class="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow border border-white">0</span>
+                            <span id="badge-pending-payments" class="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow border border-white">0</span>
                         </button>
-                        <button id="mobile-add-remision-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5">
+                        <button id="mobile-add-remision-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-3.5 sm:px-5 rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 flex-grow sm:flex-grow-0 shrink-0 active:scale-95">
                             <span class="text-base font-medium leading-none">+</span> Nueva Remisión
                         </button>
+                    </div>
+                    <div class="relative w-full sm:w-60">
+                        <input type="search" id="search-remisiones" placeholder="Buscar cliente o remisión..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs transition">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
                 </div>
             </div>
 
             <!-- Filtros de Remisiones (Por Estado y Por Pago) -->
-            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+            <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-100 shadow-xs space-y-2.5">
                 <!-- Filtros por Estado de Remisión -->
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span class="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[70px] flex-shrink-0">Estado:</span>
-                    <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
-                        <button data-filter="todas" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                    <span class="text-[10px] sm:text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[60px] sm:min-w-[70px] flex-shrink-0">Estado:</span>
+                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                        <button data-filter="todas" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
                             <span>Todos</span>
-                            <span class="filter-count-rem bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-filter="Recibido" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-inbox text-amber-500 text-[11px]"></i>
+                        <button data-filter="Recibido" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-inbox text-amber-500 text-[10px] sm:text-[11px]"></i>
                             <span>Recibido</span>
-                            <span class="filter-count-rem bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-filter="En Proceso" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-blue-700 hover:bg-blue-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-gears text-blue-500 text-[11px]"></i>
+                        <button data-filter="En Proceso" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-blue-700 hover:bg-blue-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-gears text-blue-500 text-[10px] sm:text-[11px]"></i>
                             <span>En Proceso</span>
-                            <span class="filter-count-rem bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-filter="Procesado" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-check text-purple-500 text-[11px]"></i>
+                        <button data-filter="Procesado" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-check text-purple-500 text-[10px] sm:text-[11px]"></i>
                             <span>Procesado</span>
-                            <span class="filter-count-rem bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-filter="Entregado" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-truck text-emerald-500 text-[11px]"></i>
+                        <button data-filter="Entregado" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-truck text-emerald-500 text-[10px] sm:text-[11px]"></i>
                             <span>Entregado</span>
-                            <span class="filter-count-rem bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-filter="Anulada" class="remision-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-rose-700 hover:bg-rose-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-ban text-rose-500 text-[11px]"></i>
+                        <button data-filter="Anulada" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-rose-700 hover:bg-rose-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-ban text-rose-500 text-[10px] sm:text-[11px]"></i>
                             <span>Anuladas</span>
-                            <span class="filter-count-rem bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-rem bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Filtros por Estado de Pago -->
-                <div class="border-t border-slate-100 pt-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span class="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[70px] flex-shrink-0">Pago:</span>
-                    <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
-                        <button data-payment-filter="todos" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
+                <div class="border-t border-slate-100 pt-2 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                    <span class="text-[10px] sm:text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[60px] sm:min-w-[70px] flex-shrink-0">Pago:</span>
+                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                        <button data-payment-filter="todos" class="payment-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
                             <span>Todos</span>
-                            <span class="filter-count-pay bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-pay bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-payment-filter="Pendiente" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-clock text-amber-500 text-[11px]"></i>
+                        <button data-payment-filter="Pendiente" class="payment-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-amber-700 hover:bg-amber-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-clock text-amber-500 text-[10px] sm:text-[11px]"></i>
                             <span>Pendientes</span>
-                            <span class="filter-count-pay bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-pay bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-payment-filter="Abono" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-hand-holding-dollar text-purple-500 text-[11px]"></i>
+                        <button data-payment-filter="Abono" class="payment-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-hand-holding-dollar text-purple-500 text-[10px] sm:text-[11px]"></i>
                             <span>Con Abono</span>
-                            <span class="filter-count-pay bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-pay bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
-                        <button data-payment-filter="Pagado" class="payment-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
-                            <i class="fa-solid fa-circle-check text-emerald-500 text-[11px]"></i>
+                        <button data-payment-filter="Pagado" class="payment-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-circle-check text-emerald-500 text-[10px] sm:text-[11px]"></i>
                             <span>Pagados</span>
-                            <span class="filter-count-pay bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
+                            <span class="filter-count-pay bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div id="remisiones-list-container" class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="remisiones-list" class="space-y-4"></div>
+            <div id="remisiones-list-container" class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <div id="remisiones-list" class="space-y-3 sm:space-y-4">
+                    <div id="remisiones-loading-indicator" class="flex flex-col items-center justify-center py-12 text-slate-400">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500"></i>
+                        <p class="text-xs font-semibold text-slate-500">Cargando remisiones...</p>
+                    </div>
+                </div>
             </div>
         </div>`;
     }
@@ -986,34 +1018,32 @@ function loadViewTemplates() {
                 </div>
             </div>
             
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-2">
                 <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Historial de Gastos</h1>
-                    <p class="text-xs font-semibold text-slate-450 mt-1">Registra y controla los egresos y gastos operativos de la empresa.</p>
+                    <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Historial de Gastos</h1>
+                    <p class="hidden sm:block text-xs font-semibold text-slate-450 mt-1">Registra y controla los egresos y gastos operativos de la empresa.</p>
                 </div>
-                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                    <div class="flex items-center gap-2 w-full sm:w-auto bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-                        <select id="filter-gastos-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
-                        <span class="text-slate-300 font-light">|</span>
-                        <select id="filter-gastos-year" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
-                    </div>
-                    
-                    <div class="relative flex-grow sm:flex-grow-0 w-full sm:w-auto">
-                        <input type="search" id="search-gastos" placeholder="Buscar gasto..." class="w-full sm:w-60 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm transition">
-                        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>
-
-                    <div class="flex gap-2 flex-shrink-0">
-                        <button id="view-deleted-gastos-btn" class="bg-red-50 text-red-600 w-10 h-10 rounded-full hover:bg-red-100 flex items-center justify-center border border-red-100 shadow-sm transition" title="Ver Papelera de Gastos">🗑️</button>
-                        <button id="sync-gastos-btn" class="bg-slate-50 text-slate-700 w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center border border-slate-100 shadow-sm transition" title="Forzar Sincronización">↻</button>
-                        <button id="mobile-add-gasto-btn" class="bg-orange-650 hover:bg-orange-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs flex-grow sm:flex-grow-0">
+                            <select id="filter-gastos-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
+                            <span class="text-slate-300 font-light">|</span>
+                            <select id="filter-gastos-year" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
+                        </div>
+                        <button id="view-deleted-gastos-btn" class="bg-red-50 text-red-600 w-9 h-9 rounded-xl hover:bg-red-100 flex items-center justify-center border border-red-100 shadow-xs transition shrink-0 active:scale-95" title="Ver Papelera de Gastos">🗑️</button>
+                        <button id="sync-gastos-btn" class="bg-slate-50 text-slate-700 w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center border border-slate-100 shadow-xs transition shrink-0 active:scale-95" title="Forzar Sincronización">↻</button>
+                        <button id="mobile-add-gasto-btn" class="bg-orange-650 hover:bg-orange-755 text-white font-extrabold py-2 px-3.5 sm:px-5 rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 flex-grow sm:flex-grow-0 shrink-0 active:scale-95">
                             <span class="text-base font-medium leading-none">+</span> Nuevo Gasto
                         </button>
+                    </div>
+                    <div class="relative w-full sm:w-60">
+                        <input type="search" id="search-gastos" placeholder="Buscar gasto..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-xs transition">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
                 <div id="gastos-list" class="space-y-3"></div>
             </div>
         </div>`;
@@ -1258,15 +1288,32 @@ function updateUIVisibility(userData) {
     const loanReqBtn = document.getElementById('loan-request-btn');
     if(loanReqBtn) loanReqBtn.style.display = isAdmin ? 'none' : 'block';
 
-    // Control de botones en el Menú Móvil (Mi Cuenta)
+    // Control de botones en el Menú Móvil (Mi Cuenta) y Header Móvil
     const mobileSummaryBtn = document.getElementById('mobile-summary-btn');
     if(mobileSummaryBtn) mobileSummaryBtn.style.display = isAdmin ? 'flex' : 'none';
+
+    const mobileHeaderSummaryBtn = document.getElementById('mobile-header-summary-btn');
+    if(mobileHeaderSummaryBtn) mobileHeaderSummaryBtn.classList.toggle('hidden', !isAdmin);
 
     const mobileLoansBtn = document.getElementById('mobile-loans-btn');
     if(mobileLoansBtn) mobileLoansBtn.style.display = isAdmin ? 'flex' : 'none';
 
     const mobileLoanReqBtn = document.getElementById('mobile-loan-request-btn');
     if(mobileLoanReqBtn) mobileLoanReqBtn.style.display = isAdmin ? 'none' : 'flex';
+
+    // Actualizar datos del usuario en la cabecera del Menú Móvil
+    const mobileUserName = document.getElementById('mobile-menu-user-name');
+    const mobileUserRole = document.getElementById('mobile-menu-user-role');
+    const mobileUserAvatar = document.getElementById('mobile-menu-user-avatar');
+    if (mobileUserName && (userData.firstName || userData.lastName)) {
+        mobileUserName.textContent = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+    }
+    if (mobileUserRole && userData.role) {
+        mobileUserRole.textContent = userData.role;
+    }
+    if (mobileUserAvatar && userData.firstName) {
+        mobileUserAvatar.textContent = (userData.firstName[0] || 'U').toUpperCase();
+    }
 
     // Módulos específicos según rol
     const isPlanta = userData.role?.toLowerCase() === 'planta';
@@ -1469,8 +1516,10 @@ function setupEventListeners() {
         }
     });
 
-    // Conectar los botones del menú móvil a sus funciones principales
+    // Conectar los botones del menú móvil y header móvil a sus funciones principales
     document.getElementById('mobile-summary-btn')?.addEventListener('click', () => { closeMobileMenu(); showDashboardModal(); });
+    document.getElementById('mobile-header-summary-btn')?.addEventListener('click', showDashboardModal);
+    document.getElementById('mobile-menu-close-btn')?.addEventListener('click', closeMobileMenu);
     document.getElementById('mobile-edit-profile-btn')?.addEventListener('click', () => { closeMobileMenu(); showEditProfileModal(); });
     document.getElementById('mobile-logout-btn')?.addEventListener('click', () => { closeMobileMenu(); signOut(auth); });
     document.getElementById('mobile-loans-btn')?.addEventListener('click', () => { closeMobileMenu(); document.getElementById('view-all-loans-btn').click(); });
@@ -1508,6 +1557,11 @@ function setupEventListeners() {
 
     // --- EVENT DELEGATION FOR RESPONSIVE MOBILE FORM MODALS ---
     document.body.addEventListener('click', (e) => {
+        // Cerrar modal al tocar el fondo oscuro (backdrop)
+        if (e.target && e.target.classList.contains('mobile-form-modal')) {
+            e.target.classList.remove('show-modal');
+        }
+
         // Handle trigger buttons
         if (e.target && e.target.id === 'mobile-add-cliente-btn') {
             document.getElementById('cliente-form-container')?.classList.add('show-modal');
@@ -1560,17 +1614,37 @@ function switchView(viewName, tabs, views, mobileTabs = null) {
     Object.values(tabs).forEach(tab => { if (tab) tab.classList.remove('active') });
     if (tabs[viewName]) tabs[viewName].classList.add('active');
 
+    // Actualizar título dinámico en el Header Móvil
+    const viewTitles = {
+        remisiones: 'Remisiones',
+        cotizaciones: 'Cotizaciones',
+        facturacion: 'Facturación',
+        clientes: 'Clientes',
+        items: 'Ítems de Inventario',
+        colores: 'Catálogo de Colores',
+        gastos: 'Control de Gastos',
+        proveedores: 'Proveedores',
+        empleados: 'Gestión de Empleados',
+        nomina: 'Nómina y RRHH',
+        funciones: 'Configuración',
+        mensajes: 'PrismaColor CRM'
+    };
+    const mobileHeaderTitle = document.getElementById('mobile-header-title');
+    if (mobileHeaderTitle && viewTitles[viewName]) {
+        mobileHeaderTitle.textContent = viewTitles[viewName];
+    }
+
     // Cambiar color del icono inferior seleccionado
     if (mobileTabs) {
         Object.values(mobileTabs).forEach(tab => { 
             if (tab) {
-                tab.classList.remove('text-blue-600');
-                tab.classList.add('text-gray-500');
+                tab.classList.remove('text-[#de7518]', 'text-orange-600', 'font-black');
+                tab.classList.add('text-gray-400');
             }
         });
         if (mobileTabs[viewName]) {
-            mobileTabs[viewName].classList.remove('text-gray-500');
-            mobileTabs[viewName].classList.add('text-blue-600');
+            mobileTabs[viewName].classList.remove('text-gray-400', 'text-gray-500');
+            mobileTabs[viewName].classList.add('text-[#de7518]', 'font-black');
         }
     }
 

@@ -132,7 +132,7 @@ export function renderProveedores() {
     // 3. Dibujar Tarjetas
     paginatedProviders.forEach(proveedor => {
         const el = document.createElement('div');
-        el.className = 'premium-card premium-card-teal p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
+        el.className = 'premium-card premium-card-teal p-3.5 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
         
         const nameInitial = (proveedor.nombre || 'P').charAt(0).toUpperCase();
         const editButton = (currentUserData && currentUserData.role === 'admin')
@@ -140,10 +140,10 @@ export function renderProveedores() {
             : '';
 
         el.innerHTML = `
-            <div class="flex items-center gap-4 flex-grow min-w-0">
+            <div class="flex items-center gap-3.5 sm:gap-4 flex-grow min-w-0">
                 <div class="premium-avatar premium-avatar-teal flex-shrink-0">${nameInitial}</div>
                 <div class="flex-grow min-w-0">
-                    <p class="font-bold text-lg text-slate-900 truncate" title="${proveedor.nombre}">${proveedor.nombre}</p>
+                    <p class="font-bold text-base sm:text-lg text-slate-900 truncate" title="${proveedor.nombre}">${proveedor.nombre}</p>
                     <p class="text-xs text-slate-500 mt-1">${proveedor.email || 'Sin correo'} &bull; ${proveedor.telefono || 'Sin teléfono'}</p>
                     ${proveedor.contacto ? `<p class="text-xs text-teal-800 font-semibold bg-teal-50 border border-teal-100 rounded px-2 py-0.5 mt-1 inline-block">Contacto: ${proveedor.contacto}</p>` : ''}
                 </div>
@@ -157,7 +157,7 @@ export function renderProveedores() {
 
     // 4. Dibujar Controles de Paginación
     const paginationEl = document.createElement('div');
-    paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+    paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-6';
     paginationEl.innerHTML = `
         <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} proveedores</span>
         <div class="flex gap-2">

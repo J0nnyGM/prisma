@@ -403,21 +403,22 @@ body {
 
 /* Header Móvil */
 #mobile-header {
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+    height: 52px;
 }
 
 /* Barra inferior móvil glassmorphic */
 @media (max-width: 767px) {
     #mobile-bottom-nav {
-        background-color: rgba(255, 255, 255, 0.85);
+        background-color: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
         border-top: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03);
-        height: 64px !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
+        height: 58px !important;
         padding-bottom: env(safe-area-inset-bottom) !important;
         display: flex !important;
         align-items: center !important;
@@ -469,6 +470,7 @@ body {
     background-color: rgba(255, 255, 255, 0.25) !important;
     color: #ffffff !important;
 }
+
 .mobile-form-modal {
     display: none !important; /* Oculto por defecto */
     position: fixed !important;
@@ -480,9 +482,11 @@ body {
     justify-content: center !important;
     padding: 1.25rem !important;
 }
+
 .mobile-form-modal.show-modal {
     display: flex !important;
 }
+
 .modal-card {
     background-color: #ffffff !important;
     border-radius: 1.5rem !important;
@@ -495,6 +499,7 @@ body {
     flex-direction: column !important;
     overflow: hidden !important;
 }
+
 .modal-header-fixed {
     padding: 1.75rem 2rem 1rem 2rem !important;
     flex-shrink: 0 !important;
@@ -503,11 +508,50 @@ body {
     align-items: center !important;
     border-bottom: 1px solid #f1f5f9 !important;
 }
+
 .modal-body-scroll {
     overflow-y: auto !important;
     padding: 1.5rem 2rem 2rem 2rem !important;
     flex-grow: 1 !important;
 }
+
+/* Modales adaptados a Bottom Sheet en móviles < 640px */
+@media (max-width: 639px) {
+    .mobile-form-modal {
+        padding: 0 !important;
+        align-items: flex-end !important;
+    }
+    .modal-card {
+        border-bottom-left-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        border-top-left-radius: 1.5rem !important;
+        border-top-right-radius: 1.5rem !important;
+        max-height: 92vh !important;
+        width: 100% !important;
+        margin: 0 !important;
+        animation: mobileSheetSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    }
+    .modal-header-fixed {
+        padding: 1.25rem 1.25rem 0.75rem 1.25rem !important;
+    }
+    .modal-body-scroll {
+        padding: 1rem 1.25rem 1.75rem 1.25rem !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Evitar auto-zoom molesto en inputs de iOS Safari al enfocar */
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="search"],
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
 @keyframes modalSlideUp {
     from {
         transform: translateY(30px) scale(0.96);
@@ -515,6 +559,17 @@ body {
     }
     to {
         transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes mobileSheetSlideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0.5;
+    }
+    to {
+        transform: translateY(0);
         opacity: 1;
     }
 }

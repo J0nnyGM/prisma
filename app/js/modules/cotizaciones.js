@@ -214,7 +214,7 @@ export function renderCotizaciones() {
         else if (esAprobada) cardColorClass = 'premium-card-green';
         else if (esConvertida) cardColorClass = 'premium-card-purple';
 
-        el.className = `premium-card ${cardColorClass} p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-white shadow-sm hover:shadow-md transition`;
+        el.className = `premium-card ${cardColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition`;
 
         const statusClasses = {
             'Pendiente': 'status-recibido',
@@ -243,20 +243,22 @@ export function renderCotizaciones() {
             versionBadge = `<button data-id="${c.id}" class="version-history-btn bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-sky-200 transition flex items-center gap-1 shadow-xs" title="Ver historial de versiones"><i class="fa-solid fa-clock-rotate-left text-[10px]"></i> v${c.version || 1} (${prevCount} previa${prevCount !== 1 ? 's' : ''})</button>`;
         }
 
-        const pdfButton = `<button data-id="${c.id}" class="pdf-cot-btn w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition text-center shadow-sm flex items-center justify-center gap-1.5"><i class="fa-solid fa-file-pdf"></i> Ver PDF</button>`;
-        const editButton = esConvertida ? '' : `<button data-id="${c.id}" class="edit-cot-btn w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> Editar</button>`;
-        const escalarButton = esConvertida ? '' : `<button data-id="${c.id}" class="escalar-cot-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center gap-1.5"><i class="fa-solid fa-rocket text-amber-300"></i> Escalar</button>`;
-        const opcionesButton = `<button data-id="${c.id}" class="options-cot-btn w-full bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center gap-1.5"><i class="fa-solid fa-ellipsis-vertical"></i> Opciones</button>`;
+        const pdfButton = `<button data-id="${c.id}" class="pdf-cot-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition text-center shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>`;
+        const editButton = esConvertida ? '' : `<button data-id="${c.id}" class="edit-cot-btn w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-pen-to-square"></i><span>Editar</span></button>`;
+        const escalarButton = esConvertida ? '' : `<button data-id="${c.id}" class="escalar-cot-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-rocket text-amber-300"></i><span>Escalar</span></button>`;
+        const opcionesButton = `<button data-id="${c.id}" class="options-cot-btn w-full bg-slate-800 hover:bg-slate-900 text-white px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-ellipsis-vertical"></i><span>Opciones</span></button>`;
 
         el.innerHTML = `
             <div class="flex-grow min-w-0 text-left">
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="remision-id font-bold text-slate-800">COT-${c.numeroCotizacion}</span>
-                    <p class="font-bold text-lg text-slate-900 truncate" title="${c.clienteNombre || 'Sin Cliente'}">${c.clienteNombre || 'Sin Cliente'}</p>
-                    ${statusBadge} ${remisionBadge} ${versionBadge}
-                    ${c.archivada ? '<span class="px-2.5 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-extrabold border border-slate-300 rounded-full">ARCHIVADA</span>' : ''}
+                    <p class="font-bold text-base sm:text-lg text-slate-900 truncate" title="${c.clienteNombre || 'Sin Cliente'}">${c.clienteNombre || 'Sin Cliente'}</p>
                 </div>
-                <p class="text-xs text-slate-500 mt-2 font-medium">
+                <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                    ${statusBadge} ${remisionBadge} ${versionBadge}
+                    ${c.archivada ? '<span class="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-extrabold border border-slate-300 rounded-full">ARCHIVADA</span>' : ''}
+                </div>
+                <p class="text-[11px] sm:text-xs text-slate-500 mt-2 font-medium">
                     Fecha: ${c.fecha || 'N/A'} &bull; Validez: ${c.validez || 15} días &bull; ${itemsCount} ítem${itemsCount !== 1 ? 's' : ''}
                     ${c.clienteTelefono ? `&bull; Tel: ${c.clienteTelefono}` : ''}
                 </p>
@@ -265,7 +267,7 @@ export function renderCotizaciones() {
                     ${c.incluyeIVA ? '<span class="text-[10px] text-slate-400 font-bold ml-1">(IVA Incluido)</span>' : ''}
                 </p>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0 w-full sm:max-w-xs mt-2 lg:mt-0">
+            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 flex-shrink-0 w-full sm:max-w-xs mt-1 sm:mt-2 lg:mt-0">
                 ${pdfButton}
                 ${escalarButton}
                 ${editButton}
@@ -277,13 +279,13 @@ export function renderCotizaciones() {
 
     // Paginación con estilo idéntico a remisiones
     if (paginationEl) {
-        paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+        paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 sm:mt-6';
         paginationEl.innerHTML = `
-            <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, filtered.length)} de ${filtered.length} cotizaciones</span>
-            <div class="flex gap-2">
-                <button id="prev-page-cot-btn" class="premium-pagination-btn" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
-                <span class="px-3 py-1 text-xs font-bold text-slate-700 flex items-center bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
-                <button id="next-page-cot-btn" class="premium-pagination-btn" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
+            <span class="text-xs font-medium text-slate-500 text-center sm:text-left">Mostrando ${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, filtered.length)} de ${filtered.length} cotizaciones</span>
+            <div class="flex items-center gap-2">
+                <button id="prev-page-cot-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
+                <span class="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
+                <button id="next-page-cot-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
             </div>
         `;
 

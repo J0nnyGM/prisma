@@ -78,25 +78,28 @@ export async function showDashboardModal() {
     `).join('');
 
     modalContentWrapper.innerHTML = `
-    <div class="modal-card max-w-6xl w-full mx-auto" style="height: 85vh; max-height: 85vh;">
-        <div class="modal-header-fixed flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+    <div class="modal-card max-w-6xl w-full mx-auto h-[92vh] sm:h-[85vh] max-h-[92vh] sm:max-h-[85vh]">
+        <div class="modal-header-fixed flex flex-col md:flex-row justify-between items-stretch md:items-center gap-2.5 p-3.5 sm:p-5">
             <div class="flex justify-between items-center w-full md:w-auto">
-                <h2 class="text-xl font-bold text-slate-800">Resumen Financiero</h2>
-                <button id="close-dashboard-modal" class="text-gray-500 hover:text-gray-800 text-3xl md:hidden">&times;</button>
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">📊</span>
+                    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Resumen Financiero</h2>
+                </div>
+                <button id="close-dashboard-modal" class="text-gray-400 hover:text-gray-700 text-2xl md:hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center transition active:scale-90">&times;</button>
             </div>
-            <div class="flex items-center gap-2 flex-wrap w-full md:w-auto justify-start md:justify-end">
+            <div class="flex items-center gap-1.5 flex-wrap w-full md:w-auto justify-start md:justify-end">
                 ${initialBalanceButtonHTML}
-                <button id="show-transfer-modal-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-bold py-2 px-3 sm:text-sm sm:py-2 sm:px-4 rounded-xl transition-colors whitespace-nowrap shadow-xs">Transferir Fondos</button>
-                <button id="download-report-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white text-xs font-bold py-2 px-3 sm:text-sm sm:py-2 sm:px-4 rounded-xl transition-colors whitespace-nowrap shadow-xs">Descargar PDF</button>
-                <button id="close-dashboard-modal-desktop" class="text-gray-500 hover:text-gray-800 text-3xl hidden md:block">&times;</button>
+                <button id="show-transfer-modal-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl transition-colors whitespace-nowrap shadow-xs flex items-center gap-1 active:scale-95"><i class="fa-solid fa-arrow-right-arrow-left"></i><span>Transferir Fondos</span></button>
+                <button id="download-report-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white text-xs font-bold py-1.5 px-3 rounded-xl transition-colors whitespace-nowrap shadow-xs flex items-center gap-1 active:scale-95"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>
+                <button id="close-dashboard-modal-desktop" class="text-gray-500 hover:text-gray-800 text-3xl hidden md:block ml-2">&times;</button>
             </div>
         </div>
         <div class="border-b border-gray-200 bg-slate-50/50 flex-shrink-0">
-            <nav class="-mb-px flex space-x-6 px-6 overflow-x-auto">
-                <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-4 px-1 font-semibold whitespace-nowrap text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Resumen Mensual</button>
-                <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-4 px-1 font-semibold whitespace-nowrap text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Cartera</button>
-                <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-4 px-1 font-semibold whitespace-nowrap text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Clientes</button>
-                <button id="dashboard-tab-transferencias" class="dashboard-tab-btn py-4 px-1 font-semibold whitespace-nowrap text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Transferencias</button>
+            <nav class="-mb-px flex space-x-3 sm:space-x-6 px-3 sm:px-6 overflow-x-auto scrollbar-none">
+                <button id="dashboard-tab-summary" class="dashboard-tab-btn active py-2.5 sm:py-4 px-1 font-semibold whitespace-nowrap text-xs sm:text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Resumen Mensual</button>
+                <button id="dashboard-tab-cartera" class="dashboard-tab-btn py-2.5 sm:py-4 px-1 font-semibold whitespace-nowrap text-xs sm:text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Cartera</button>
+                <button id="dashboard-tab-clientes" class="dashboard-tab-btn py-2.5 sm:py-4 px-1 font-semibold whitespace-nowrap text-xs sm:text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Clientes</button>
+                <button id="dashboard-tab-transferencias" class="dashboard-tab-btn py-2.5 sm:py-4 px-1 font-semibold whitespace-nowrap text-xs sm:text-sm border-b-2 border-transparent hover:text-slate-700 transition-all duration-150">Transferencias</button>
             </nav>
         </div>
         

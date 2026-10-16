@@ -53,7 +53,9 @@ export function loadGastos() {
         q = query(colRef);
     }
 
+    let hasGastosSnapshotFired = false;
     const unsubscribe = onSnapshot(q, (snapshot) => {
+        hasGastosSnapshotFired = true;
         let huboCambios = false;
 
         snapshot.docChanges().forEach((change) => {
@@ -92,6 +94,35 @@ export function loadGastos() {
         console.error("Error en onSnapshot diferencial de gastos:", error);
     });
 
+    // Salvaguarda para Safari / conexiones móviles lentas:
+    if (mapGastos.size === 0) {
+        setTimeout(async () => {
+            if (!hasGastosSnapshotFired && mapGastos.size === 0) {
+                console.warn("[Gastos] onSnapshot demorado en móvil. Ejecutando getDocs de rescate...");
+                try {
+                    const snap = await getDocs(q);
+                    if (!hasGastosSnapshotFired && snap && !snap.empty) {
+                        snap.forEach(docSnap => {
+                            const data = docSnap.data();
+                            if (data.estado === 'eliminado') return;
+                            if (data._lastUpdated && typeof data._lastUpdated.toMillis === 'function') data._lastUpdated = data._lastUpdated.toMillis();
+                            if (data.timestamp && typeof data.timestamp.toMillis === 'function') data.timestamp = data.timestamp.toMillis();
+                            mapGastos.set(docSnap.id, { id: docSnap.id, ...data });
+                        });
+                        const finalArray = Array.from(mapGastos.values());
+                        finalArray.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(finalArray));
+                        setAllGastos(finalArray);
+                        renderGastos();
+                        document.dispatchEvent(new CustomEvent('gastosChanged'));
+                    }
+                } catch (fallbackErr) {
+                    console.error("[Gastos] Error en getDocs de rescate:", fallbackErr);
+                }
+            }
+        }, 2500);
+    }
+
     return unsubscribe;
 }
 
@@ -100,8 +131,8 @@ export function renderGastos() {
     const gastosListEl = document.getElementById('gastos-list');
     if (!gastosListEl) return;
 
-    const month = document.getElementById('filter-gastos-month').value;
-    const year = document.getElementById('filter-gastos-year').value;
+    const month = document.getElementById('filter-gastos-month')?.value || 'all';
+    const year = document.getElementById('filter-gastos-year')?.value || 'all';
     const searchInput = document.getElementById('search-gastos');
     const rawSearch = searchInput ? searchInput.value : '';
     const hasTrailingSpace = rawSearch.endsWith(' ');
@@ -151,18 +182,18 @@ export function renderGastos() {
             (gasto.numeroFactura && (gasto.numeroFactura.toLowerCase().includes('nómina') || gasto.numeroFactura.toLowerCase().includes('nomina')));
 
         el.className = isSalaryExpense 
-            ? 'premium-card premium-card-indigo p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition border-l-4 border-l-indigo-600'
-            : 'premium-card premium-card-orange p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
+            ? 'premium-card premium-card-indigo p-3.5 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 bg-white shadow-sm hover:shadow-md transition border-l-4 border-l-indigo-600'
+            : 'premium-card premium-card-orange p-3.5 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 bg-white shadow-sm hover:shadow-md transition';
         
         const nameInitial = (gasto.proveedorNombre || 'G').charAt(0).toUpperCase();
         let deleteBtnHTML = '';
         
         if (isAdmin && !isSalaryExpense && !gasto.isEmployeePayment && !gasto.isTransfer && !gasto.isImportacionGasto) {
-            deleteBtnHTML = `<button data-gasto-id="${gasto.id}" class="delete-gasto-btn bg-red-50 text-red-600 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-100 hover:text-red-700 transition border border-red-200 shadow-xs" title="Eliminar Gasto">✕</button>`;
+            deleteBtnHTML = `<button data-gasto-id="${gasto.id}" class="delete-gasto-btn bg-red-50 text-red-600 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-100 hover:text-red-700 transition border border-red-200 shadow-xs shrink-0 active:scale-90" title="Eliminar Gasto">✕</button>`;
         }
 
         let badgeFactura = gasto.numeroFactura 
-            ? `<span class="${isSalaryExpense ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-orange-50 text-orange-700 border-orange-100'} text-[10px] font-bold px-2 py-0.5 rounded border font-mono">Factura: ${gasto.numeroFactura}</span>`
+            ? `<span class="${isSalaryExpense ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-orange-50 text-orange-700 border-orange-100'} text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded border font-mono">Fact: ${gasto.numeroFactura}</span>`
             : '';
 
         let badgeNomina = isSalaryExpense
@@ -170,26 +201,29 @@ export function renderGastos() {
             : '';
 
         const avatarHTML = isSalaryExpense
-            ? `<div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs flex-shrink-0"><i class="fa-solid fa-money-bill-wave"></i></div>`
-            : `<div class="premium-avatar premium-avatar-orange flex-shrink-0">${nameInitial}</div>`;
+            ? `<div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs flex-shrink-0"><i class="fa-solid fa-money-bill-wave"></i></div>`
+            : `<div class="premium-avatar premium-avatar-orange flex-shrink-0 !w-9 !h-9 sm:!w-11 sm:!h-11 !text-sm sm:!text-base">${nameInitial}</div>`;
 
         el.innerHTML = `
-            <div class="flex items-center gap-4 flex-grow min-w-0">
+            <div class="flex items-center gap-3 sm:gap-4 flex-grow min-w-0">
                 ${avatarHTML}
                 <div class="flex-grow min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <p class="font-bold text-base text-slate-900 truncate" title="${gasto.proveedorNombre}">${gasto.proveedorNombre}</p>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <p class="font-bold text-sm sm:text-base text-slate-900 truncate" title="${gasto.proveedorNombre}">${gasto.proveedorNombre}</p>
                         ${badgeNomina}
                         ${badgeFactura}
                     </div>
-                    <p class="text-xs text-slate-500 mt-1">Fecha: ${gasto.fecha}${gasto.observacion ? ` &bull; <span class="italic text-slate-500 font-normal truncate" title="${gasto.observacion}">Nota: ${gasto.observacion}</span>` : ''}</p>
+                    <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                        <span>${gasto.fecha}</span>
+                        ${gasto.observacion ? ` &bull; <span class="italic text-slate-400 font-normal" title="${gasto.observacion}">Nota: ${gasto.observacion}</span>` : ''}
+                    </p>
                 </div>
             </div>
             
-            <div class="flex items-center justify-between sm:justify-end gap-4 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
+            <div class="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 mt-1 sm:mt-0">
                 <div class="text-left sm:text-right">
-                    <p class="font-extrabold text-lg text-red-600 leading-none">-${formatCurrency(gasto.valorTotal)}</p>
-                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">${gasto.fuentePago}</p>
+                    <p class="font-extrabold text-base sm:text-lg text-red-600 leading-none">-${formatCurrency(gasto.valorTotal)}</p>
+                    <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">${gasto.fuentePago}</p>
                 </div>
                 ${deleteBtnHTML}
             </div>
@@ -198,13 +232,13 @@ export function renderGastos() {
     });
 
     const paginationEl = document.createElement('div');
-    paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+    paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 sm:mt-6';
     paginationEl.innerHTML = `
-        <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} gastos</span>
-        <div class="flex gap-2">
-            <button id="prev-page-gastos-btn" class="premium-pagination-btn" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
-            <span class="px-3 py-1 text-xs font-bold text-slate-700 flex items-center bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
-            <button id="next-page-gastos-btn" class="premium-pagination-btn" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
+        <span class="text-xs font-medium text-slate-500 text-center sm:text-left">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} gastos</span>
+        <div class="flex items-center gap-2">
+            <button id="prev-page-gastos-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
+            <span class="px-2.5 py-1 text-xs font-bold text-slate-700 flex items-center bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
+            <button id="next-page-gastos-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
         </div>
     `;
     gastosListEl.appendChild(paginationEl);

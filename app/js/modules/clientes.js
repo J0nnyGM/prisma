@@ -144,33 +144,33 @@ export function renderClientes() {
     // 4. Dibujar Tarjetas
     clientsToRender.forEach(cliente => {
         const clienteDiv = document.createElement('div');
-        clienteDiv.className = 'premium-card premium-card-orange p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white shadow-sm hover:shadow-md transition';
+        clienteDiv.className = 'premium-card premium-card-orange p-3.5 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition';
 
         const nameInitial = (cliente.nombreEmpresa || cliente.nombre || 'C').charAt(0).toUpperCase();
         const telefonos = [cliente.telefono1, cliente.telefono2].filter(Boolean).join(' | ');
         const editButton = (currentUserData && currentUserData.role === 'admin')
-            ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn btn-premium-outline px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition w-full text-center">Editar Cliente</button>`
+            ? `<button data-client-json='${JSON.stringify(cliente)}' class="edit-client-btn btn-premium-outline px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition w-full text-center active:scale-95 shadow-2xs">Editar Cliente</button>`
             : '';
 
-        const nombreContactoHtml = cliente.contacto ? `<p class="text-sm text-slate-600"><span class="font-medium text-slate-800">Contacto:</span> ${cliente.contacto}</p>` : '';
+        const nombreContactoHtml = cliente.contacto ? `<p class="text-xs sm:text-sm text-slate-600"><span class="font-medium text-slate-800">Contacto:</span> ${cliente.contacto}</p>` : '';
 
         clienteDiv.innerHTML = `
-            <div class="flex items-center gap-4 flex-grow min-w-0">
-                <div class="premium-avatar premium-avatar-orange flex-shrink-0">${nameInitial}</div>
+            <div class="flex items-center gap-3 sm:gap-4 flex-grow min-w-0">
+                <div class="premium-avatar premium-avatar-orange flex-shrink-0 !w-9 !h-9 sm:!w-11 sm:!h-11 !text-sm sm:!text-base">${nameInitial}</div>
                 <div class="flex-grow min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <p class="font-bold text-lg text-slate-900 truncate" title="${cliente.nombre}">${cliente.nombreEmpresa || cliente.nombre}</p>
-                        ${cliente.nit ? `<span class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded border border-indigo-100">NIT: ${cliente.nit}</span>` : ''}
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <p class="font-bold text-base sm:text-lg text-slate-900 truncate" title="${cliente.nombre}">${cliente.nombreEmpresa || cliente.nombre}</p>
+                        ${cliente.nit ? `<span class="bg-indigo-50 text-indigo-700 text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded border border-indigo-100">NIT: ${cliente.nit}</span>` : ''}
                     </div>
                     ${nombreContactoHtml}
-                    <p class="text-xs text-slate-500 mt-1">${cliente.email || 'Sin correo'} &bull; ${telefonos}</p>
+                    <p class="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">${cliente.email || 'Sin correo'} &bull; ${telefonos}</p>
                 </div>
             </div>
             
-            <div class="flex flex-col gap-2 flex-shrink-0 w-full sm:w-56 mt-2 sm:mt-0">
-                <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs text-slate-600 space-y-1">
-                    <p><span class="font-bold text-slate-700">Última Compra:</span> ${cliente.ultimaCompra}</p>
-                    <p><span class="font-bold text-slate-700">Total Comprado:</span> <span class="font-bold text-indigo-600">${formatCurrency(cliente.totalComprado)}</span></p>
+            <div class="flex flex-col gap-2 flex-shrink-0 w-full sm:w-56 mt-1 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                <div class="bg-slate-50 p-2 sm:p-2.5 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1">
+                    <p class="flex justify-between sm:block"><span class="font-bold text-slate-700">Última Compra:</span> <span>${cliente.ultimaCompra}</span></p>
+                    <p class="flex justify-between sm:block"><span class="font-bold text-slate-700">Total Comprado:</span> <span class="font-bold text-indigo-650">${formatCurrency(cliente.totalComprado)}</span></p>
                 </div>
                 ${editButton}
             </div>
@@ -180,13 +180,13 @@ export function renderClientes() {
 
     // 5. Dibujar Controles de Paginación
     const paginationEl = document.createElement('div');
-    paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+    paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 sm:mt-6';
     paginationEl.innerHTML = `
-        <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} clientes</span>
-        <div class="flex gap-2">
-            <button id="prev-page-btn" class="premium-pagination-btn" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
-            <span class="px-3 py-1 text-xs font-bold text-slate-700 flex items-center bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
-            <button id="next-page-btn" class="premium-pagination-btn" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
+        <span class="text-xs font-medium text-slate-500 text-center sm:text-left">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} clientes</span>
+        <div class="flex items-center gap-2">
+            <button id="prev-page-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
+            <span class="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
+            <button id="next-page-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
         </div>
     `;
     clientesListEl.appendChild(paginationEl);

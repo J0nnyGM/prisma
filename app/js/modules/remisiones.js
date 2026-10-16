@@ -76,7 +76,9 @@ export function loadRemisiones() {
         q = query(colRef);
     }
 
+    let hasSnapshotFired = false;
     const unsubscribe = onSnapshot(q, (snapshot) => {
+        hasSnapshotFired = true;
         let huboCambios = false;
 
         snapshot.docChanges().forEach((change) => {
@@ -145,6 +147,51 @@ export function loadRemisiones() {
         console.error("Error en onSnapshot diferencial de remisiones:", error);
     });
 
+    // Salvaguarda para Safari / conexiones móviles lentas:
+    // Si en 2.5 segundos onSnapshot no ha entregado datos y la lista está vacía, rescatar con getDocs
+    if (mapRemisiones.size === 0) {
+        setTimeout(async () => {
+            if (!hasSnapshotFired && mapRemisiones.size === 0) {
+                console.warn("[Remisiones] onSnapshot demorado en móvil. Ejecutando getDocs de rescate...");
+                try {
+                    const snap = await getDocs(q);
+                    if (!hasSnapshotFired && snap && !snap.empty) {
+                        snap.forEach(docSnap => {
+                            const data = docSnap.data();
+                            if (data._lastUpdated && typeof data._lastUpdated.toMillis === 'function') data._lastUpdated = data._lastUpdated.toMillis();
+                            if (data.timestamp && typeof data.timestamp.toMillis === 'function') data.timestamp = data.timestamp.toMillis();
+                            if (data.fechaFacturado && typeof data.fechaFacturado.toMillis === 'function') data.fechaFacturado = data.fechaFacturado.toMillis();
+                            if (Array.isArray(data.payments)) {
+                                data.payments.forEach(p => {
+                                    if (p.registeredAt && typeof p.registeredAt.toMillis === 'function') p.registeredAt = p.registeredAt.toMillis();
+                                    if (p.confirmedAt && typeof p.confirmedAt.toMillis === 'function') p.confirmedAt = p.confirmedAt.toMillis();
+                                });
+                            }
+                            mapRemisiones.set(docSnap.id, { id: docSnap.id, ...data });
+                        });
+                        const finalArray = Array.from(mapRemisiones.values());
+                        finalArray.sort((a, b) => {
+                            const numB = Number(b.numeroRemision) || 0;
+                            const numA = Number(a.numeroRemision) || 0;
+                            if (numB !== numA) return numB - numA;
+                            const timeB = b.timestamp || (b.fechaRecibido ? new Date(b.fechaRecibido).getTime() : 0);
+                            const timeA = a.timestamp || (a.fechaRecibido ? new Date(a.fechaRecibido).getTime() : 0);
+                            return timeB - timeA;
+                        });
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(finalArray));
+                        setAllRemisiones(finalArray);
+                        renderRemisiones();
+                        renderFacturacion();
+                        renderClientes();
+                        document.dispatchEvent(new CustomEvent('remisionesChanged'));
+                    }
+                } catch (fallbackErr) {
+                    console.error("[Remisiones] Error en getDocs de rescate:", fallbackErr);
+                }
+            }
+        }, 2500);
+    }
+
     return unsubscribe;
 }
 
@@ -179,8 +226,8 @@ export function renderRemisiones() {
     if (!remisionesListEl) return;
 
     const isPlanta = currentUserData && currentUserData.role === 'planta';
-    const month = document.getElementById('filter-remisiones-month').value;
-    const year = document.getElementById('filter-remisiones-year').value;
+    const month = document.getElementById('filter-remisiones-month')?.value || 'all';
+    const year = document.getElementById('filter-remisiones-year')?.value || 'all';
     const searchInput = document.getElementById('search-remisiones');
     const rawSearch = searchInput ? searchInput.value : '';
     const hasTrailingSpace = rawSearch.endsWith(' ');
@@ -284,7 +331,7 @@ export function renderRemisiones() {
         const esAnulada = remision.estado === 'Anulada';
         const esEntregada = remision.estado === 'Entregado';
         const remColorClass = esAnulada ? 'premium-card-red' : 'premium-card-indigo';
-        el.className = `premium-card ${remColorClass} p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-white shadow-sm hover:shadow-md transition`;
+        el.className = `premium-card ${remColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition`;
 
         const nameInitial = (remision.clienteNombre || 'C').charAt(0).toUpperCase();
         const paymentsArray = Array.isArray(remision.payments) ? remision.payments : [];
@@ -300,21 +347,21 @@ export function renderRemisiones() {
 
         const pdfPath = isPlanta ? remision.pdfPlantaPath : remision.pdfPath;
         const pdfButton = pdfPath
-            ? `<button data-file-path="${pdfPath}" data-file-title="Remisión N° ${remision.numeroRemision}" class="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition text-center shadow-sm">Ver PDF</button>`
-            : `<button class="w-full bg-slate-300 text-slate-500 border border-slate-200 px-4 py-2.5 rounded-lg text-sm font-semibold cursor-not-allowed" disabled>Generando PDF...</button>`;
+            ? `<button data-file-path="${pdfPath}" data-file-title="Remisión N° ${remision.numeroRemision}" class="w-full bg-emerald-600 text-white px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition text-center shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button>`
+            : `<button class="w-full bg-slate-200 text-slate-400 border border-slate-200 px-2.5 py-2 rounded-xl text-xs font-bold cursor-not-allowed text-center" disabled>PDF...</button>`;
 
         const hasActivePayments = paymentsArray.some(p => p.status === 'confirmado' || p.status === 'por confirmar');
-        const anularButton = (esAnulada || esEntregada || isPlanta || hasActivePayments) ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-red-50 text-red-650 border border-red-200 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-100 hover:text-red-700 transition shadow-sm">Anular</button>`;
-        const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-purple-700 transition shadow-sm">Abonar (${formatCurrency(saldoPendiente)})</button>`;
-        const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount) ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-cyan-700 transition shadow-sm">Descuento</button>`;
+        const anularButton = (esAnulada || esEntregada || isPlanta || hasActivePayments) ? '' : `<button data-remision-id="${remision.id}" class="anular-btn w-full bg-red-50 text-red-650 border border-red-200 px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-red-100 hover:text-red-700 transition shadow-2xs text-center active:scale-95">Anular</button>`;
+        const pagosButton = esAnulada || isPlanta ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="payment-btn w-full bg-purple-600 text-white px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-purple-700 transition shadow-2xs text-center flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-hand-holding-dollar"></i><span>Abonar</span></button>`;
+        const descuentoButton = (esAnulada || esEntregada || isPlanta || remision.discount) ? '' : `<button data-remision-json='${JSON.stringify(remision)}' class="discount-btn w-full bg-cyan-600 text-white px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-cyan-700 transition shadow-2xs text-center active:scale-95">Descuento</button>`;
         
         const enviarFacturarBtn = (!remision.incluyeIVA && !esAnulada && !isPlanta) 
-            ? `<button data-remision-id="${remision.id}" class="enviar-facturar-btn w-full bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition shadow-sm">Enviar a Facturar</button>` 
+            ? `<button data-remision-id="${remision.id}" class="enviar-facturar-btn w-full bg-indigo-600 text-white px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition shadow-2xs text-center active:scale-95">Facturar</button>` 
             : '';
 
         let discountInfo = '';
         if (remision.discount && remision.discount.percentage > 0) {
-            discountInfo = `<span class="bg-cyan-50 text-cyan-700 text-xs font-semibold px-2 py-0.5 rounded border border-cyan-150">DTO ${remision.discount.percentage.toFixed(2)}%</span>`;
+            discountInfo = `<span class="bg-cyan-50 text-cyan-700 text-[10px] font-bold px-2 py-0.5 rounded border border-cyan-150">DTO ${remision.discount.percentage.toFixed(1)}%</span>`;
         }
         
         const statusClasses = { 'Recibido': 'status-recibido', 'En Proceso': 'status-en-proceso', 'Procesado': 'status-procesado', 'Entregado': 'status-entregado' };
@@ -324,7 +371,7 @@ export function renderRemisiones() {
         const currentIndex = ESTADOS_REMISION.indexOf(remision.estado);
         if (!esAnulada && currentIndex < ESTADOS_REMISION.length - 1) {
             const nextStatus = ESTADOS_REMISION[currentIndex + 1];
-            statusButton = `<button data-remision-id="${remision.id}" data-current-status="${remision.estado}" class="status-update-btn w-full bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition shadow-sm">Listo: ${nextStatus}</button>`;
+            statusButton = `<button data-remision-id="${remision.id}" data-current-status="${remision.estado}" class="status-update-btn col-span-2 sm:col-span-1 w-full bg-indigo-600 text-white px-2.5 py-2 rounded-xl text-xs font-extrabold hover:bg-indigo-700 transition shadow-2xs flex items-center justify-center gap-1.5 active:scale-95"><i class="fa-solid fa-arrow-right text-[10px]"></i><span>Listo: ${nextStatus}</span></button>`;
         }
 
         let fechaRecibidoDisplay = remision.fechaRecibido || 'N/A';
@@ -337,29 +384,33 @@ export function renderRemisiones() {
 
         el.innerHTML = `
             <div class="flex-grow min-w-0 text-left">
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="remision-id font-bold text-slate-800">N° ${remision.numeroRemision}</span>
-                    <p class="font-bold text-lg text-slate-900 truncate" title="${remision.clienteNombre}">${remision.clienteNombre}</p>
-                    ${statusBadge} ${paymentStatusBadge} ${discountInfo}
-                    ${esAnulada ? '<span class="px-2.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-extrabold border border-red-200 rounded-full">ANULADA</span>' : ''}
+                    <p class="font-bold text-base sm:text-lg text-slate-900 truncate" title="${remision.clienteNombre}">${remision.clienteNombre}</p>
                 </div>
-                <p class="text-xs text-slate-500 mt-2 font-medium">Recibido: ${fechaRecibidoDisplay} &bull; ${remision.fechaEntrega ? `Entregado: ${remision.fechaEntrega}` : 'Entrega: Pendiente'}</p>
-                ${!isPlanta ? `<p class="text-xs text-slate-600 mt-1 font-semibold">Monto Total: <span class="text-sm font-extrabold text-indigo-650">${formatCurrency(remision.valorTotal)}</span></p>` : ''}
+                <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                    ${statusBadge} ${paymentStatusBadge} ${discountInfo}
+                    ${esAnulada ? '<span class="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-extrabold border border-red-200 rounded-full">ANULADA</span>' : ''}
+                </div>
+                <div class="flex items-center justify-between text-xs text-slate-500 mt-2 font-medium flex-wrap gap-1">
+                    <span><i class="fa-regular fa-calendar-days text-[11px] mr-1 text-slate-400"></i>${fechaRecibidoDisplay}</span>
+                    ${!isPlanta ? `<span class="font-bold text-slate-700">Total: <span class="text-sm font-extrabold text-indigo-650">${formatCurrency(remision.valorTotal)}</span></span>` : ''}
+                </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0 w-full sm:max-w-xs mt-2 lg:mt-0">
+            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 flex-shrink-0 w-full sm:max-w-xs mt-1 sm:mt-2 lg:mt-0">
                 ${statusButton} ${pdfButton} ${pagosButton} ${descuentoButton} ${enviarFacturarBtn} ${anularButton}
             </div>`;
         remisionesListEl.appendChild(el);
     });
 
     const paginationEl = document.createElement('div');
-    paginationEl.className = 'premium-pagination-container flex justify-between items-center mt-6';
+    paginationEl.className = 'premium-pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 sm:mt-6';
     paginationEl.innerHTML = `
-        <span class="text-xs font-medium text-slate-500">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} remisiones</span>
-        <div class="flex gap-2">
-            <button id="prev-page-rem-btn" class="premium-pagination-btn" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
-            <span class="px-3 py-1 text-xs font-bold text-slate-700 flex items-center bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
-            <button id="next-page-rem-btn" class="premium-pagination-btn" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
+        <span class="text-xs font-medium text-slate-500 text-center sm:text-left">Mostrando ${startIndex + 1} - ${Math.min(endIndex, totalItems)} de ${totalItems} remisiones</span>
+        <div class="flex items-center gap-2">
+            <button id="prev-page-rem-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === 1 ? 'disabled' : ''}>&larr; Anterior</button>
+            <span class="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-50 border rounded-full">Pág ${currentPage} de ${totalPages}</span>
+            <button id="next-page-rem-btn" class="premium-pagination-btn !py-1.5 !px-3 !text-xs" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &rarr;</button>
         </div>
     `;
     remisionesListEl.appendChild(paginationEl);
