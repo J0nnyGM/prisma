@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -17,7 +17,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/output.css?v=3.4">
+    <link rel="stylesheet" href="css/output.css?v=3.5">
     <link rel="icon" type="image/jpeg" href="/app/recursos/LOGO PRISMA.png">
     <script>window.dataLayer = window.dataLayer || []; function gtag() { dataLayer.push(arguments); } gtag('js', new Date()); gtag('config', 'G-T2RKG90GC5');</script>
 </head>
@@ -197,7 +197,7 @@
         </aside>
 
         <!-- Contenedor de Contenido Principal -->
-        <div id="main-content-layout" class="min-h-screen flex flex-col md:pl-0">
+        <div id="main-content-layout" class="min-h-screen flex flex-col md:pl-0 w-full min-w-0 max-w-full overflow-x-hidden">
             <!-- Header Móvil Superior (Visible en móviles < md) -->
             <header id="mobile-header" class="md:hidden sticky top-0 flex items-center justify-between px-3.5 py-2.5 z-20 shadow-xs">
                 <div class="flex items-center gap-2.5 min-w-0">
@@ -214,8 +214,8 @@
             </header>
 
             <!-- Vistas e Inyección Principal -->
-            <main class="flex-grow p-3 sm:p-4 pb-24 md:p-8 max-w-7xl mx-auto w-full">
-                <div class="w-full">
+            <main class="flex-grow p-3 sm:p-4 pb-24 md:p-8 max-w-7xl mx-auto w-full min-w-0 max-w-full">
+                <div class="w-full min-w-0">
                 <div id="view-remisiones"></div>
                 <div id="view-cotizaciones" class="hidden"></div>
                 <div id="view-facturacion" class="hidden"></div>
@@ -644,7 +644,7 @@
         </div>
     </div>
 
-    <script type="module" src="js/app.js?v=3.4"></script>
+    <script type="module" src="js/app.js?v=3.5"></script>
 
 </body>
 

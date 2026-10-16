@@ -341,7 +341,7 @@ export function renderRemisiones() {
         const esAnulada = remision.estado === 'Anulada';
         const esEntregada = remision.estado === 'Entregado';
         const remColorClass = esAnulada ? 'premium-card-red' : 'premium-card-indigo';
-        el.className = `premium-card ${remColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition`;
+        el.className = `premium-card ${remColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition w-full min-w-0 max-w-full`;
 
         const nameInitial = (remision.clienteNombre || 'C').charAt(0).toUpperCase();
         const paymentsArray = Array.isArray(remision.payments) ? remision.payments : [];

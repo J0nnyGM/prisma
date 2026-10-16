@@ -1,6 +1,6 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
-export const APP_VERSION = '3.4';
+export const APP_VERSION = '3.5';
 
 // --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
 export const APP_CACHE_KEYS = [
@@ -31,19 +31,19 @@ import { auth, db, storage, functions, analytics, httpsCallable } from './fireba
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
 
-import { loadClientes, setupClientesEvents, renderClientes } from './modules/clientes.js?v=3.4';
-import { loadProveedores, setupProveedoresEvents, renderProveedores } from './modules/proveedores.js?v=3.4';
-import { loadItems, setupItemsEvents, renderItems } from './modules/items.js?v=3.4';
-import { loadColores, setupColoresEvents, renderColores } from './modules/colores.js?v=3.4';
-import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.4';
-import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.4';
-import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.4';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones, allCotizaciones } from './modules/cotizaciones.js?v=3.4';
-import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.4';
-import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.4';
-import { setupFacturacionEvents } from './modules/facturacion.js?v=3.4';
-import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.4';
-import { setupFuncionesEvents } from './modules/funciones.js?v=3.4';
+import { loadClientes, setupClientesEvents, renderClientes } from './modules/clientes.js?v=3.5';
+import { loadProveedores, setupProveedoresEvents, renderProveedores } from './modules/proveedores.js?v=3.5';
+import { loadItems, setupItemsEvents, renderItems } from './modules/items.js?v=3.5';
+import { loadColores, setupColoresEvents, renderColores } from './modules/colores.js?v=3.5';
+import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.5';
+import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.5';
+import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.5';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones, allCotizaciones } from './modules/cotizaciones.js?v=3.5';
+import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.5';
+import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.5';
+import { setupFacturacionEvents } from './modules/facturacion.js?v=3.5';
+import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.5';
+import { setupFuncionesEvents } from './modules/funciones.js?v=3.5';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { doc, getDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -566,8 +566,8 @@ function loadViewTemplates() {
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Inventario de Ítems</h1>
                     <p class="text-xs font-semibold text-slate-400 mt-1">Monitorea el catálogo de ítems y servicios en tiempo real.</p>
                 </div>
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <div class="relative flex-grow md:flex-grow-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                    <div class="relative flex-grow md:flex-grow-0 w-full sm:w-auto min-w-0">
                         <input type="search" id="search-items" placeholder="Buscar ítem..." class="w-full md:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
@@ -580,8 +580,8 @@ function loadViewTemplates() {
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="items-list" class="space-y-3"></div>
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="items-list" class="space-y-3 w-full min-w-0"></div>
             </div>
         </div>`;
     }
@@ -642,7 +642,7 @@ function loadViewTemplates() {
                     <p class="hidden sm:block text-xs font-semibold text-slate-450 mt-1">Genera, imprime y realiza el seguimiento de las remisiones y abonos de clientes.</p>
                 </div>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
-                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                         <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs flex-grow sm:flex-grow-0">
                             <select id="filter-remisiones-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
                             <span class="text-slate-300 font-light">|</span>
@@ -658,7 +658,7 @@ function loadViewTemplates() {
                             <span class="text-base font-medium leading-none">+</span> Nueva Remisión
                         </button>
                     </div>
-                    <div class="relative w-full sm:w-60">
+                    <div class="relative w-full sm:w-60 min-w-0">
                         <input type="search" id="search-remisiones" placeholder="Buscar cliente o remisión..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
@@ -666,11 +666,11 @@ function loadViewTemplates() {
             </div>
 
             <!-- Filtros de Remisiones (Por Estado y Por Pago) -->
-            <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-100 shadow-xs space-y-2.5">
+            <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-100 shadow-xs space-y-2.5 w-full min-w-0 overflow-hidden">
                 <!-- Filtros por Estado de Remisión -->
-                <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0">
                     <span class="text-[10px] sm:text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[60px] sm:min-w-[70px] flex-shrink-0">Estado:</span>
-                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none w-full min-w-0 max-w-full">
                         <button data-filter="todas" class="remision-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
                             <span>Todos</span>
                             <span class="filter-count-rem bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
@@ -704,9 +704,9 @@ function loadViewTemplates() {
                 </div>
 
                 <!-- Filtros por Estado de Pago -->
-                <div class="border-t border-slate-100 pt-2 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                <div class="border-t border-slate-100 pt-2 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0">
                     <span class="text-[10px] sm:text-[11px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[60px] sm:min-w-[70px] flex-shrink-0">Pago:</span>
-                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none flex-grow">
+                    <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none w-full min-w-0 max-w-full">
                         <button data-payment-filter="todos" class="payment-filter-btn px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
                             <span>Todos</span>
                             <span class="filter-count-pay bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">0</span>
@@ -730,8 +730,8 @@ function loadViewTemplates() {
                 </div>
             </div>
 
-            <div id="remisiones-list-container" class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="remisiones-list" class="space-y-3 sm:space-y-4">
+            <div id="remisiones-list-container" class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="remisiones-list" class="space-y-3 sm:space-y-4 w-full min-w-0">
                     <div id="remisiones-loading-indicator" class="flex flex-col items-center justify-center py-12 text-slate-400">
                         <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500"></i>
                         <p class="text-xs font-semibold text-slate-500">Cargando remisiones...</p>
@@ -800,24 +800,26 @@ function loadViewTemplates() {
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Gestión de Cotizaciones</h1>
                     <p class="text-xs font-semibold text-slate-450 mt-1">Crea propuestas comerciales, haz seguimiento de estados y escálalas a remisión oficial.</p>
                 </div>
-                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                    <div class="flex items-center gap-2 w-full sm:w-auto bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-                        <select id="filter-month-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
-                        <span class="text-slate-300 font-light">|</span>
-                        <select id="filter-year-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+                    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                        <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
+                            <select id="filter-month-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
+                            <span class="text-slate-300 font-light">|</span>
+                            <select id="filter-year-cotizaciones" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer"></select>
+                        </div>
+                        <button id="mobile-add-cotizacion-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5 flex-shrink-0">
+                            <span class="text-base font-medium leading-none">+</span> Nueva Cotización
+                        </button>
                     </div>
-                    <div class="relative flex-grow sm:flex-grow-0 w-full sm:w-auto">
+                    <div class="relative flex-grow sm:flex-grow-0 w-full sm:w-60 min-w-0">
                         <input type="search" id="search-cotizaciones" placeholder="Buscar cotización o cliente..." class="w-full sm:w-60 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
-                    <button id="mobile-add-cotizacion-btn" class="bg-indigo-650 hover:bg-indigo-755 text-white font-extrabold py-2 px-5 rounded-full text-xs shadow-md transition-all transform hover:-translate-y-0.5 flex items-center gap-1.5 flex-shrink-0">
-                        <span class="text-base font-medium leading-none">+</span> Nueva Cotización
-                    </button>
                 </div>
             </div>
 
             <!-- Filtros por Estado -->
-            <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none w-full min-w-0 max-w-full">
                 <button data-filter="todas" class="cotizacion-filter-btn px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active-filter shadow-xs flex-shrink-0">
                     <span>Todas</span>
                     <span class="filter-count bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0</span>
@@ -849,8 +851,8 @@ function loadViewTemplates() {
                 </button>
             </div>
 
-            <div id="cotizaciones-list-container" class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="cotizaciones-list" class="space-y-4"></div>
+            <div id="cotizaciones-list-container" class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="cotizaciones-list" class="space-y-4 w-full min-w-0"></div>
                 <div id="cotizaciones-pagination"></div>
             </div>
         </div>`;
@@ -867,14 +869,14 @@ function loadViewTemplates() {
                 </div>
             </div>
             
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
                 <div class="border-b border-gray-150 mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4">
-                    <nav id="facturacion-nav" class="-mb-px flex space-x-6 overflow-x-auto w-full lg:w-auto">
+                    <nav id="facturacion-nav" class="-mb-px flex space-x-6 overflow-x-auto w-full min-w-0 max-w-full lg:w-auto">
                         <button id="tab-pendientes" class="dashboard-tab-btn active py-3 px-1 font-bold text-sm uppercase tracking-wide">🧾 Pendientes</button>
                         <button id="tab-realizadas" class="dashboard-tab-btn py-3 px-1 font-bold text-sm uppercase tracking-wide">📦 Realizadas</button>
                     </nav>
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-start gap-3 bg-white border border-slate-200 rounded-full px-4 py-1.5 shadow-sm w-full sm:w-auto">
+                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-start gap-3 bg-white border border-slate-200 rounded-full px-4 py-1.5 shadow-sm w-full sm:w-auto min-w-0">
                             <div class="flex items-center gap-1.5">
                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Desde:</span>
                                 <input type="month" id="factura-filter-start" class="bg-transparent border-0 p-0 text-xs font-bold text-slate-700 focus:ring-0 w-[135px] sm:w-auto cursor-pointer">
@@ -885,7 +887,7 @@ function loadViewTemplates() {
                                 <input type="month" id="factura-filter-end" class="bg-transparent border-0 p-0 text-xs font-bold text-slate-700 focus:ring-0 w-[135px] sm:w-auto cursor-pointer">
                             </div>
                         </div>
-                        <div class="relative w-full sm:w-auto flex-grow lg:flex-grow-0">
+                        <div class="relative w-full sm:w-auto flex-grow lg:flex-grow-0 min-w-0">
                             <input type="search" id="search-facturacion" placeholder="Buscar cliente, remisión..." class="w-full lg:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
                             <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                         </div>
@@ -935,8 +937,8 @@ function loadViewTemplates() {
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Directorio de Clientes</h1>
                     <p class="text-xs font-semibold text-slate-450 mt-1">Administra, busca y registra la información de tus clientes y sus compras.</p>
                 </div>
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <div class="relative flex-grow md:flex-grow-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                    <div class="relative flex-grow md:flex-grow-0 w-full sm:w-auto min-w-0">
                         <input type="search" id="search-clientes" placeholder="Buscar cliente..." class="w-full md:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
@@ -946,8 +948,8 @@ function loadViewTemplates() {
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="clientes-list" class="space-y-3"></div>
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="clientes-list" class="space-y-3 w-full min-w-0"></div>
             </div>
         </div>`;
     }
@@ -981,8 +983,8 @@ function loadViewTemplates() {
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Directorio de Proveedores</h1>
                     <p class="text-xs font-semibold text-slate-450 mt-1">Registra y administra los proveedores nacionales de la empresa.</p>
                 </div>
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <div class="relative flex-grow md:flex-grow-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                    <div class="relative flex-grow md:flex-grow-0 w-full sm:w-auto min-w-0">
                         <input type="search" id="search-proveedores" placeholder="Buscar proveedor..." class="w-full md:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
@@ -992,8 +994,8 @@ function loadViewTemplates() {
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="proveedores-list" class="space-y-3"></div>
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="proveedores-list" class="space-y-3 w-full min-w-0"></div>
             </div>
         </div>`;
     }
@@ -1050,7 +1052,7 @@ function loadViewTemplates() {
                     <p class="hidden sm:block text-xs font-semibold text-slate-450 mt-1">Registra y controla los egresos y gastos operativos de la empresa.</p>
                 </div>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
-                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                         <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs flex-grow sm:flex-grow-0">
                             <select id="filter-gastos-month" class="bg-transparent border-0 font-bold text-slate-700 text-xs focus:ring-0 cursor-pointer p-0"></select>
                             <span class="text-slate-300 font-light">|</span>
@@ -1062,15 +1064,15 @@ function loadViewTemplates() {
                             <span class="text-base font-medium leading-none">+</span> Nuevo Gasto
                         </button>
                     </div>
-                    <div class="relative w-full sm:w-60">
+                    <div class="relative w-full sm:w-60 min-w-0">
                         <input type="search" id="search-gastos" placeholder="Buscar gasto..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-xs transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="gastos-list" class="space-y-3"></div>
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="gastos-list" class="space-y-3 w-full min-w-0"></div>
             </div>
         </div>`;
     }
@@ -1243,8 +1245,8 @@ function loadViewTemplates() {
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Catálogo de Colores</h1>
                     <p class="text-xs font-semibold text-slate-450 mt-1">Administra la lista de colores de pintura electrostática disponibles.</p>
                 </div>
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <div class="relative flex-grow md:flex-grow-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                    <div class="relative flex-grow md:flex-grow-0 w-full sm:w-auto min-w-0">
                         <input type="search" id="search-colores" placeholder="Buscar color..." class="w-full md:w-64 pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-full text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition">
                         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
@@ -1253,8 +1255,8 @@ function loadViewTemplates() {
                     </button>
                 </div>
             </div>
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <div id="colores-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+            <div class="bg-white p-3.5 sm:p-6 rounded-2xl border border-slate-100 shadow-sm w-full min-w-0 overflow-hidden">
+                <div id="colores-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full min-w-0"></div>
             </div>
         </div>`;
     }

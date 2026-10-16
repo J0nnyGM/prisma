@@ -214,7 +214,7 @@ export function renderCotizaciones() {
         else if (esAprobada) cardColorClass = 'premium-card-green';
         else if (esConvertida) cardColorClass = 'premium-card-purple';
 
-        el.className = `premium-card ${cardColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition`;
+        el.className = `premium-card ${cardColorClass} p-3.5 sm:p-5 flex flex-col lg:flex-row justify-between lg:items-center gap-3 sm:gap-4 bg-white shadow-sm hover:shadow-md transition w-full min-w-0 max-w-full`;
 
         const statusClasses = {
             'Pendiente': 'status-recibido',
