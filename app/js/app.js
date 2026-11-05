@@ -1,6 +1,6 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
-export const APP_VERSION = '3.5';
+export const APP_VERSION = '3.6';
 
 // --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
 export const APP_CACHE_KEYS = [

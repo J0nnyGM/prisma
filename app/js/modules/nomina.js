@@ -1734,13 +1734,15 @@ function loadGestionPrestamosTab(container) {
                                     <tr>
                                         <th class="px-4 py-3 font-black tracking-wider">Colaborador</th>
                                         <th class="px-4 py-3 font-black tracking-wider text-right">Monto Inicial</th>
+                                        <th class="px-4 py-3 font-black tracking-wider text-right text-emerald-600">Tiene Pago</th>
                                         <th class="px-4 py-3 font-black tracking-wider text-right text-rose-600">Saldo Deuda</th>
-                                        <th class="px-4 py-3 font-black tracking-wider text-center w-24">Cuotas Restantes</th>
+                                        <th class="px-4 py-3 font-black tracking-wider text-center w-28">Progreso</th>
+                                        <th class="px-4 py-3 font-black tracking-wider text-center w-20">Cuotas</th>
                                         <th class="px-4 py-3 font-black tracking-wider text-center">Acción</th>
                                     </tr>
                                 </thead>
                                 <tbody id="active-loans-tbody" class="divide-y divide-slate-100">
-                                    <tr><td colspan="5" class="text-center py-8 text-slate-450">Cargando base de deudores...</td></tr>
+                                    <tr><td colspan="7" class="text-center py-8 text-slate-450">Cargando base de deudores...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1827,7 +1829,7 @@ function loadGestionPrestamosTab(container) {
             if (!document.getElementById('active-loans-tbody')) return;
 
             if (snap.empty) {
-                activeLoansBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-450 italic">No hay deudas activas en la empresa.</td></tr>`;
+                activeLoansBody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-450 italic">No hay deudas activas en la empresa.</td></tr>`;
                 return;
             }
 
@@ -1867,7 +1869,7 @@ function loadGestionPrestamosTab(container) {
 
                 activeLoansBody.innerHTML = '';
                 if (pageData.length === 0) {
-                    activeLoansBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-450">Sin resultados.</td></tr>`;
+                    activeLoansBody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-450">Sin resultados.</td></tr>`;
                     updatePaginationUI(0, 1);
                     return;
                 }
@@ -1875,6 +1877,14 @@ function loadGestionPrestamosTab(container) {
                 pageData.forEach(loan => {
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0";
+
+                    const montoOriginal = Number(loan.amount) || 0;
+                    const saldoPendiente = Math.max(0, Number(loan.balance !== undefined ? loan.balance : montoOriginal) || 0);
+                    const montoPagado = Math.max(0, montoOriginal - saldoPendiente);
+                    const porcentajePagado = montoOriginal > 0 
+                        ? Math.min(100, Math.max(0, Math.round((montoPagado / montoOriginal) * 100))) 
+                        : (saldoPendiente === 0 ? 100 : 0);
+
                     tr.innerHTML = `
                         <td class="px-4 py-3 font-bold text-slate-800">
                             <div>
@@ -1882,8 +1892,20 @@ function loadGestionPrestamosTab(container) {
                                 <p class="text-[9px] text-slate-400 mt-0.5 leading-none uppercase">${loan.description || 'Préstamo'}</p>
                             </div>
                         </td>
-                        <td class="px-4 py-3 text-right font-medium text-slate-500 font-mono">${currencyFormatter.format(loan.amount)}</td>
-                        <td class="px-4 py-3 text-right font-bold text-rose-600 font-mono">${currencyFormatter.format(loan.balance)}</td>
+                        <td class="px-4 py-3 text-right font-medium text-slate-500 font-mono">${currencyFormatter.format(montoOriginal)}</td>
+                        <td class="px-4 py-3 text-right font-bold text-emerald-700 font-mono">${currencyFormatter.format(montoPagado)}</td>
+                        <td class="px-4 py-3 text-right font-bold text-rose-600 font-mono">${currencyFormatter.format(saldoPendiente)}</td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="w-24 mx-auto text-left">
+                                <div class="flex justify-between items-center text-[10px] font-bold text-slate-600 mb-0.5">
+                                    <span>${porcentajePagado}%</span>
+                                    <span class="text-[9px] text-emerald-600">${porcentajePagado === 100 ? '✓' : ''}</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner">
+                                    <div class="h-2 rounded-full ${porcentajePagado === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-indigo-500 to-emerald-500'}" style="width: ${porcentajePagado}%;"></div>
+                                </div>
+                            </div>
+                        </td>
                         <td class="px-4 py-3 text-center font-bold text-slate-600 font-mono">${loan.installments || 1}</td>
                         <td class="px-4 py-3 text-center">
                             <button class="btn-abono-manual bg-indigo-550/10 border border-indigo-150 text-indigo-650 hover:bg-indigo-650 hover:text-white px-2.5 py-1 rounded-lg font-bold text-[10px] transition-all transform active:scale-95 shadow-xs" 
@@ -1946,7 +1968,7 @@ function loadGestionPrestamosTab(container) {
 
         } catch (e) {
             console.error("Error al compilar cartera de operarios:", e);
-            activeLoansBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-rose-500">Error al consultar base de datos: ${e.message}</td></tr>`;
+            activeLoansBody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-rose-500">Error al consultar base de datos: ${e.message}</td></tr>`;
         }
     };
 

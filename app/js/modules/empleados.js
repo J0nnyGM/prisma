@@ -10,6 +10,7 @@ import { loadIndividualDashboardIntoContainer } from './nomina.js';
 
 let showInactiveEmployees = false;
 let unsubscribeMyLoans = null;
+let unsubscribeMyApprovedLoans = null;
 import { doc,
     getDoc,
     collection,
@@ -4936,85 +4937,351 @@ function renderLoanList(prestamos) {
 }
 
 function showLoanRequestModal() {
+    if (!currentUser || !currentUser.uid) {
+        if (window.showToast) window.showToast("Usuario no autenticado", "error");
+        return;
+    }
+
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
 
     modalContentWrapper.innerHTML = `
-        <div class="modal-card max-w-lg w-full mx-auto text-left">
-            <div class="modal-header-fixed">
-                <h2 class="text-xl font-bold text-slate-800">Solicitud de Préstamo</h2>
-                <button id="close-loan-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+        <div class="modal-card max-w-2xl w-full mx-auto text-left rounded-2xl overflow-hidden bg-white shadow-2xl flex flex-col" style="max-height: 90vh;">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 sm:p-5 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-indigo-300 text-lg border border-white/10 shrink-0">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h2 class="text-base sm:text-lg font-black text-white leading-tight truncate">Mis Préstamos y Vales</h2>
+                        <p class="text-[11px] text-slate-300 font-medium truncate">Estado de cuenta, abonos y solicitudes de crédito</p>
+                    </div>
+                </div>
+                <button id="close-loan-modal" class="text-white/70 hover:text-white text-2xl font-bold leading-none p-1 transition-colors shrink-0">&times;</button>
             </div>
-            <div class="modal-body-scroll space-y-6">
-                <form id="loan-request-form" class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label for="loan-amount" class="block text-sm font-semibold text-slate-700">Monto a Solicitar</label>
-                            <input type="text" id="loan-amount" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-all font-mono font-bold text-slate-800" inputmode="numeric" required>
-                        </div>
-                        <div>
-                            <label for="loan-installments" class="block text-sm font-semibold text-slate-700">Número de Cuotas</label>
-                            <input type="number" id="loan-installments" min="1" max="48" value="1" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-all font-bold text-center text-slate-800" required>
+
+            <!-- Top Summary KPI Cards -->
+            <div class="bg-slate-50 border-b border-slate-200/80 px-4 sm:px-6 py-3 shrink-0">
+                <div class="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+                    <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-2xs">
+                        <span class="block text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Total Vales</span>
+                        <span id="my-loans-kpi-total" class="block text-xs sm:text-sm md:text-base font-black text-slate-800 font-mono mt-0.5">$0</span>
+                    </div>
+                    <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-150 shadow-2xs">
+                        <span class="block text-[9px] sm:text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider">Tienes Pago</span>
+                        <span id="my-loans-kpi-paid" class="block text-xs sm:text-sm md:text-base font-black text-emerald-600 font-mono mt-0.5">$0</span>
+                    </div>
+                    <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-rose-150 shadow-2xs">
+                        <span class="block text-[9px] sm:text-[10px] font-extrabold text-rose-500 uppercase tracking-wider">Debes Hoy</span>
+                        <span id="my-loans-kpi-debt" class="block text-xs sm:text-sm md:text-base font-black text-rose-600 font-mono mt-0.5">$0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="bg-white border-b border-slate-200 flex px-4 sm:px-6 shrink-0 gap-3 sm:gap-6">
+                <button id="op-tab-btn-active" class="py-3 text-xs font-black uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5 transition-all">
+                    <i class="fa-solid fa-receipt"></i> Mis Vales
+                    <span id="op-active-count-badge" class="ml-1 bg-indigo-100 text-indigo-700 text-[10px] font-black px-1.5 py-0.2 rounded-full">0</span>
+                </button>
+                <button id="op-tab-btn-request" class="py-3 text-xs font-black uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-1.5 transition-all">
+                    <i class="fa-solid fa-plus-circle"></i> Solicitar Nuevo Vale
+                    <span id="op-requests-count-badge" class="ml-1 bg-amber-100 text-amber-700 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
+                </button>
+            </div>
+
+            <!-- Scrollable Body Container -->
+            <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/60 space-y-4">
+                <!-- Tab 1: Mis Vales Activos e Historial -->
+                <div id="op-tab-content-active" class="space-y-4">
+                    <div id="my-active-loans-list" class="space-y-3">
+                        <div class="text-center py-10">
+                            <div class="inline-block animate-spin rounded-full h-7 w-7 border-3 border-indigo-500 border-t-transparent mb-2"></div>
+                            <p class="text-xs text-slate-400 font-medium">Cargando tus vales y préstamos...</p>
                         </div>
                     </div>
-                    <div>
-                        <label for="loan-reason" class="block text-sm font-semibold text-slate-700">Motivo</label>
-                        <textarea id="loan-reason" class="w-full p-2.5 border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-all" rows="3" required></textarea>
+                </div>
+
+                <!-- Tab 2: Solicitar Préstamo & Solicitudes Pendientes -->
+                <div id="op-tab-content-request" class="hidden space-y-5">
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                        <div class="border-b border-slate-100 pb-2">
+                            <h3 class="text-sm font-extrabold text-slate-800">Formulario de Solicitud</h3>
+                            <p class="text-[11px] text-slate-400">Ingresa los datos para solicitar un nuevo vale o anticipo a la empresa</p>
+                        </div>
+                        <form id="loan-request-form" class="space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="loan-amount" class="block text-xs font-bold text-slate-600 uppercase mb-1">Monto a Solicitar</label>
+                                    <input type="text" id="loan-amount" placeholder="$ 0" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white font-mono font-bold text-slate-800 text-sm" inputmode="numeric" required>
+                                </div>
+                                <div>
+                                    <label for="loan-installments" class="block text-xs font-bold text-slate-600 uppercase mb-1">Número de Cuotas</label>
+                                    <input type="number" id="loan-installments" min="1" max="48" value="1" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white font-bold text-center text-slate-800 text-sm" required>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="loan-reason" class="block text-xs font-bold text-slate-600 uppercase mb-1">Motivo / Concepto del Vale</label>
+                                <textarea id="loan-reason" placeholder="Describe brevemente el motivo del vale o anticipo..." class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-xs text-slate-700" rows="2" required></textarea>
+                            </div>
+                            <button type="submit" id="btn-submit-loan-request" class="w-full bg-indigo-650 hover:bg-indigo-700 text-white font-black py-2.5 px-4 rounded-xl transition-all shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i> Enviar Solicitud de Vale
+                            </button>
+                        </form>
                     </div>
-                    <button type="submit" class="w-full bg-indigo-650 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-sm">Enviar Solicitud</button>
-                </form>
-                <div class="border-t border-slate-100 pt-4">
-                    <h3 class="text-base font-bold text-slate-800">Mis Solicitudes</h3>
-                    <div id="my-loans-list" class="space-y-3 mt-3 max-h-60 overflow-y-auto divide-y divide-slate-100">Cargando...</div>
+
+                    <div class="space-y-2">
+                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Historial de Solicitudes Enviadas</h3>
+                        <div id="my-loans-list" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                            <p class="text-center text-slate-450 italic py-4 text-xs">Cargando solicitudes...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
+
     document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('close-loan-modal').addEventListener('click', hideModal);
 
+    // Close logic
+    const closeBtn = document.getElementById('close-loan-modal');
+    const handleClose = () => {
+        if (unsubscribeMyLoans) {
+            unsubscribeMyLoans();
+            unsubscribeMyLoans = null;
+        }
+        if (unsubscribeMyApprovedLoans) {
+            unsubscribeMyApprovedLoans();
+            unsubscribeMyApprovedLoans = null;
+        }
+        hideModal();
+    };
+    if (closeBtn) closeBtn.onclick = handleClose;
+
+    // Tabs navigation
+    const tabActiveBtn = document.getElementById('op-tab-btn-active');
+    const tabRequestBtn = document.getElementById('op-tab-btn-request');
+    const contentActive = document.getElementById('op-tab-content-active');
+    const contentRequest = document.getElementById('op-tab-content-request');
+
+    const switchToActive = () => {
+        tabActiveBtn.className = "py-3 text-xs font-black uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5 transition-all";
+        tabRequestBtn.className = "py-3 text-xs font-black uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-1.5 transition-all";
+        contentActive.classList.remove('hidden');
+        contentRequest.classList.add('hidden');
+    };
+
+    const switchToRequest = () => {
+        tabRequestBtn.className = "py-3 text-xs font-black uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5 transition-all";
+        tabActiveBtn.className = "py-3 text-xs font-black uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-1.5 transition-all";
+        contentRequest.classList.remove('hidden');
+        contentActive.classList.add('hidden');
+    };
+
+    if (tabActiveBtn) tabActiveBtn.onclick = switchToActive;
+    if (tabRequestBtn) tabRequestBtn.onclick = switchToRequest;
+
+    // Form inputs
     const amountInput = document.getElementById('loan-amount');
-    amountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
-    amountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+    if (amountInput) {
+        amountInput.addEventListener('focus', (e) => unformatCurrencyInput(e.target));
+        amountInput.addEventListener('blur', (e) => formatCurrencyInput(e.target));
+    }
 
-    document.getElementById('loan-request-form').addEventListener('submit', handleLoanRequestSubmit);
+    const loanForm = document.getElementById('loan-request-form');
+    if (loanForm) {
+        loanForm.addEventListener('submit', handleLoanRequestSubmit);
+    }
 
+    // 1. Subscribe to approved loans in users/{currentUser.uid}/loans
+    if (unsubscribeMyApprovedLoans) {
+        unsubscribeMyApprovedLoans();
+        unsubscribeMyApprovedLoans = null;
+    }
+
+    const activeLoansListEl = document.getElementById('my-active-loans-list');
+    const kpiTotalEl = document.getElementById('my-loans-kpi-total');
+    const kpiPaidEl = document.getElementById('my-loans-kpi-paid');
+    const kpiDebtEl = document.getElementById('my-loans-kpi-debt');
+    const activeBadgeEl = document.getElementById('op-active-count-badge');
+
+    const userLoansRef = collection(db, "users", currentUser.uid, "loans");
+    unsubscribeMyApprovedLoans = onSnapshot(userLoansRef, (snapshot) => {
+        if (!document.getElementById('my-active-loans-list')) return;
+
+        const loans = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        loans.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+        let totalAmount = 0;
+        let totalBalance = 0;
+        let activeCount = 0;
+
+        loans.forEach(l => {
+            const amt = Number(l.amount) || 0;
+            const bal = Math.max(0, Number(l.balance !== undefined ? l.balance : amt) || 0);
+            totalAmount += amt;
+            totalBalance += bal;
+            if (l.status === 'active' || bal > 0) {
+                activeCount++;
+            }
+        });
+
+        const totalPaid = Math.max(0, totalAmount - totalBalance);
+        const totalPercentPaid = totalAmount > 0 
+            ? Math.min(100, Math.max(0, Math.round((totalPaid / totalAmount) * 100))) 
+            : (totalBalance === 0 && totalAmount === 0 ? 100 : 0);
+
+        if (kpiTotalEl) kpiTotalEl.textContent = formatCurrency(totalAmount);
+        if (kpiPaidEl) kpiPaidEl.innerHTML = `${formatCurrency(totalPaid)} <span class="text-[10px] font-bold text-emerald-500 block sm:inline">(${totalPercentPaid}%)</span>`;
+        if (kpiDebtEl) {
+            if (totalBalance === 0 && totalAmount > 0) {
+                kpiDebtEl.innerHTML = `<span class="text-emerald-600 font-black text-xs sm:text-sm">¡Paz y Salvo! 🎉</span>`;
+            } else {
+                kpiDebtEl.textContent = formatCurrency(totalBalance);
+            }
+        }
+        if (activeBadgeEl) activeBadgeEl.textContent = activeCount;
+
+        if (loans.length === 0) {
+            activeLoansListEl.innerHTML = `
+                <div class="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-250 p-6 space-y-3">
+                    <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-xl mx-auto border border-emerald-200">
+                        <i class="fa-solid fa-shield-heart"></i>
+                    </div>
+                    <h4 class="text-sm font-extrabold text-slate-800">No tienes vales o préstamos activos</h4>
+                    <p class="text-xs text-slate-400 max-w-sm mx-auto">No registras deudas pendientes con la empresa. Si requieres un adelanto o vale, solicítalo en cualquier momento.</p>
+                    <button id="btn-go-to-request" class="bg-indigo-50 text-indigo-650 hover:bg-indigo-100 font-black text-xs px-4 py-2 rounded-xl transition-all border border-indigo-150 inline-flex items-center gap-1.5 mt-2">
+                        <i class="fa-solid fa-plus-circle"></i> Solicitar un Adelanto o Vale
+                    </button>
+                </div>
+            `;
+            const goBtn = document.getElementById('btn-go-to-request');
+            if (goBtn) goBtn.onclick = switchToRequest;
+            return;
+        }
+
+        activeLoansListEl.innerHTML = loans.map(l => {
+            const montoOriginal = Number(l.amount) || 0;
+            const saldoPendiente = Math.max(0, Number(l.balance !== undefined ? l.balance : montoOriginal) || 0);
+            const montoPagado = Math.max(0, montoOriginal - saldoPendiente);
+            const porcentajePagado = montoOriginal > 0 
+                ? Math.min(100, Math.max(0, Math.round((montoPagado / montoOriginal) * 100))) 
+                : (saldoPendiente === 0 ? 100 : 0);
+            const esPagado = l.status === 'paid' || saldoPendiente === 0;
+
+            return `
+                <div class="bg-white border ${esPagado ? 'border-emerald-200/80 bg-emerald-50/15' : 'border-slate-200'} p-4 sm:p-5 rounded-2xl shadow-xs space-y-3.5 transition-all hover:shadow-sm">
+                    <!-- Header del Vale -->
+                    <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-2.5">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs sm:text-sm font-black text-slate-800 leading-tight">${l.description || 'Vale / Préstamo'}</span>
+                                ${esPagado 
+                                    ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-250 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">✓ Pagado</span>`
+                                    : `<span class="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>En Cobro</span>`
+                                }
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 font-medium mt-1">
+                                <span><i class="fa-regular fa-calendar-days text-slate-400 mr-1"></i>${l.date || 'Sin fecha'}</span>
+                                <span>•</span>
+                                <span><i class="fa-solid fa-layer-group text-slate-400 mr-1"></i>Cuotas: <strong>${l.installments || 1}</strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3 Métricas Clave: Monto Vale, Tienes Pago, Debes -->
+                    <div class="grid grid-cols-3 gap-2 bg-slate-50/80 p-3 rounded-xl border border-slate-150 text-center">
+                        <div>
+                            <span class="block text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Monto Vale</span>
+                            <span class="block text-xs sm:text-sm font-black text-slate-700 font-mono mt-0.5">${formatCurrency(montoOriginal)}</span>
+                        </div>
+                        <div class="border-x border-slate-200 px-1">
+                            <span class="block text-[9px] sm:text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider">Tienes Pago</span>
+                            <span class="block text-xs sm:text-sm font-black text-emerald-600 font-mono mt-0.5">${formatCurrency(montoPagado)}</span>
+                        </div>
+                        <div>
+                            <span class="block text-[9px] sm:text-[10px] font-extrabold text-rose-500 uppercase tracking-wider">Debes</span>
+                            <span class="block text-xs sm:text-sm font-black ${saldoPendiente > 0 ? 'text-rose-600' : 'text-slate-400'} font-mono mt-0.5">${formatCurrency(saldoPendiente)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Progreso por Vale -->
+                    <div class="space-y-1.5 pt-1">
+                        <div class="flex justify-between items-center text-[11px]">
+                            <span class="font-bold text-slate-600 flex items-center gap-1.5">
+                                <i class="fa-solid fa-chart-line text-[10px] ${esPagado ? 'text-emerald-500' : 'text-indigo-500'}"></i> Progreso de Pago
+                            </span>
+                            <span class="font-black ${esPagado ? 'text-emerald-600' : 'text-indigo-600'} text-xs font-mono">${porcentajePagado}% pagado</span>
+                        </div>
+                        <div class="w-full bg-slate-200/90 rounded-full h-3 p-0.5 overflow-hidden shadow-inner">
+                            <div class="h-full rounded-full transition-all duration-700 ease-out ${esPagado ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 via-indigo-600 to-emerald-500'}" style="width: ${porcentajePagado}%;"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px] text-slate-400 font-medium px-0.5">
+                            <span>Pagado: <strong class="text-slate-600">${formatCurrency(montoPagado)}</strong></span>
+                            <span>Saldo: <strong class="${saldoPendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatCurrency(saldoPendiente)}</strong></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }, (error) => {
+        console.warn("Error en onSnapshot de vales del empleado:", error.message || error);
+        if (activeLoansListEl) {
+            activeLoansListEl.innerHTML = `<p class="text-center text-rose-500 py-4 text-xs">Error al consultar vales: ${error.message}</p>`;
+        }
+    });
+
+    // 2. Subscribe to pending requests in collection('prestamos')
     if (unsubscribeMyLoans) {
         unsubscribeMyLoans();
         unsubscribeMyLoans = null;
     }
     const loansListEl = document.getElementById('my-loans-list');
+    const reqBadgeEl = document.getElementById('op-requests-count-badge');
     const q = query(collection(db, "prestamos"), where("employeeId", "==", currentUser.uid));
     unsubscribeMyLoans = onSnapshot(q, (snapshot) => {
-        const prestamos = snapshot.docs.map(d => d.data());
-        prestamos.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+        if (!document.getElementById('my-loans-list')) return;
+
+        const prestamos = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        prestamos.sort((a, b) => new Date(b.requestDate || 0) - new Date(a.requestDate || 0));
+
+        const pendingCount = prestamos.filter(p => p.status === 'solicitado').length;
+        if (reqBadgeEl) {
+            if (pendingCount > 0) {
+                reqBadgeEl.textContent = `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''}`;
+                reqBadgeEl.classList.remove('hidden');
+            } else {
+                reqBadgeEl.classList.add('hidden');
+            }
+        }
 
         if (prestamos.length === 0) {
-            loansListEl.innerHTML = '<p class="text-center text-gray-500 py-4">No tienes solicitudes de préstamo.</p>';
+            loansListEl.innerHTML = '<p class="text-center text-slate-400 py-4 text-xs italic">No has enviado solicitudes recientes.</p>';
             return;
         }
-        loansListEl.innerHTML = '';
-        prestamos.forEach(p => {
-            const el = document.createElement('div');
-            el.className = 'bg-slate-50 border border-slate-100 p-3 rounded-xl flex justify-between items-center';
+        loansListEl.innerHTML = prestamos.map(p => {
             let statusBadge = '';
             switch (p.status) {
-                case 'solicitado': statusBadge = `<span class="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-250 px-2 py-0.5 rounded-md uppercase tracking-wider">Solicitado</span>`; break;
+                case 'solicitado': statusBadge = `<span class="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-250 px-2 py-0.5 rounded-md uppercase tracking-wider">En Revisión</span>`; break;
                 case 'aprobado': statusBadge = `<span class="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-250 px-2 py-0.5 rounded-md uppercase tracking-wider">Aprobado</span>`; break;
                 case 'cancelado': statusBadge = `<span class="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md uppercase tracking-wider">Cancelado</span>`; break;
-                case 'denegado': statusBadge = `<span class="text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md uppercase tracking-wider">Denegado</span>`; break;
+                case 'denegado': statusBadge = `<span class="text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md uppercase tracking-wider">Rechazado</span>`; break;
+                default: statusBadge = `<span class="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md uppercase">${p.status || 'En trámite'}</span>`;
             }
-            el.innerHTML = `
+            return `
+                <div class="bg-white border border-slate-200 p-3 rounded-xl flex justify-between items-center shadow-2xs">
                     <div>
-                        <p class="font-extrabold text-slate-800">${formatCurrency(p.amount)}</p>
+                        <p class="font-extrabold text-slate-800 text-xs sm:text-sm font-mono">${formatCurrency(p.amount)}</p>
+                        <p class="text-[11px] text-slate-500 italic truncate max-w-[200px] sm:max-w-xs">"${p.reason || 'Sin motivo'}"</p>
                         <div class="flex items-center gap-2 mt-0.5">
-                            <span class="text-xs text-slate-400 font-medium">${p.requestDate}</span>
-                            ${p.installments ? `<span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span><span class="text-xs text-slate-450 font-semibold">Cuotas: ${p.installments}</span>` : ''}
+                            <span class="text-[10px] text-slate-400 font-medium">${p.requestDate}</span>
+                            ${p.installments ? `<span class="h-1 w-1 rounded-full bg-slate-300"></span><span class="text-[10px] text-slate-450 font-semibold">Cuotas: ${p.installments}</span>` : ''}
                         </div>
                     </div>
-                    ${statusBadge}
-                `;
-            loansListEl.appendChild(el);
-        });
+                    <div>${statusBadge}</div>
+                </div>
+            `;
+        }).join('');
     }, (error) => {
         console.warn("Error en onSnapshot de préstamos del empleado:", error.message || error);
     });
@@ -5024,14 +5291,17 @@ async function handleLoanRequestSubmit(e) {
     e.preventDefault();
     const amount = unformatCurrency(document.getElementById('loan-amount').value);
     const installments = parseInt(document.getElementById('loan-installments').value) || 1;
-    const reason = document.getElementById('loan-reason').value;
+    const reason = (document.getElementById('loan-reason').value || '').trim();
 
-    if (amount <= 0) return showModalMessage("El monto debe ser mayor a cero.");
-    if (installments <= 0) return showModalMessage("El número de cuotas debe ser mayor a cero.");
+    if (amount <= 0) return alert("El monto debe ser mayor a cero.");
+    if (installments <= 0) return alert("El número de cuotas debe ser mayor a cero.");
+    if (!reason) return alert("Por favor ingresa el motivo del vale o préstamo.");
+
+    const employeeName = (currentUserData && (currentUserData.nombre || `${currentUserData.firstName || ''} ${currentUserData.lastName || ''}`.trim())) || 'Colaborador';
 
     const newLoan = {
         employeeId: currentUser.uid,
-        employeeName: currentUserData.nombre,
+        employeeName: employeeName,
         amount: amount,
         installments: installments,
         reason: reason,
@@ -5039,14 +5309,28 @@ async function handleLoanRequestSubmit(e) {
         status: 'solicitado'
     };
 
-    showModalMessage("Enviando solicitud...", true);
+    const submitBtn = document.getElementById('btn-submit-loan-request');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<div class="loader-small-white mx-auto"></div> Enviando...';
+    }
+
     try {
         await addDoc(collection(db, "prestamos"), newLoan);
-        hideModal();
-        showModalMessage("¡Solicitud enviada con éxito!", false, 2000);
+        if (window.showToast) {
+            window.showToast("¡Solicitud enviada con éxito! La administración la revisará.", "success");
+        } else {
+            alert("¡Solicitud enviada con éxito!");
+        }
+        document.getElementById('loan-request-form')?.reset();
     } catch (error) {
         console.error("Error al solicitar préstamo:", error);
-        showModalMessage("Error al enviar la solicitud.");
+        alert("Error al enviar la solicitud: " + (error.message || error));
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Solicitud de Vale';
+        }
     }
 }
 
@@ -5256,41 +5540,107 @@ function showAllLoansModal(requests) {
                     resultsContainer.innerHTML = '<p class="text-center text-slate-450 italic py-8 text-xs">Este colaborador no registra historial de préstamos.</p>';
                     return;
                 }
-                let html = '';
+
+                let totalAmount = 0;
+                let totalBalance = 0;
+                const loansList = [];
+
                 snap.forEach(docSnap => {
                     const l = docSnap.data();
-                    let statusBadge = '';
-                    if (l.status === 'active') {
-                        statusBadge = '<span class="text-[9px] font-black bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full uppercase">Activo</span>';
-                    } else if (l.status === 'paid') {
-                        statusBadge = '<span class="text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full uppercase">Pagado</span>';
-                    }
-                    html += `
-                        <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-xs text-left space-y-3">
+                    const montoOriginal = Number(l.amount) || 0;
+                    const saldoPendiente = Math.max(0, Number(l.balance !== undefined ? l.balance : montoOriginal) || 0);
+                    const montoPagado = Math.max(0, montoOriginal - saldoPendiente);
+                    const porcentajePagado = montoOriginal > 0 
+                        ? Math.min(100, Math.max(0, Math.round((montoPagado / montoOriginal) * 100))) 
+                        : (saldoPendiente === 0 ? 100 : 0);
+                    const esPagado = l.status === 'paid' || saldoPendiente === 0;
+
+                    totalAmount += montoOriginal;
+                    totalBalance += saldoPendiente;
+
+                    loansList.push({
+                        ...l,
+                        montoOriginal,
+                        saldoPendiente,
+                        montoPagado,
+                        porcentajePagado,
+                        esPagado
+                    });
+                });
+
+                const totalPaid = Math.max(0, totalAmount - totalBalance);
+                const totalPercentPaid = totalAmount > 0 
+                    ? Math.min(100, Math.max(0, Math.round((totalPaid / totalAmount) * 100))) 
+                    : 100;
+
+                const summaryHtml = `
+                    <div class="grid grid-cols-3 gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs text-center mb-4">
+                        <div>
+                            <span class="block text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Total Vales</span>
+                            <span class="block text-xs sm:text-sm font-black text-slate-800 font-mono mt-0.5">${formatCurrency(totalAmount)}</span>
+                        </div>
+                        <div class="border-x border-slate-200 px-1">
+                            <span class="block text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider">Tiene Pago</span>
+                            <span class="block text-xs sm:text-sm font-black text-emerald-600 font-mono mt-0.5">${formatCurrency(totalPaid)} <span class="text-[9px] text-emerald-500 font-bold">(${totalPercentPaid}%)</span></span>
+                        </div>
+                        <div>
+                            <span class="block text-[9px] font-extrabold text-rose-500 uppercase tracking-wider">Saldo Deuda</span>
+                            <span class="block text-xs sm:text-sm font-black ${totalBalance > 0 ? 'text-rose-600' : 'text-slate-400'} font-mono mt-0.5">${formatCurrency(totalBalance)}</span>
+                        </div>
+                    </div>
+                `;
+
+                const cardsHtml = loansList.map(l => {
+                    const statusBadge = l.esPagado
+                        ? '<span class="text-[9px] font-black bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full uppercase">Pagado</span>'
+                        : '<span class="text-[9px] font-black bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full uppercase">Activo</span>';
+
+                    return `
+                        <div class="bg-white border ${l.esPagado ? 'border-emerald-200/80 bg-emerald-50/10' : 'border-slate-200'} p-4 rounded-xl shadow-xs text-left space-y-3">
                             <div class="flex justify-between items-center border-b border-slate-100 pb-2">
                                 <div>
                                     <p class="text-xs font-black text-slate-700">${l.description || 'Préstamo'}</p>
-                                    <p class="text-[9px] text-slate-405 mt-0.5">Fecha: ${l.date}</p>
+                                    <p class="text-[9px] text-slate-400 mt-0.5">Fecha: ${l.date || 'N/A'} • Cuotas: ${l.installments || 1}</p>
                                 </div>
                                 ${statusBadge}
                             </div>
-                            <div class="grid grid-cols-2 gap-4 text-xs">
+                            <div class="grid grid-cols-3 gap-2 bg-slate-50/80 p-2.5 rounded-lg border border-slate-150 text-center">
                                 <div>
-                                    <p class="text-slate-400 font-semibold text-[10px]">Monto Original</p>
-                                    <p class="font-black text-slate-800 font-mono mt-0.5">${formatCurrency(l.amount)}</p>
+                                    <p class="text-slate-400 font-semibold text-[9px] uppercase tracking-wider">Monto Original</p>
+                                    <p class="font-black text-slate-800 font-mono text-xs mt-0.5">${formatCurrency(l.montoOriginal)}</p>
                                 </div>
                                 <div>
-                                    <p class="text-slate-400 font-semibold text-[10px]">Saldo Pendiente</p>
-                                    <p class="font-black text-rose-600 font-mono mt-0.5">${formatCurrency(l.balance)}</p>
+                                    <p class="text-emerald-600 font-semibold text-[9px] uppercase tracking-wider">Tiene Pago</p>
+                                    <p class="font-black text-emerald-600 font-mono text-xs mt-0.5">${formatCurrency(l.montoPagado)}</p>
+                                </div>
+                                <div>
+                                    <p class="text-rose-500 font-semibold text-[9px] uppercase tracking-wider">Debe</p>
+                                    <p class="font-black ${l.saldoPendiente > 0 ? 'text-rose-600' : 'text-slate-400'} font-mono text-xs mt-0.5">${formatCurrency(l.saldoPendiente)}</p>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-center text-[10px]">
+                                    <span class="font-bold text-slate-500 flex items-center gap-1">
+                                        <i class="fa-solid fa-chart-line text-[9px] text-indigo-500"></i> Progreso del vale
+                                    </span>
+                                    <span class="font-black ${l.esPagado ? 'text-emerald-600' : 'text-indigo-600'} text-xs font-mono">${l.porcentajePagado}% pagado</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden shadow-inner">
+                                    <div class="h-2.5 rounded-full ${l.esPagado ? 'bg-emerald-500' : 'bg-gradient-to-r from-indigo-500 to-emerald-500'}" style="width: ${l.porcentajePagado}%;"></div>
+                                </div>
+                                <div class="flex justify-between items-center text-[9px] text-slate-400 font-medium px-0.5">
+                                    <span>Pagado: ${formatCurrency(l.montoPagado)}</span>
+                                    <span>Saldo pendiente: ${formatCurrency(l.saldoPendiente)}</span>
                                 </div>
                             </div>
                         </div>
                     `;
-                });
-                resultsContainer.innerHTML = html;
+                }).join('');
+
+                resultsContainer.innerHTML = summaryHtml + cardsHtml;
             } catch (err) {
                 console.error("Error al consultar historial:", err);
-                resultsContainer.innerHTML = '<p class="text-center text-rose-500 py-8 text-xs">Error al cargar el historial de créditos.</p>';
+                resultsContainer.innerHTML = '<p class="text-center text-rose-500 py-8 text-xs">Error al cargar el historial de créditos: ' + err.message + '</p>';
             }
         };
     }
@@ -5301,8 +5651,9 @@ function showAllLoansModal(requests) {
     });
 }
 
-// Publish showAllLoansModal globally
+// Publish showAllLoansModal and showLoanRequestModal globally
 window.showAllLoansModal = showAllLoansModal;
+window.showLoanRequestModal = showLoanRequestModal;
 
 function showApproveLoanModal(loan, fromListModal = false) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
@@ -5630,6 +5981,14 @@ export function cleanupEmpleadosListeners() {
             console.warn("Error al desuscribir préstamos personales:", e);
         }
         unsubscribeMyLoans = null;
+    }
+    if (unsubscribeMyApprovedLoans) {
+        try {
+            unsubscribeMyApprovedLoans();
+        } catch (e) {
+            console.warn("Error al desuscribir préstamos aprobados personales:", e);
+        }
+        unsubscribeMyApprovedLoans = null;
     }
 }
 
