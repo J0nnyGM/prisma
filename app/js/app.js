@@ -1,6 +1,6 @@
 // js/app.js (Versión Modularizada - Controlador Principal LIMPIO)
 
-export const APP_VERSION = '3.6';
+export const APP_VERSION = '3.7';
 
 // --- CONTROL DE VERSIONAMIENTO Y LIMPIEZA DE CACHÉ OBSOLETO EN DISPOSITIVOS ---
 export const APP_CACHE_KEYS = [
@@ -10,6 +10,7 @@ export const APP_CACHE_KEYS = [
     'clientes_cache', 'clientes_last_sync',
     'proveedores_cache', 'proveedores_last_sync',
     'colores_cache', 'colores_last_sync',
+    'empleados_cache', 'empleados_last_sync',
     'payroll_config_cache', 'activeView'
 ];
 
@@ -31,19 +32,19 @@ import { auth, db, storage, functions, analytics, httpsCallable } from './fireba
 import { METODOS_DE_PAGO, ALL_MODULES } from './constants.js';
 import { isMobileDevice } from './utils.js';
 
-import { loadClientes, setupClientesEvents, renderClientes } from './modules/clientes.js?v=3.5';
-import { loadProveedores, setupProveedoresEvents, renderProveedores } from './modules/proveedores.js?v=3.5';
-import { loadItems, setupItemsEvents, renderItems } from './modules/items.js?v=3.5';
-import { loadColores, setupColoresEvents, renderColores } from './modules/colores.js?v=3.5';
-import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.5';
-import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners } from './modules/empleados.js?v=3.5';
-import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.5';
-import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones, allCotizaciones } from './modules/cotizaciones.js?v=3.5';
-import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.5';
-import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.5';
-import { setupFacturacionEvents } from './modules/facturacion.js?v=3.5';
-import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.5';
-import { setupFuncionesEvents } from './modules/funciones.js?v=3.5';
+import { loadClientes, setupClientesEvents, renderClientes } from './modules/clientes.js?v=3.7';
+import { loadProveedores, setupProveedoresEvents, renderProveedores } from './modules/proveedores.js?v=3.7';
+import { loadItems, setupItemsEvents, renderItems } from './modules/items.js?v=3.7';
+import { loadColores, setupColoresEvents, renderColores } from './modules/colores.js?v=3.7';
+import { loadGastos, setupGastosEvents, renderGastos } from './modules/gastos.js?v=3.7';
+import { loadEmpleados, loadAllLoanRequests, setupEmpleadosEvents, cleanupEmpleadosListeners, renderEmpleados } from './modules/empleados.js?v=3.7';
+import { loadRemisiones, setupRemisionesEvents, renderRemisiones } from './modules/remisiones.js?v=3.7';
+import { loadCotizaciones, setupCotizacionesEvents, renderCotizaciones, allCotizaciones } from './modules/cotizaciones.js?v=3.7';
+import { loadNomina, setupNominaEvents, cleanupNominaListeners, getPayrollConfig } from './modules/nomina.js?v=3.7';
+import { showDashboardModal, cleanupDashboardListeners } from './modules/dashboard.js?v=3.7';
+import { setupFacturacionEvents } from './modules/facturacion.js?v=3.7';
+import { loadChats, setupMensajesEvents, cleanupMensajesListeners } from './modules/mensajes.js?v=3.7';
+import { setupFuncionesEvents } from './modules/funciones.js?v=3.7';
 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updateEmail, createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { doc, getDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -495,7 +496,7 @@ function loadAllData() {
         loadChats();
     }
 
-    if (currentUserData && currentUserData.role === 'admin') {
+    if (currentUserData && (currentUserData.role === 'admin' || currentUserData.permissions?.empleados || currentUserData.permissions?.nomina)) {
         activeListeners.push(loadEmpleados());
         activeListeners.push(loadAllLoanRequests());
     }
@@ -1688,6 +1689,10 @@ function switchView(viewName, tabs, views, mobileTabs = null) {
 
     if (viewName === 'cotizaciones') {
         renderCotizaciones();
+    }
+
+    if (viewName === 'empleados') {
+        renderEmpleados();
     }
 
     // Expandir/contraer dinámicamente el contenedor principal <main> para el módulo de WhatsApp

@@ -46,8 +46,26 @@ const EMPLEADOS_CACHE_KEY = 'empleados_cache';
 const EMPLEADOS_SYNC_KEY = 'empleados_last_sync';
 
 let _db = db;
-let _getUsersMap;
-let _getCurrentUserRole;
+let _getUsersMap = () => {
+    const map = new Map();
+    (allUsers || []).forEach(u => {
+        const id = u.id || u.uid;
+        if (id) {
+            const normalized = { ...u };
+            if (!normalized.nombre) {
+                normalized.nombre = `${normalized.firstName || ''} ${normalized.lastName || ''}`.trim() || normalized.email || 'Empleado';
+            }
+            if (!normalized.firstName && !normalized.lastName && normalized.nombre) {
+                const parts = normalized.nombre.trim().split(/\s+/);
+                normalized.firstName = parts[0] || '';
+                normalized.lastName = parts.slice(1).join(' ') || '';
+            }
+            map.set(id, normalized);
+        }
+    });
+    return map;
+};
+let _getCurrentUserRole = () => currentUserData?.role || 'operario';
 let _showView;
 let _openConfirmModal = function(message, onConfirm) {
     if (window.openConfirmModal) {
@@ -394,18 +412,22 @@ async function loadDocumentosTab(container) {
 
     // CORRECCIÓN: Convertimos el Map a un array asegurándonos de incluir el 'id'
     const usersArray = Array.from(usersMap.entries())
-        .map(([id, data]) => ({ id: id, ...data })) // <-- AQUÍ ESTABA EL PROBLEMA
-        .filter(u => u.status === 'active');
+        .map(([id, data]) => ({ id: id, ...data }))
+        .filter(u => {
+            const s = (u.status || '').toLowerCase().trim();
+            return s !== 'inactive' && s !== 'inactivo' && s !== 'archived';
+        });
 
     searchInput.addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
         resultsBox.innerHTML = '';
         if (term.length < 2) { resultsBox.classList.add('hidden'); return; }
 
-        const filtered = usersArray.filter(u =>
-            `${u.firstName} ${u.lastName}`.toLowerCase().includes(term) ||
-            (u.idNumber && u.idNumber.includes(term))
-        );
+        const filtered = usersArray.filter(u => {
+            const fullName = (u.nombre || `${u.firstName || ''} ${u.lastName || ''}`).toLowerCase();
+            const idNum = (u.idNumber || u.cedula || '').toLowerCase();
+            return fullName.includes(term) || idNum.includes(term);
+        });
 
         if (filtered.length === 0) resultsBox.innerHTML = '<div class="p-3 text-sm text-gray-500">No encontrado</div>';
         else {
@@ -1341,7 +1363,12 @@ async function loadSSTColaboradoresSubTab(container) {
     // Mapeamos entries() para asegurar que el ID vaya dentro del objeto y filtramos administradores
     const activeUsers = Array.from(usersMap.entries())
         .map(([id, data]) => ({ id: id, ...data }))
-        .filter(u => u.status === 'active' && u.role !== 'admin' && u.role !== 'administrador');
+        .filter(u => {
+            const s = (u.status || '').toLowerCase().trim();
+            const r = (u.role || '').toLowerCase().trim();
+            const isInactive = s === 'inactive' || s === 'inactivo' || s === 'archived';
+            return !isInactive && r !== 'admin' && r !== 'administrador';
+        });
 
     tableBody.innerHTML = '';
 
@@ -3921,95 +3948,63 @@ window.openPaymentVoucherModal = openPaymentVoucherModal;
 // ==========================================
 
 export function loadEmpleados() {
-    if (!currentUserData || currentUserData.role !== 'admin') {
+    if (!currentUserData || (currentUserData.role !== 'admin' && !currentUserData.permissions?.empleados && !currentUserData.permissions?.nomina)) {
         return () => { }; 
     }
 
+    // 1. Cargar desde el caché local si existe (para renderizado instantáneo en 0ms)
     const cachedData = localStorage.getItem(EMPLEADOS_CACHE_KEY);
-    
-    let mapUsers = new Map();
-    let maxLastUpdated = 0; // Guardará la fecha exacta del documento más reciente
-
-    // 1. Cargar desde el caché local (Velocidad instantánea)
     if (cachedData) {
         try {
             const parsedData = JSON.parse(cachedData);
-            parsedData.forEach(u => {
-                mapUsers.set(u.id, u);
-                // Buscamos cuál es el timestamp más reciente que tenemos guardado
-                if (u._lastUpdated && u._lastUpdated > maxLastUpdated) {
-                    maxLastUpdated = u._lastUpdated;
-                }
-            });
-            setAllUsers(Array.from(mapUsers.values()));
-            renderAndAttachEmployeeListeners(Array.from(mapUsers.values()));
+            if (Array.isArray(parsedData) && parsedData.length > 0) {
+                setAllUsers(parsedData);
+                renderAndAttachEmployeeListeners(parsedData);
+            }
         } catch (e) {
-            console.warn("Caché de empleados corrupto. Se limpiará.");
+            console.warn("Caché de empleados corrupto:", e);
             localStorage.removeItem(EMPLEADOS_CACHE_KEY);
             localStorage.removeItem(EMPLEADOS_SYNC_KEY);
         }
     }
 
-    // 2. onSnapshot Diferencial basado en la información real del servidor
+    // 2. onSnapshot en tiempo real de TODA la colección de usuarios (sin filtros que omitan empleados)
     const colRef = collection(db, "users");
-    let q;
-
-    if (maxLastUpdated > 0) {
-        // Restamos 2 minutos de margen de seguridad a la fecha del último documento
-        const syncTime = new Date(maxLastUpdated - 120000); 
-        q = query(colRef, where("_lastUpdated", ">=", syncTime));
-    } else {
-        // Si no hay caché, descarga todo
-        q = query(colRef);
-    }
-
-    // 3. Quedarse escuchando los cambios en vivo
-    let isInitial = true;
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        let huboCambios = false;
-
-        snapshot.docChanges().forEach((change) => {
-            const doc = change.doc;
-            const data = doc.data();
-
-            // Limpieza de Timestamps para poder serializar en JSON local
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+        const users = [];
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
             if (data._lastUpdated && typeof data._lastUpdated.toMillis === 'function') data._lastUpdated = data._lastUpdated.toMillis();
             if (data.creadoEn && typeof data.creadoEn.toMillis === 'function') data.creadoEn = data.creadoEn.toMillis();
-            
-            if (change.type === "added" || change.type === "modified") {
-                mapUsers.set(doc.id, { id: doc.id, ...data });
-                huboCambios = true;
-            }
-            if (change.type === "removed") {
-                mapUsers.delete(doc.id);
-                huboCambios = true;
-            }
+            users.push({ id: docSnap.id, ...data });
         });
 
-        // 4. Si hubo un cambio, actualizamos la memoria, el caché local y la pantalla
-        if (huboCambios) {
-            const finalArray = Array.from(mapUsers.values());
-            
-            finalArray.sort((a, b) => {
-                const statusOrder = { 'pending': 1, 'inactive': 2, 'active': 3 };
-                const orderA = statusOrder[a.status] || 99;
-                const orderB = statusOrder[b.status] || 99;
-                if (orderA !== orderB) return orderA - orderB;
-                return (a.nombre || '').localeCompare(b.nombre || '');
-            });
+        users.sort((a, b) => {
+            const statusOrder = { 'pending': 1, 'inactive': 2, 'active': 3 };
+            const statusA = (a.status || '').toLowerCase().trim();
+            const statusB = (b.status || '').toLowerCase().trim();
+            const orderA = statusOrder[statusA] || 99;
+            const orderB = statusOrder[statusB] || 99;
+            if (orderA !== orderB) return orderA - orderB;
+            const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+            const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
 
-            localStorage.setItem(EMPLEADOS_CACHE_KEY, JSON.stringify(finalArray));
-            
-            setAllUsers(finalArray);
-            renderAndAttachEmployeeListeners(finalArray);
-            
-            if (!isInitial) {
-                console.log(`[Empleados] ${snapshot.docChanges().length} cambios detectados en tiempo real.`);
-            }
+        try {
+            localStorage.setItem(EMPLEADOS_CACHE_KEY, JSON.stringify(users));
+        } catch (e) {
+            console.warn("No se pudo guardar empleados en localStorage:", e);
         }
-        isInitial = false;
+
+        setAllUsers(users);
+        renderAndAttachEmployeeListeners(users);
+
+        if (typeof window.refreshNominaTables === 'function') {
+            window.refreshNominaTables();
+        }
     }, (error) => {
-        console.error("Error en onSnapshot diferencial de empleados:", error);
+        console.error("Error en onSnapshot de empleados:", error);
     });
 
     return unsubscribe;
@@ -4057,21 +4052,36 @@ export function loadAllLoanRequests() {
 }
 
 // --- RENDERIZADO Y MODALES DE EMPLEADOS ---
+export function renderEmpleados(users = allUsers) {
+    renderAndAttachEmployeeListeners(users);
+}
+
 function renderAndAttachEmployeeListeners(users) {
     const empleadosListEl = document.getElementById('empleados-list');
     if (!empleadosListEl) return;
 
+    // Función auxiliar para normalizar el estado del usuario
+    const getNormalizedStatus = (st) => {
+        const s = (st || '').toString().toLowerCase().trim();
+        if (s === 'inactive' || s === 'inactivo' || s === 'archived' || s === 'desactivado') return 'inactive';
+        if (s === 'active' || s === 'activo' || s === 'habilitado') return 'active';
+        return 'pending';
+    };
+
     // 1. Filtrar los usuarios según el estado del botón
     const filteredUsers = users.filter(u => {
         if (showInactiveEmployees) return true; // Mostrar todos
-        return u.status !== 'inactive'; // Ocultar inactivos
+        return getNormalizedStatus(u.status) !== 'inactive'; // Ocultar inactivos
     });
 
-    // Ordenar: planta (1), facturador (2), admin (3) al final. Si son iguales, por nombre alfabéticamente.
+    // Ordenar: planta/operario (1), contabilidad/facturador (2), admin (3) al final. Si son iguales, por nombre alfabéticamente.
     const roleOrder = {
         'planta': 1,
+        'operario': 1,
+        'contabilidad': 2,
         'facturador': 2,
-        'admin': 3
+        'admin': 3,
+        'administrador': 3
     };
     filteredUsers.sort((a, b) => {
         const orderA = roleOrder[(a.role || '').toLowerCase().trim()] || 99;
@@ -4079,13 +4089,15 @@ function renderAndAttachEmployeeListeners(users) {
         if (orderA !== orderB) {
             return orderA - orderB;
         }
-        return (a.nombre || '').localeCompare(b.nombre || '');
+        const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+        const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es');
     });
 
     // 2. Construir la cabecera con el botón de filtro
-    const activeCount = users.filter(u => u.status === 'active').length;
-    const inactiveCount = users.filter(u => u.status === 'inactive').length;
-    const pendingCount = users.filter(u => u.status === 'pending').length;
+    const activeCount = users.filter(u => getNormalizedStatus(u.status) === 'active').length;
+    const inactiveCount = users.filter(u => getNormalizedStatus(u.status) === 'inactive').length;
+    const pendingCount = users.filter(u => getNormalizedStatus(u.status) === 'pending').length;
 
     let htmlContent = `
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5 bg-slate-50 border border-slate-200/60 p-4 rounded-2xl shadow-xs">
@@ -4110,12 +4122,14 @@ function renderAndAttachEmployeeListeners(users) {
     // 3. Generar las tarjetas de los empleados
     filteredUsers.forEach(empleado => {
         const isMe = (empleado.id === currentUser.uid); // Comprobamos si es el propio admin
-        const nameInitial = (empleado.nombre || 'E').charAt(0).toUpperCase();
+        const normStatus = getNormalizedStatus(empleado.status);
+        const empName = (empleado.nombre || `${empleado.firstName || ''} ${empleado.lastName || ''}`).trim() || empleado.email || 'Empleado';
+        const nameInitial = empName.charAt(0).toUpperCase();
 
         let statusBadge = '';
         let toggleButtonHTML = '';
 
-        switch (empleado.status) {
+        switch (normStatus) {
             case 'active':
                 statusBadge = `<span class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-250 uppercase tracking-wider">Activo</span>`;
                 toggleButtonHTML = `<button data-uid="${empleado.id}" data-status="inactive" class="user-status-btn bg-amber-600 hover:bg-amber-700 text-white py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition w-full shadow-xs">Desactivar</button>`;
@@ -4136,7 +4150,9 @@ function renderAndAttachEmployeeListeners(users) {
         }
 
         // Si el usuario está inactivo, le ponemos un fondo gris claro a su tarjeta para distinguirlo rápidamente
-        const cardBgClass = empleado.status === 'inactive' ? 'opacity-70 bg-slate-50' : 'bg-white';
+        const cardBgClass = normStatus === 'inactive' ? 'opacity-70 bg-slate-50' : 'bg-white';
+
+        const userPayload = { ...empleado, nombre: empName };
 
         htmlContent += `
             <div class="premium-card premium-card-indigo p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${cardBgClass} shadow-xs hover:shadow-md transition">
@@ -4144,15 +4160,15 @@ function renderAndAttachEmployeeListeners(users) {
                     <div class="premium-avatar premium-avatar-indigo flex-shrink-0">${nameInitial}</div>
                     <div class="flex-grow min-w-0">
                         <div class="flex items-center gap-2 mb-1 flex-wrap">
-                             <p class="font-extrabold text-base sm:text-lg text-slate-900 truncate">${empleado.nombre} ${isMe ? '<span class="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded ml-2 uppercase">Tú</span>' : ''}</p>
+                             <p class="font-extrabold text-base sm:text-lg text-slate-900 truncate">${empName} ${isMe ? '<span class="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded ml-2 uppercase">Tú</span>' : ''}</p>
                              ${statusBadge}
                         </div>
-                        <p class="text-xs text-slate-500 font-medium">${empleado.email} &bull; <span class="font-bold text-indigo-650 uppercase text-[10px] tracking-wider">${empleado.role}</span></p>
+                        <p class="text-xs text-slate-500 font-medium">${empleado.email || 'Sin correo'} &bull; <span class="font-bold text-indigo-650 uppercase text-[10px] tracking-wider">${empleado.role || 'Sin Rol'}</span></p>
                     </div>
                 </div>
                 <div class="flex-shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-rrhh-docs-btn bg-teal-650 hover:bg-teal-755 text-white py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition shadow-xs">RR.HH.</button>
-                    <button data-user-json='${JSON.stringify(empleado)}' class="manage-user-btn bg-indigo-650 hover:bg-indigo-755 text-white py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition shadow-xs">Gestionar</button>
+                    <button data-user-json='${JSON.stringify(userPayload)}' class="manage-rrhh-docs-btn bg-teal-650 hover:bg-teal-755 text-white py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition shadow-xs">RR.HH.</button>
+                    <button data-user-json='${JSON.stringify(userPayload)}' class="manage-user-btn bg-indigo-650 hover:bg-indigo-755 text-white py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition shadow-xs">Gestionar</button>
                     <div class="col-span-2 sm:col-span-1 w-full lg:w-auto">
                         ${toggleButtonHTML}
                     </div>
@@ -4215,6 +4231,7 @@ function renderAndAttachEmployeeListeners(users) {
 function showAdminEditUserModal(user) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
     const userPermissions = user.permissions || {};
+    const userName = (user.nombre || `${user.firstName || ''} ${user.lastName || ''}`).trim() || user.email || 'Empleado';
 
     let permissionsHTML = ALL_MODULES.filter(m => m !== 'empleados').map(module => {
         const isChecked = userPermissions[module] || false;
@@ -4230,14 +4247,14 @@ function showAdminEditUserModal(user) {
     modalContentWrapper.innerHTML = `
         <div class="modal-card max-w-lg w-full mx-auto" style="height: auto; max-height: 85vh;">
             <div class="modal-header-fixed">
-                <h2 class="text-xl font-bold text-slate-800">Gestionar Empleado: ${user.nombre}</h2>
+                <h2 class="text-xl font-bold text-slate-800">Gestionar Empleado: ${userName}</h2>
                 <button id="close-admin-edit-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
             </div>
             <form id="admin-edit-user-form" class="modal-body-scroll p-6 space-y-4">
                 <input type="hidden" id="admin-edit-user-id" value="${user.id}">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nombre Completo</label>
-                    <input type="text" id="admin-edit-name" class="w-full p-2.5 border border-slate-300 rounded-xl bg-white shadow-xs focus:ring-2 focus:ring-indigo-500 text-sm" value="${user.nombre || ''}" required>
+                    <input type="text" id="admin-edit-name" class="w-full p-2.5 border border-slate-300 rounded-xl bg-white shadow-xs focus:ring-2 focus:ring-indigo-500 text-sm" value="${userName}" required>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cédula de Ciudadanía</label>
@@ -4362,11 +4379,12 @@ function showAdminEditUserModal(user) {
 
 function showRRHHModal(empleado) {
     const modalContentWrapper = document.getElementById('modal-content-wrapper');
+    const empNombre = (empleado.nombre || `${empleado.firstName || ''} ${empleado.lastName || ''}`).trim() || empleado.email || 'Empleado';
 
     modalContentWrapper.innerHTML = `
             <div class="modal-card max-w-5xl w-full mx-auto" style="height: 85vh; max-height: 85vh;">
                 <div class="modal-header-fixed">
-                    <h2 class="text-xl font-bold text-slate-800">Recursos Humanos: ${empleado.nombre}</h2>
+                    <h2 class="text-xl font-bold text-slate-800">Recursos Humanos: ${empNombre}</h2>
                     <button id="close-rrhh-modal" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
                 </div>
                 <div class="border-b border-slate-200 bg-slate-50/50 flex-shrink-0">
@@ -5429,11 +5447,17 @@ function showAllLoansModal(requests) {
 
     const activeUsers = [];
     allUsers.forEach(u => {
-        if (u.status === 'active') activeUsers.push(u);
+        const s = (u.status || '').toLowerCase().trim();
+        const isInactive = s === 'inactive' || s === 'inactivo' || s === 'archived';
+        if (!isInactive) activeUsers.push(u);
     });
-    activeUsers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    activeUsers.sort((a, b) => {
+        const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+        const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es');
+    });
     const activeUsersOptionsHTML = activeUsers.map(u => {
-        const displayName = (u.firstName && u.lastName) ? `${u.firstName} ${u.lastName}` : (u.nombre || 'Colaborador Sin Nombre');
+        const displayName = (u.nombre || `${u.firstName || ''} ${u.lastName || ''}`).trim() || u.email || 'Colaborador';
         return `<option value="${u.id}">${displayName} (${u.role || 'Operario'})</option>`;
     }).join('');
 

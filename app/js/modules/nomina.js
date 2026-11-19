@@ -421,14 +421,20 @@ export function getPayrollConfig() {
 
 function getUsersMap() {
     const newMap = new Map();
-    allUsers.forEach(user => {
+    (allUsers || []).forEach(user => {
         const normalizedUser = { ...user };
+        if (!normalizedUser.nombre) {
+            normalizedUser.nombre = `${normalizedUser.firstName || ''} ${normalizedUser.lastName || ''}`.trim() || normalizedUser.email || 'Empleado';
+        }
         if (!normalizedUser.firstName && !normalizedUser.lastName && normalizedUser.nombre) {
             const parts = normalizedUser.nombre.trim().split(/\s+/);
             normalizedUser.firstName = parts[0] || '';
             normalizedUser.lastName = parts.slice(1).join(' ') || '';
         }
-        newMap.set(user.id, normalizedUser);
+        const uid = user.id || user.uid;
+        if (uid) {
+            newMap.set(uid, normalizedUser);
+        }
     });
     return newMap;
 }
@@ -706,6 +712,16 @@ function renderActiveSubTab() {
     }
 }
 
+window.refreshNominaTables = function() {
+    const viewNomina = document.getElementById('view-nomina');
+    if (!viewNomina || viewNomina.classList.contains('hidden')) return;
+    if (currentDrillDownUserId) {
+        loadIndividualDashboard(currentDrillDownUserId, currentDrillDownSubTab);
+    } else {
+        renderActiveSubTab();
+    }
+};
+
 function updateLoanBadge() {
     const badge = document.getElementById('nomina-loan-badge');
     const headerBadge = document.getElementById('header-loan-badge');
@@ -814,9 +830,16 @@ async function loadNominaQuincenalTab(container) {
         const usersMap = getUsersMap();
         const activeUsers = [];
         usersMap.forEach((user, id) => {
-            const basico = parseFloat(user.contratacion?.salario) || parseFloat(user.salarioBasico) || 0;
-            if (user.status === 'active' && (user.role || '').toLowerCase().trim() !== 'facturador' && basico > 0) {
-                activeUsers.push({ id, ...user });
+            const basico = parseFloat(user.contratacion?.salario) || 
+                           parseFloat(user.salarioBasico) || 
+                           parseFloat(user.salario) || 
+                           parseFloat(user.salary) || 
+                           parseFloat(user.sueldo) || 0;
+            const status = (user.status || '').toLowerCase().trim();
+            const role = (user.role || '').toLowerCase().trim();
+            const isInactive = status === 'inactive' || status === 'inactivo' || status === 'archived';
+            if (!isInactive && role !== 'facturador') {
+                activeUsers.push({ id, ...user, salarioBasico: basico });
             }
         });
 
@@ -882,21 +905,29 @@ async function loadNominaQuincenalTab(container) {
             const stats = statDoc.exists() ? statDoc.data() : { totalBonificacion: 0 };
             const loanInfo = userLoansMap.get(operario.id) || { totalBalance: 0, estimatedDeduction: 0, loans: [] };
 
-            const basico = parseFloat(operario.contratacion?.salario) || parseFloat(operario.salarioBasico) || 0;
+            const basico = parseFloat(operario.contratacion?.salario) || 
+                           parseFloat(operario.salarioBasico) || 
+                           parseFloat(operario.salario) || 
+                           parseFloat(operario.salary) || 
+                           parseFloat(operario.sueldo) || 0;
             const bono = 0;
             const deductionPotential = Math.min(loanInfo.estimatedDeduction, loanInfo.totalBalance);
             const dedSobreMinimo = operario.deduccionSobreMinimo === true || operario.deduccionSobreMinimo === 'true';
 
             const continuity = (continuityResults && continuityResults[index]) ? continuityResults[index] : null;
 
+            const fullName = (operario.nombre || `${operario.firstName || ''} ${operario.lastName || ''}`).trim() || operario.email || 'Empleado';
+            const fName = operario.firstName || fullName.split(' ')[0] || '';
+            const lName = operario.lastName || fullName.split(' ').slice(1).join(' ') || '';
+
             return {
                 id: operario.id,
-                fullName: `${operario.firstName} ${operario.lastName}`,
-                firstName: operario.firstName || '',
-                lastName: operario.lastName || '',
+                fullName: fullName,
+                firstName: fName,
+                lastName: lName,
                 email: operario.email || '',
-                initials: ((operario.firstName ? operario.firstName[0] : '') + (operario.lastName ? operario.lastName[0] : 'E')).toUpperCase(),
-                cedula: operario.idNumber || 'N/A',
+                initials: ((fName ? fName[0] : '') + (lName ? lName[0] : (fullName[0] || 'E'))).toUpperCase(),
+                cedula: operario.idNumber || operario.cedula || 'N/A',
                 bankName: operario.bankName || 'N/A',
                 accountNumber: operario.accountNumber || 'N/A',
                 commissionLevel: operario.commissionLevel || 'principiante',
@@ -921,8 +952,8 @@ async function loadNominaQuincenalTab(container) {
             const diasPagar = 15;
 
             const processedData = rawEmpleadoData.map(emp => {
-                const salarioProrrateado = (emp.salarioBasico / 30) * diasPagar;
-                const auxTransporteMensual = emp.salarioBasico <= (config.salarioMinimo * 2) ? config.auxilioTransporte : 0;
+                const salarioProrrateado = emp.salarioBasico > 0 ? (emp.salarioBasico / 30) * diasPagar : 0;
+                const auxTransporteMensual = (emp.salarioBasico > 0 && emp.salarioBasico <= (config.salarioMinimo * 2)) ? config.auxilioTransporte : 0;
 
                 let incDays = 0;
                 const range = getQuincenaDateRange(activeQuincena, selectedNominaMonthYear);
@@ -1043,6 +1074,9 @@ async function loadNominaQuincenalTab(container) {
                 }
 
                 const basicoMasAux = data.salarioProrrateado + data.auxTransporteProrrateado;
+                const basicoHtml = data.salarioBasico > 0 
+                    ? currencyFormatter.format(basicoMasAux)
+                    : `<span class="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs font-mono" title="Configure el salario en el módulo de Empleados">$ 0 (Sin Asignar)</span>`;
 
                 let netPayHtml = `<span class="font-black text-blue-700 text-sm md:text-base font-mono">${currencyFormatter.format(data.totalPagar)}</span>`;
                 if (data.isAlreadyPaid) {
@@ -1081,7 +1115,7 @@ async function loadNominaQuincenalTab(container) {
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4 text-right font-semibold text-slate-600 text-xs md:text-sm font-mono">${currencyFormatter.format(basicoMasAux)}</td>
+                    <td class="px-6 py-4 text-right font-semibold text-slate-600 text-xs md:text-sm font-mono">${basicoHtml}</td>
                     <td class="px-6 py-4 text-right text-xs md:text-sm">${leyHtml}</td>
                     <td class="px-6 py-4 text-right text-xs md:text-sm">${prestamosHtml}</td>
                     <td class="px-6 py-4 text-right">${netPayHtml}</td>
@@ -1589,15 +1623,23 @@ function loadPrestacionesTab(container) {
     const usersMap = getUsersMap();
     const activeUsers = [];
     usersMap.forEach((user, id) => {
-        if (user.status === 'active') activeUsers.push({ id, ...user });
+        const s = (user.status || '').toLowerCase().trim();
+        const isInactive = s === 'inactive' || s === 'inactivo' || s === 'archived';
+        if (!isInactive) activeUsers.push({ id, ...user });
     });
 
-    activeUsers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    activeUsers.sort((a, b) => {
+        const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+        const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es');
+    });
 
     activeUsers.forEach(u => {
         const option = document.createElement('option');
         option.value = u.id;
-        option.textContent = `${u.firstName} ${u.lastName} (C.C. ${u.idNumber || 'N/A'})`;
+        const name = (u.nombre || `${u.firstName || ''} ${u.lastName || ''}`).trim();
+        const cedula = u.idNumber || u.cedula || 'N/A';
+        option.textContent = `${name} (C.C. ${cedula})`;
         select.appendChild(option);
     });
 
@@ -1655,15 +1697,23 @@ function loadLiquidacionesTab(container) {
     const usersMap = getUsersMap();
     const activeUsers = [];
     usersMap.forEach((user, id) => {
-        if (user.status === 'active') activeUsers.push({ id, ...user });
+        const s = (user.status || '').toLowerCase().trim();
+        const isInactive = s === 'inactive' || s === 'inactivo' || s === 'archived';
+        if (!isInactive) activeUsers.push({ id, ...user });
     });
 
-    activeUsers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    activeUsers.sort((a, b) => {
+        const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+        const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es');
+    });
 
     activeUsers.forEach(u => {
         const option = document.createElement('option');
         option.value = u.id;
-        option.textContent = `${u.firstName} ${u.lastName} (C.C. ${u.idNumber || 'N/A'})`;
+        const name = (u.nombre || `${u.firstName || ''} ${u.lastName || ''}`).trim();
+        const cedula = u.idNumber || u.cedula || 'N/A';
+        option.textContent = `${name} (C.C. ${cedula})`;
         select.appendChild(option);
     });
 
@@ -2093,11 +2143,21 @@ function showDirectLoanModal(onCompletedCallback) {
     const usersMap = getUsersMap();
     const activeUsers = [];
     usersMap.forEach((user, id) => {
-        if (user.status === 'active') activeUsers.push({ id, ...user });
+        const s = (user.status || '').toLowerCase().trim();
+        const isInactive = s === 'inactive' || s === 'inactivo' || s === 'archived';
+        if (!isInactive) activeUsers.push({ id, ...user });
     });
-    activeUsers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    activeUsers.sort((a, b) => {
+        const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim().toLowerCase();
+        const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es');
+    });
 
-    const userOptionsHTML = activeUsers.map(u => `<option value="${u.id}">${u.firstName} ${u.lastName} (C.C. ${u.idNumber || 'N/A'})</option>`).join('');
+    const userOptionsHTML = activeUsers.map(u => {
+        const name = (u.nombre || `${u.firstName || ''} ${u.lastName || ''}`).trim();
+        const cedula = u.idNumber || u.cedula || 'N/A';
+        return `<option value="${u.id}">${name} (C.C. ${cedula})</option>`;
+    }).join('');
 
     modalContentWrapper.innerHTML = `
         <div class="modal-card max-w-md w-full mx-auto text-left border border-slate-200">
@@ -2879,18 +2939,27 @@ export function loadIndividualDashboardIntoContainer(userId, targetContainer, de
     }
 
     if (!hideBackButton) {
-        const activeUsersList = Array.from(getUsersMap().values())
-            .filter(u => {
-                const basico = parseFloat(u.contratacion?.salario) || parseFloat(u.salarioBasico) || 0;
-                return (u.status === 'active' || u.status === 'pending') && 
-                       (u.role || '').toLowerCase().trim() !== 'facturador' && 
-                       basico > 0;
-            });
+        const seenNavIds = new Set();
+        const activeUsersList = [];
+        getUsersMap().forEach((u, id) => {
+            const uid = u.id || id;
+            if (seenNavIds.has(uid)) return;
+            seenNavIds.add(uid);
+            const status = (u.status || '').toLowerCase().trim();
+            const role = (u.role || '').toLowerCase().trim();
+            const isInactive = status === 'inactive' || status === 'inactivo' || status === 'archived';
+            if (!isInactive && role !== 'facturador') {
+                activeUsersList.push({ ...u, id: uid });
+            }
+        });
         
         const roleOrder = {
             'planta': 1,
+            'operario': 1,
+            'contabilidad': 2,
             'facturador': 2,
-            'admin': 3
+            'admin': 3,
+            'administrador': 3
         };
         
         activeUsersList.sort((a, b) => {
@@ -2899,8 +2968,8 @@ export function loadIndividualDashboardIntoContainer(userId, targetContainer, de
             if (orderA !== orderB) {
                 return orderA - orderB;
             }
-            const nameA = `${a.firstName || ''} ${a.lastName || ''}`.trim();
-            const nameB = `${b.firstName || ''} ${b.lastName || ''}`.trim();
+            const nameA = (a.nombre || `${a.firstName || ''} ${a.lastName || ''}`).trim();
+            const nameB = (b.nombre || `${b.firstName || ''} ${b.lastName || ''}`).trim();
             return nameA.localeCompare(nameB, 'es');
         });
 
